@@ -1,0 +1,4 @@
+Django==4.2.8
+nanoid==2.0.0
+Pillow==10.1.0
+qrcode==7.4.2

@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}删除分享{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="bi bi-exclamation-triangle"></i> 确认删除</h4>
+                </div>
+                <div class="card-body">
+                    <p class="lead">你确定要删除这个分享吗？</p>
+                    <div class="alert alert-warning">
+                        <strong>标题：</strong>{{ share.title }}<br>
+                        <strong>创建时间：</strong>{{ share.created_at|date:"Y-m-d H:i" }}
+                    </div>
+                    <p class="text-danger"><strong>此操作无法撤销！</strong></p>
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-danger btn-lg">
+                                <i class="bi bi-trash"></i> 确认删除
+                            </button>
+                            <a href="{% url 'share_detail' share.share_id %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> 取消
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
