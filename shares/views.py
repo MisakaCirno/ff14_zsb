@@ -48,12 +48,8 @@ def share_detail(request, share_id):
         if len(viewed_list) > 100:
             viewed_list = viewed_list[-100:]
     
-    # 生成分享链接
-    share_url = request.build_absolute_uri(share.get_absolute_url())
-    
     response = render(request, 'shares/detail.html', {
         'share': share,
-        'share_url': share_url,
     })
     
     # 更新Cookie（30天有效期）

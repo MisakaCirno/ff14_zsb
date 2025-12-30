@@ -55,7 +55,7 @@
                     <div class="mb-4">
                         <h5>分享链接</h5>
                         <div class="input-group">
-                            <input type="text" class="form-control" id="shareUrl" value="{{ share_url }}" readonly>
+                            <input type="text" class="form-control" id="shareUrl" readonly>
                             <button class="btn btn-outline-secondary" type="button" onclick="copyUrl()">
                                 <i class="bi bi-link-45deg"></i> 复制链接
                             </button>
@@ -441,6 +441,9 @@ function downloadShareImage() {
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Set share URL from window location
+        document.getElementById('shareUrl').value = window.location.href;
+
         // Save visit history
         const shareId = "{{ share.share_id }}";
         const shareTitle = "{{ share.title|escapejs }}";
