@@ -6,8 +6,8 @@ from .models import Share, UserProfile
 
 @admin.register(Share)
 class ShareAdmin(admin.ModelAdmin):
-    list_display = ['title', 'share_id', 'get_author_display', 'is_public', 'views', 'created_at']
-    list_filter = ['is_public', 'created_at', 'author']
+    list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'views', 'created_at']
+    list_filter = ['visibility', 'created_at', 'author']
     search_fields = ['title', 'share_id', 'description', 'author__username', 'author__profile__nickname']
     readonly_fields = ['share_id', 'created_at', 'updated_at', 'views']
     date_hierarchy = 'created_at'
@@ -15,7 +15,7 @@ class ShareAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('基本信息', {
-            'fields': ('title', 'author', 'share_id', 'is_public')
+            'fields': ('title', 'author', 'share_id', 'visibility')
         }),
         ('内容', {
             'fields': ('strategy_code', 'description')
@@ -28,7 +28,9 @@ class ShareAdmin(admin.ModelAdmin):
     
     def get_author_display(self, obj):
         """显示作者昵称或用户名"""
-        return obj.author.profile.get_display_name()
+        if obj.author:
+            return obj.author.profile.get_display_name()
+        return "匿名用户"
     get_author_display.short_description = '作者'
     get_author_display.admin_order_field = 'author__username'
     

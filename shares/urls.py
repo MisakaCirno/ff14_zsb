@@ -11,6 +11,7 @@ urlpatterns = [
     path('share/<str:share_id>/edit/', views.edit_share, name='edit_share'),
     path('share/<str:share_id>/delete/', views.delete_share, name='delete_share'),
     path('my-shares/', views.my_shares, name='my_shares'),
+    path('search/', views.search, name='search'),
     
     # 用户认证
     path('register/', views.register, name='register'),
@@ -23,4 +24,7 @@ urlpatterns = [
     
     # API
     path('api/qr/<str:share_id>/', views.generate_qr_code, name='generate_qr'),
+    
+    # 其他
+    path('about/', views.about, name='about'),
 ]

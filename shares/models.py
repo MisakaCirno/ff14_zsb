@@ -45,10 +45,22 @@ class Share(models.Model):
     title = models.CharField(max_length=200, verbose_name='标题')
     strategy_code = models.TextField(verbose_name='战术板代码')
     description = models.TextField(blank=True, verbose_name='描述')
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='shares', verbose_name='作者')
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='shares', verbose_name='作者', null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
-    is_public = models.BooleanField(default=True, verbose_name='公开')
+    
+    class Visibility(models.TextChoices):
+        PUBLIC = 'public', '公开'
+        UNLISTED = 'unlisted', '不公开 (仅链接/ID可见)'
+        PRIVATE = 'private', '私有 (仅自己可见)'
+
+    visibility = models.CharField(
+        max_length=10,
+        choices=Visibility.choices,
+        default=Visibility.PUBLIC,
+        verbose_name='可见性'
+    )
+    
     views = models.IntegerField(default=0, verbose_name='浏览量')
 
     class Meta:
@@ -58,7 +70,9 @@ class Share(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.share_id:
-            self.share_id = generate(size=10)
+            # 仅小写字母和数字，长度8位
+            alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789'
+            self.share_id = generate(alphabet, 8)
         super().save(*args, **kwargs)
 
     def __str__(self):

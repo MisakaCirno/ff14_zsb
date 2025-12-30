@@ -13,7 +13,7 @@ admin.site.index_title = '欢迎使用管理后台'
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('shares.urls')),
+    path('', include('shares.urls')), # Include shares app URLs
 ]
 
 if settings.DEBUG:

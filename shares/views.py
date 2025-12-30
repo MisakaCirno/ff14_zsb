@@ -5,6 +5,7 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
+from django.db.models import Q
 from .models import Share, UserProfile
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm
 import qrcode
@@ -14,7 +15,7 @@ import base64
 
 def index(request):
     """主页 - 显示所有公开分享"""
-    shares_list = Share.objects.filter(is_public=True)
+    shares_list = Share.objects.filter(visibility=Share.Visibility.PUBLIC)
     paginator = Paginator(shares_list, 12)  # 每页12个
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
@@ -26,31 +27,63 @@ def share_detail(request, share_id):
     share = get_object_or_404(Share, share_id=share_id)
     
     # 检查权限
-    if not share.is_public and share.author != request.user:
-        messages.error(request, '该分享不存在或不公开')
-        return redirect('index')
+    # 私有分享仅作者可见
+    if share.visibility == Share.Visibility.PRIVATE:
+        if not request.user.is_authenticated or share.author != request.user:
+            messages.error(request, '该分享不存在或您没有权限访问')
+            return redirect('index')
     
-    # 增加浏览量
-    share.views += 1
-    share.save(update_fields=['views'])
+    # 精准浏览量统计：使用Cookie防止重复计数
+    # Cookie名称：viewed_shares，存储已浏览的分享ID列表
+    viewed_shares = request.COOKIES.get('viewed_shares', '')
+    viewed_list = viewed_shares.split(',') if viewed_shares else []
+    
+    # 如果该分享未被当前访客浏览过，则增加浏览量
+    if share_id not in viewed_list:
+        share.views += 1
+        share.save(update_fields=['views'])
+        # 将该分享ID添加到已浏览列表
+        viewed_list.append(share_id)
+        # 限制Cookie大小，最多保留最近100个浏览记录
+        if len(viewed_list) > 100:
+            viewed_list = viewed_list[-100:]
     
     # 生成分享链接
     share_url = request.build_absolute_uri(share.get_absolute_url())
     
-    return render(request, 'shares/detail.html', {
+    response = render(request, 'shares/detail.html', {
         'share': share,
         'share_url': share_url,
     })
+    
+    # 更新Cookie（30天有效期）
+    if share_id not in viewed_shares.split(','):
+        response.set_cookie(
+            'viewed_shares',
+            ','.join(viewed_list),
+            max_age=30*24*60*60,  # 30天
+            httponly=True,  # 防止JavaScript访问
+            samesite='Lax'  # CSRF保护
+        )
+    
+    return response
 
 
-@login_required
 def create_share(request):
     """创建新分享"""
     if request.method == 'POST':
         form = ShareForm(request.POST)
         if form.is_valid():
             share = form.save(commit=False)
-            share.author = request.user
+            if request.user.is_authenticated:
+                share.author = request.user
+            else:
+                share.author = None
+                # 匿名用户不能创建私有分享，强制设为公开或不公开
+                if share.visibility == Share.Visibility.PRIVATE:
+                    share.visibility = Share.Visibility.PUBLIC
+                    messages.warning(request, '匿名用户无法创建私有分享，已自动调整为公开。')
+            
             share.save()
             messages.success(request, '分享创建成功！')
             return redirect('share_detail', share_id=share.share_id)
@@ -192,3 +225,48 @@ def password_change(request):
         form = CustomPasswordChangeForm(user=request.user)
     
     return render(request, 'shares/password_change.html', {'form': form})
+
+
+def search(request):
+    """搜索分享"""
+    query = request.GET.get('q', '').strip()
+    
+    if not query:
+        return redirect('index')
+        
+    # 优先匹配 share_id (不再限制长度，兼容不同版本的ID格式)
+    try:
+        share = Share.objects.get(share_id=query)
+        # 检查权限：
+        # 1. 公开或不公开(Unlisted) -> 允许访问
+        # 2. 私有(Private) -> 仅作者允许访问
+        can_view = (share.visibility != Share.Visibility.PRIVATE) or \
+                   (request.user.is_authenticated and share.author == request.user)
+                   
+        if can_view:
+            return redirect('share_detail', share_id=share.share_id)
+    except Share.DoesNotExist:
+        pass
+
+    # 普通搜索 - 仅显示公开分享
+    shares_list = Share.objects.filter(visibility=Share.Visibility.PUBLIC).filter(
+        Q(title__icontains=query) |
+        Q(description__icontains=query) |
+        Q(author__profile__nickname__icontains=query) |
+        Q(author__username__icontains=query)
+    ).distinct()
+    
+    paginator = Paginator(shares_list, 12)
+    page_number = request.GET.get('page')
+    shares = paginator.get_page(page_number)
+    
+    return render(request, 'shares/index.html', {
+        'shares': shares,
+        'search_query': query
+    })
+
+
+def about(request):
+    """关于页面"""
+    return render(request, 'about.html')
+

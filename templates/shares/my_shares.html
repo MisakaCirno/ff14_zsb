@@ -56,9 +56,13 @@
                     <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay" style="background: rgba(0,0,0,0.05); pointer-events: none;"></div>
                     <!-- 状态和浏览量标签 -->
                     <div class="position-absolute top-0 end-0 m-2">
-                        {% if not share.is_public %}
+                        {% if share.visibility == 'private' %}
+                        <span class="badge bg-danger me-1">
+                            <i class="bi bi-lock-fill"></i> 私有
+                        </span>
+                        {% elif share.visibility == 'unlisted' %}
                         <span class="badge bg-warning text-dark me-1">
-                            <i class="bi bi-lock"></i> 私有
+                            <i class="bi bi-link-45deg"></i> 不公开
                         </span>
                         {% endif %}
                         <span class="badge bg-dark bg-opacity-75">

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}{{ share.title }} - 详情{% endblock %}
 
@@ -23,9 +24,14 @@
                 <div class="card-body">
                     <div class="mb-3">
                         <p class="text-muted">
-                            <i class="bi bi-person-fill"></i> 作者：{{ share.author.profile.get_display_name }} | 
+                            <i class="bi bi-person-fill"></i> 作者：{% if share.author %}{{ share.author.profile.get_display_name }}{% else %}匿名用户{% endif %} | 
                             <i class="bi bi-clock"></i> 创建于：{{ share.created_at|date:"Y-m-d H:i" }} | 
                             <i class="bi bi-eye"></i> 浏览：{{ share.views }}
+                            {% if share.visibility == 'private' %}
+                            | <span class="badge bg-danger"><i class="bi bi-lock-fill"></i> 私有</span>
+                            {% elif share.visibility == 'unlisted' %}
+                            | <span class="badge bg-warning text-dark"><i class="bi bi-link-45deg"></i> 不公开</span>
+                            {% endif %}
                         </p>
                     </div>
                     
@@ -150,8 +156,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs2@0.0.2/qrcode.min.js"></script>
+<script src="{% static 'js/html2canvas.min.js' %}"></script>
+<script src="{% static 'js/qrcode.min.js' %}"></script>
 <script>
 function copyCode() {
     const codeInput = document.getElementById('strategyCode');
@@ -431,5 +437,42 @@ function downloadShareImage() {
         alert('下载失败，请右键点击图片另存为');
     }
 }
+</script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Save visit history
+        const shareId = "{{ share.share_id }}";
+        const shareTitle = "{{ share.title|escapejs }}";
+        const timestamp = new Date().getTime();
+        
+        try {
+            let history = JSON.parse(localStorage.getItem('visitHistory') || '[]');
+            
+            // Remove existing entry for this share if exists
+            history = history.filter(item => item.id !== shareId);
+            
+            // Add to beginning
+            history.unshift({
+                id: shareId,
+                title: shareTitle,
+                timestamp: timestamp
+            });
+            
+            // Limit to 10 items
+            if (history.length > 10) {
+                history = history.slice(0, 10);
+            }
+            
+            localStorage.setItem('visitHistory', JSON.stringify(history));
+            
+            // Update dropdown if function exists (it's in base.html)
+            if (typeof updateHistoryDropdown === 'function') {
+                updateHistoryDropdown();
+            }
+        } catch (e) {
+            console.error('Failed to save history:', e);
+        }
+    });
 </script>
 {% endblock %}

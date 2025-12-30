@@ -10,20 +10,19 @@
                 <i class="bi bi-grid-3x3-gap text-primary"></i> 
                 战术板分享广场
             </h1>
-            <p class="lead text-muted mb-4">探索和分享最终幻想XIV的战术板配置</p>
             
-            {% if user.is_authenticated %}
+            {% if search_query %}
+            <div class="alert alert-primary d-inline-block mb-4">
+                <i class="bi bi-search"></i> 搜索结果：<strong>{{ search_query }}</strong>
+                <a href="{% url 'index' %}" class="btn btn-sm btn-outline-primary ms-2">清除搜索</a>
+            </div>
+            {% else %}
+            <p class="lead text-muted mb-4">探索和分享最终幻想XIV的战术板配置</p>
+            {% endif %}
+            
             <a href="{% url 'create_share' %}" class="btn btn-lg btn-primary shadow-sm">
                 <i class="bi bi-plus-circle"></i> 创建新分享
             </a>
-            {% else %}
-            <div class="alert alert-info d-inline-block">
-                <i class="bi bi-info-circle"></i> 
-                <a href="{% url 'login' %}" class="alert-link">登录</a> 或 
-                <a href="{% url 'register' %}" class="alert-link">注册</a> 
-                后即可创建分享
-            </div>
-            {% endif %}
         </div>
     </div>
 
@@ -79,7 +78,7 @@
                         </h5>
                         <div class="mb-2">
                             <small class="text-muted">
-                                <i class="bi bi-person-circle"></i> {{ share.author.profile.get_display_name }}
+                                <i class="bi bi-person-circle"></i> {% if share.author %}{{ share.author.profile.get_display_name }}{% else %}匿名用户{% endif %}
                                 <span class="ms-2">
                                     <i class="bi bi-calendar3"></i> {{ share.created_at|date:"m-d" }}
                                 </span>
