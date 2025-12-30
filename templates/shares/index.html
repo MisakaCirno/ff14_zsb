@@ -31,11 +31,14 @@
         <div class="col-md-12">
             <div class="card bg-light border-0">
                 <div class="card-body py-2 text-center">
-                    <small class="text-muted">
+                    <small class="text-muted d-block mb-1">
                         <i class="bi bi-collection"></i> 共有 <strong>{{ shares.paginator.count }}</strong> 个分享
                         {% if shares.has_other_pages %}
                         | 第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页
                         {% endif %}
+                    </small>
+                    <small class="text-muted" style="font-size: 0.75rem;">
+                        <i class="bi bi-info-circle"></i> 免责声明：本站内容均由用户上传，仅供参考与交流，不代表本站立场
                     </small>
                 </div>
             </div>
