@@ -26,9 +26,14 @@ def share_detail(request, share_id):
     share = get_object_or_404(Share, share_id=share_id)
     
     # 检查权限
-    # 私有分享仅作者可见
+    # 私有分享仅作者和管理员可见
     if share.visibility == Share.Visibility.PRIVATE:
-        if not request.user.is_authenticated or share.author != request.user:
+        has_permission = request.user.is_authenticated and (
+            share.author == request.user or 
+            request.user.is_staff or 
+            request.user.is_superuser
+        )
+        if not has_permission:
             messages.error(request, '该分享不存在或您没有权限访问')
             return redirect('index')
     
@@ -106,12 +111,21 @@ def edit_share(request, share_id):
 @login_required
 def delete_share(request, share_id):
     """删除分享"""
-    share = get_object_or_404(Share, share_id=share_id, author=request.user)
+    share = get_object_or_404(Share, share_id=share_id)
+    
+    # 权限检查：作者或管理员
+    if not (request.user == share.author or request.user.is_staff or request.user.is_superuser):
+        messages.error(request, '您没有权限删除此分享')
+        return redirect('share_detail', share_id=share_id)
     
     if request.method == 'POST':
         share.delete()
         messages.success(request, '分享已删除')
-        return redirect('my_shares')
+        # 如果是作者删除，跳转到我的分享；如果是管理员删除，跳转到主页
+        if request.user == share.author:
+            return redirect('my_shares')
+        else:
+            return redirect('index')
     
     return render(request, 'shares/delete.html', {'share': share})
 
@@ -211,9 +225,13 @@ def search(request):
         share = Share.objects.get(share_id=query)
         # 检查权限：
         # 1. 公开或不公开(Unlisted) -> 允许访问
-        # 2. 私有(Private) -> 仅作者允许访问
+        # 2. 私有(Private) -> 作者或管理员允许访问
         can_view = (share.visibility != Share.Visibility.PRIVATE) or \
-                   (request.user.is_authenticated and share.author == request.user)
+                   (request.user.is_authenticated and (
+                       share.author == request.user or 
+                       request.user.is_staff or 
+                       request.user.is_superuser
+                   ))
                    
         if can_view:
             return redirect('share_detail', share_id=share.share_id)
