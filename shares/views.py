@@ -23,7 +23,10 @@ def index(request):
 
 def share_detail(request, share_id):
     """分享详情页"""
-    share = get_object_or_404(Share, share_id=share_id)
+    try:
+        share = Share.objects.get(share_id=share_id)
+    except Share.DoesNotExist:
+        return render(request, '404.html', status=404)
     
     # 检查权限
     # 私有分享仅作者和管理员可见
@@ -259,4 +262,9 @@ def search(request):
 def about(request):
     """关于页面"""
     return render(request, 'about.html')
+
+
+def page_not_found(request, exception):
+    """自定义404页面"""
+    return render(request, '404.html', status=404)
 
