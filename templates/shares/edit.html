@@ -2,6 +2,20 @@
 
 {% block title %}编辑分享{% endblock %}
 
+{% block extra_css %}
+<link href="{% static 'css/quill.snow.css' %}" rel="stylesheet">
+<style>
+    #editor-container {
+        height: 200px;
+        font-family: inherit;
+    }
+    .ql-container {
+        font-family: inherit;
+        font-size: inherit;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container">
     <div class="row justify-content-center">
@@ -11,7 +25,7 @@
                     <h4 class="mb-0"><i class="bi bi-pencil"></i> 编辑分享</h4>
                 </div>
                 <div class="card-body">
-                    <form method="post">
+                    <form method="post" id="shareForm">
                         {% csrf_token %}
                         
                         <div class="mb-3">
@@ -38,7 +52,10 @@
                             <label for="{{ form.description.id_for_label }}" class="form-label">
                                 {{ form.description.label }}
                             </label>
-                            {{ form.description }}
+                            <div style="display: none;">
+                                {{ form.description }}
+                            </div>
+                            <div id="editor-container"></div>
                             {% if form.description.errors %}
                             <div class="text-danger small">{{ form.description.errors }}</div>
                             {% endif %}
@@ -71,4 +88,55 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/quill.js' %}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var quill = new Quill('#editor-container', {
+            theme: 'snow',
+            placeholder: '请输入描述内容...',
+            modules: {
+                toolbar: [
+                    ['bold', 'italic', 'underline', 'strike'],        // toggled buttons
+                    ['blockquote', 'code-block'],
+
+                    [{ 'header': 1 }, { 'header': 2 }],               // custom button values
+                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                    [{ 'script': 'sub'}, { 'script': 'super' }],      // superscript/subscript
+                    [{ 'indent': '-1'}, { 'indent': '+1' }],          // outdent/indent
+                    [{ 'direction': 'rtl' }],                         // text direction
+
+                    [{ 'size': ['small', false, 'large', 'huge'] }],  // custom dropdown
+                    [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+
+                    [{ 'color': [] }, { 'background': [] }],          // dropdown with defaults from theme
+                    [{ 'font': [] }],
+                    [{ 'align': [] }],
+
+                    ['clean']                                         // remove formatting button
+                ]
+            }
+        });
+
+        // Sync content to hidden textarea
+        var form = document.getElementById('shareForm');
+        var descriptionInput = document.getElementById('{{ form.description.id_for_label }}');
+        
+        // Initialize editor content if textarea has value
+        if (descriptionInput.value) {
+            quill.root.innerHTML = descriptionInput.value;
+        }
+
+        form.onsubmit = function() {
+            // Populate hidden form on submit
+            if (quill.getText().trim().length === 0 && quill.root.innerHTML === '<p><br></p>') {
+                descriptionInput.value = '';
+            } else {
+                descriptionInput.value = quill.root.innerHTML;
+            }
+        };
+    });
+</script>
 {% endblock %}
