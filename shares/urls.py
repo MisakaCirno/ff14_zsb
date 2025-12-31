@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 from . import views
 
 urlpatterns = [
@@ -6,7 +6,7 @@ urlpatterns = [
     path('', views.index, name='index'),
     
     # 分享相关
-    path('s/<str:share_id>/', views.share_detail, name='share_detail'),
+    re_path(r'^s/(?P<share_id>[^/]+)(?:/.*)?$', views.share_detail, name='share_detail'),
     path('create/', views.create_share, name='create_share'),
     path('share/<str:share_id>/edit/', views.edit_share, name='edit_share'),
     path('share/<str:share_id>/delete/', views.delete_share, name='delete_share'),
