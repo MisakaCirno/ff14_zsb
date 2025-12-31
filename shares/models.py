@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from nanoid import generate
+import random
 
 
 class UserProfile(models.Model):
@@ -70,10 +70,40 @@ class Share(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.share_id:
-            # 仅小写字母和数字，长度8位
-            alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789'
-            self.share_id = generate(alphabet, 8)
+            self.share_id = self._generate_unique_id()
         super().save(*args, **kwargs)
+
+    def _generate_unique_id(self):
+        """生成符合规则的唯一ID"""
+        # 规则：8位，数字和字母交替，数字不含01，字母不含oil
+        digits = '23456789'
+        letters = 'abcdefghjkmnpqrstuvwxyz'
+        blacklist = ['b2b', 'c4', 'j8', 'm9', '3p', '8x8']
+        
+        while True:
+            # 生成8位字符：数字-字母-数字-字母-数字-字母-数字-字母
+            chars = []
+            for i in range(8):
+                if i % 2 == 0:
+                    chars.append(random.choice(digits))
+                else:
+                    chars.append(random.choice(letters))
+            
+            new_id = ''.join(chars)
+            
+            # 检查黑名单
+            is_valid = True
+            for bad_word in blacklist:
+                if bad_word in new_id:
+                    is_valid = False
+                    break
+            
+            if not is_valid:
+                continue
+                
+            # 检查唯一性
+            if not Share.objects.filter(share_id=new_id).exists():
+                return new_id
 
     def __str__(self):
         return f"{self.title} ({self.share_id})"
