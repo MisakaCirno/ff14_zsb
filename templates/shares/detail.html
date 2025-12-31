@@ -560,7 +560,7 @@ function downloadShareImage() {
         const canvas = document.getElementById('shareCanvas');
         const link = document.createElement('a');
         const timestamp = new Date().getTime();
-        link.download = `ffxiv-share-{{ share.share_id }}-${timestamp}.png`;
+        link.download = `zsb-share-{{ share.share_id }}-${timestamp}.png`;
         link.href = canvas.toDataURL('image/png', 1.0);
         link.click();
         

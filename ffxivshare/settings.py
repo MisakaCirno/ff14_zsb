@@ -94,7 +94,7 @@ USE_I18N = True
 USE_TZ = True
 
 # Admin site configuration
-ADMIN_SITE_HEADER = 'FFXIV 战术板分享平台管理后台'
+ADMIN_SITE_HEADER = '粘鼠板儿管理后台'
 ADMIN_SITE_TITLE = '管理后台'
 ADMIN_INDEX_TITLE = '欢迎使用管理后台'
 

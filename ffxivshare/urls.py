@@ -7,7 +7,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 # 自定义管理后台标题
-admin.site.site_header = 'FFXIV 战术板分享平台管理后台'
+admin.site.site_header = '粘鼠板儿管理后台'
 admin.site.site_title = '管理后台'
 admin.site.index_title = '欢迎使用管理后台'
 
