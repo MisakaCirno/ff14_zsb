@@ -95,7 +95,7 @@
                     </div>
                     {% if share.description %}
                     <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
-                        {{ share.description|truncatewords:12 }}
+                        {{ share.description|striptags|truncatechars:60 }}
                     </p>
                     {% else %}
                     <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
