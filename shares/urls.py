@@ -24,4 +24,9 @@ urlpatterns = [
     
     # 其他
     path('about/', views.about, name='about'),
+    
+    # 管理员审核 (使用 staff 前缀避免与 Django Admin 冲突)
+    path('staff/reviews/', views.admin_review_list, name='admin_review_list'),
+    path('staff/reviews/<str:share_id>/approve/', views.admin_approve_share, name='admin_approve_share'),
+    path('staff/reviews/<str:share_id>/reject/', views.admin_reject_share, name='admin_reject_share'),
 ]

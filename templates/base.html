@@ -88,6 +88,13 @@
                             <i class="bi bi-person-circle"></i> 我的分享
                         </a>
                     </li>
+                    {% if user.is_staff or user.is_superuser %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'admin_review_list' %}">
+                            <i class="bi bi-shield-check"></i> 审核列表
+                        </a>
+                    </li>
+                    {% endif %}
                     {% endif %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="historyDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">

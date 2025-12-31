@@ -1,20 +1,16 @@
 {% extends 'base.html' %}
 
-{% block title %}我的分享{% endblock %}
+{% block title %}审核列表{% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="row mb-4">
         <div class="col-12 text-center">
             <h1 class="display-4 mb-3">
-                <i class="bi bi-collection text-primary"></i> 
-                我的分享
+                <i class="bi bi-shield-check text-primary"></i> 
+                审核列表
             </h1>
-            <p class="lead text-muted mb-4">管理你创建的所有战术板分享</p>
-            
-            <a href="{% url 'create_share' %}" class="btn btn-lg btn-primary shadow-sm">
-                <i class="bi bi-plus-circle"></i> 创建新分享
-            </a>
+            <p class="lead text-muted mb-4">管理待审核的公开分享</p>
         </div>
     </div>
 
@@ -24,7 +20,7 @@
             <div class="card bg-light border-0">
                 <div class="card-body py-2 text-center">
                     <small class="text-muted">
-                        <i class="bi bi-collection"></i> 共有 <strong>{{ shares.paginator.count }}</strong> 个分享
+                        <i class="bi bi-collection"></i> 共有 <strong>{{ shares.paginator.count }}</strong> 个待审核分享
                         {% if shares.has_other_pages %}
                         | 第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页
                         {% endif %}
@@ -54,29 +50,10 @@
                     </iframe>
                     <!-- 半透明遮罩 -->
                     <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay" style="background: rgba(0,0,0,0.05); pointer-events: none;"></div>
-                    <!-- 状态和浏览量标签 -->
+                    <!-- 状态标签 -->
                     <div class="position-absolute top-0 end-0 m-2">
-                        {% if share.status == 'pending' %}
-                        <span class="badge bg-info text-dark me-1">
+                        <span class="badge bg-warning text-dark">
                             <i class="bi bi-hourglass-split"></i> 待审核
-                        </span>
-                        {% elif share.status == 'rejected' %}
-                        <span class="badge bg-danger me-1">
-                            <i class="bi bi-x-circle"></i> 审核失败
-                        </span>
-                        {% endif %}
-
-                        {% if share.visibility == 'private' %}
-                        <span class="badge bg-secondary me-1">
-                            <i class="bi bi-lock-fill"></i> 私有
-                        </span>
-                        {% elif share.visibility == 'unlisted' %}
-                        <span class="badge bg-warning text-dark me-1">
-                            <i class="bi bi-link-45deg"></i> 不公开
-                        </span>
-                        {% endif %}
-                        <span class="badge bg-dark bg-opacity-75">
-                            <i class="bi bi-eye"></i> {{ share.views }}
                         </span>
                     </div>
                 </div>
@@ -87,10 +64,12 @@
                     </h5>
                     <div class="mb-2">
                         <small class="text-muted">
+                            <i class="bi bi-person"></i> {{ share.author.profile.nickname|default:share.author.username }}
+                        </small>
+                    </div>
+                    <div class="mb-2">
+                        <small class="text-muted">
                             <i class="bi bi-calendar3"></i> {{ share.created_at|date:"Y-m-d H:i" }}
-                            <span class="ms-2">
-                                <i class="bi bi-clock-history"></i> {{ share.updated_at|date:"m-d H:i" }}
-                            </span>
                         </small>
                     </div>
                     {% if share.description %}
@@ -104,16 +83,18 @@
                     {% endif %}
                 </div>
                 <div class="card-footer bg-transparent border-0 pt-0">
-                    <div class="btn-group w-100 mb-2" role="group">
-                        <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary" title="查看详情">
-                            <i class="bi bi-eye"></i> 查看
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary" target="_blank">
+                            <i class="bi bi-eye"></i> 查看详情
                         </a>
-                        <a href="{% url 'edit_share' share.share_id %}" class="btn btn-sm btn-outline-success" title="编辑分享">
-                            <i class="bi bi-pencil"></i> 编辑
-                        </a>
-                        <a href="{% url 'delete_share' share.share_id %}" class="btn btn-sm btn-outline-danger" title="删除分享">
-                            <i class="bi bi-trash"></i> 删除
-                        </a>
+                        <div class="btn-group" role="group">
+                            <a href="{% url 'admin_approve_share' share.share_id %}" class="btn btn-sm btn-success">
+                                <i class="bi bi-check-circle"></i> 通过
+                            </a>
+                            <a href="{% url 'admin_reject_share' share.share_id %}" class="btn btn-sm btn-danger">
+                                <i class="bi bi-x-circle"></i> 拒绝
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -122,12 +103,9 @@
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-body text-center py-5">
-                    <i class="bi bi-inbox display-1 text-muted mb-3"></i>
-                    <h3 class="text-muted mb-3">还没有分享</h3>
-                    <p class="text-muted mb-4">快来创建你的第一个战术板分享吧！</p>
-                    <a href="{% url 'create_share' %}" class="btn btn-primary btn-lg">
-                        <i class="bi bi-plus-circle"></i> 创建分享
-                    </a>
+                    <i class="bi bi-check2-all display-1 text-success mb-3"></i>
+                    <h3 class="text-muted mb-3">没有待审核的分享</h3>
+                    <p class="text-muted">所有公开分享都已处理完毕。</p>
                 </div>
             </div>
         </div>

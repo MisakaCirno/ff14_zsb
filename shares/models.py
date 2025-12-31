@@ -54,11 +54,23 @@ class Share(models.Model):
         UNLISTED = 'unlisted', '不公开 (仅链接/ID可见)'
         PRIVATE = 'private', '私有 (仅自己可见)'
 
+    class Status(models.TextChoices):
+        PENDING = 'pending', '待审核'
+        APPROVED = 'approved', '已通过'
+        REJECTED = 'rejected', '已拒绝'
+
     visibility = models.CharField(
         max_length=10,
         choices=Visibility.choices,
         default=Visibility.PUBLIC,
         verbose_name='可见性'
+    )
+
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.APPROVED,
+        verbose_name='审核状态'
     )
     
     views = models.IntegerField(default=0, verbose_name='浏览量')

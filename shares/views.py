@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
@@ -13,8 +13,11 @@ import base64
 
 
 def index(request):
-    """主页 - 显示所有公开分享"""
-    shares_list = Share.objects.filter(visibility=Share.Visibility.PUBLIC)
+    """主页 - 显示所有公开且已通过审核的分享"""
+    shares_list = Share.objects.filter(
+        visibility=Share.Visibility.PUBLIC,
+        status=Share.Status.APPROVED
+    )
     paginator = Paginator(shares_list, 12)  # 每页12个
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
@@ -39,6 +42,24 @@ def share_detail(request, share_id):
         if not has_permission:
             messages.error(request, '该分享不存在或您没有权限访问')
             return redirect('index')
+    
+    # 审核状态检查
+    # 如果是待审核或已拒绝，仅作者和管理员可见，或者通过链接访问（待审核状态下）
+    # 用户需求：待审核的相当于链接可见
+    if share.status != Share.Status.APPROVED:
+        # 如果是公开分享但未通过审核
+        if share.visibility == Share.Visibility.PUBLIC:
+            # 待审核状态：所有人可通过链接访问（类似于 Unlisted）
+            # 已拒绝状态：仅作者和管理员可见
+            if share.status == Share.Status.REJECTED:
+                has_permission = request.user.is_authenticated and (
+                    share.author == request.user or 
+                    request.user.is_staff or 
+                    request.user.is_superuser
+                )
+                if not has_permission:
+                    messages.error(request, '该分享违反规定已被拒绝，无法访问')
+                    return redirect('index')
     
     # 精准浏览量统计：使用Cookie防止重复计数
     # Cookie名称：viewed_shares，存储已浏览的分享ID列表
@@ -80,13 +101,25 @@ def create_share(request):
             share = form.save(commit=False)
             if request.user.is_authenticated:
                 share.author = request.user
+                # 审核逻辑：如果是公开分享且用户不是管理员，则设为待审核
+                if share.visibility == Share.Visibility.PUBLIC:
+                    if not (request.user.is_staff or request.user.is_superuser):
+                        share.status = Share.Status.PENDING
+                        messages.info(request, '您的分享已提交，审核通过后将显示在公开列表中。在此期间，您可以通过链接分享给他人。')
+                    else:
+                        share.status = Share.Status.APPROVED
+                else:
+                    # 非公开分享不需要审核
+                    share.status = Share.Status.APPROVED
             else:
                 share.author = None
                 # 匿名用户强制设为不公开（仅链接访问）
                 share.visibility = Share.Visibility.UNLISTED
+                share.status = Share.Status.APPROVED
             
             share.save()
-            messages.success(request, '分享创建成功！')
+            if share.status == Share.Status.APPROVED:
+                messages.success(request, '分享创建成功！')
             return redirect('share_detail', share_id=share.share_id)
     else:
         form = ShareForm()
@@ -102,8 +135,23 @@ def edit_share(request, share_id):
     if request.method == 'POST':
         form = ShareForm(request.POST, instance=share)
         if form.is_valid():
-            form.save()
-            messages.success(request, '分享更新成功！')
+            new_share = form.save(commit=False)
+            
+            # 审核逻辑：如果修改为公开，或者原本是公开且进行了修改，且用户不是管理员
+            if new_share.visibility == Share.Visibility.PUBLIC:
+                if not (request.user.is_staff or request.user.is_superuser):
+                    # 只要是普通用户编辑公开分享，都需要重新审核
+                    new_share.status = Share.Status.PENDING
+                    messages.info(request, '修改已保存，需要重新审核后才能在公开列表中显示。')
+                else:
+                    new_share.status = Share.Status.APPROVED
+            else:
+                # 如果改为非公开，则自动通过
+                new_share.status = Share.Status.APPROVED
+                
+            new_share.save()
+            if new_share.status == Share.Status.APPROVED:
+                messages.success(request, '分享更新成功！')
             return redirect('share_detail', share_id=share.share_id)
     else:
         form = ShareForm(instance=share)
@@ -241,8 +289,11 @@ def search(request):
     except Share.DoesNotExist:
         pass
 
-    # 普通搜索 - 仅显示公开分享
-    shares_list = Share.objects.filter(visibility=Share.Visibility.PUBLIC).filter(
+    # 普通搜索 - 仅显示公开且已通过审核的分享
+    shares_list = Share.objects.filter(
+        visibility=Share.Visibility.PUBLIC,
+        status=Share.Status.APPROVED
+    ).filter(
         Q(title__icontains=query) |
         Q(description__icontains=query) |
         Q(author__profile__nickname__icontains=query) |
@@ -267,4 +318,39 @@ def about(request):
 def page_not_found(request, exception):
     """自定义404页面"""
     return render(request, '404.html', status=404)
+
+
+def is_admin(user):
+    return user.is_authenticated and (user.is_staff or user.is_superuser)
+
+
+@user_passes_test(is_admin)
+def admin_review_list(request):
+    """管理员审核列表"""
+    pending_shares = Share.objects.filter(status=Share.Status.PENDING).order_by('-created_at')
+    paginator = Paginator(pending_shares, 20)
+    page_number = request.GET.get('page')
+    shares = paginator.get_page(page_number)
+    return render(request, 'shares/admin_review_list.html', {'shares': shares})
+
+
+@user_passes_test(is_admin)
+def admin_approve_share(request, share_id):
+    """管理员通过审核"""
+    share = get_object_or_404(Share, share_id=share_id)
+    share.status = Share.Status.APPROVED
+    share.save()
+    messages.success(request, f'分享 "{share.title}" 已通过审核')
+    return redirect('admin_review_list')
+
+
+@user_passes_test(is_admin)
+def admin_reject_share(request, share_id):
+    """管理员拒绝审核"""
+    share = get_object_or_404(Share, share_id=share_id)
+    share.status = Share.Status.REJECTED
+    share.visibility = Share.Visibility.PRIVATE
+    share.save()
+    messages.warning(request, f'分享 "{share.title}" 已被拒绝并设为私有')
+    return redirect('admin_review_list')
 
