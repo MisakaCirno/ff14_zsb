@@ -22,9 +22,6 @@ urlpatterns = [
     path('profile/edit/', views.profile_edit, name='profile_edit'),
     path('profile/password/', views.password_change, name='password_change'),
     
-    # API
-    path('api/qr/<str:share_id>/', views.generate_qr_code, name='generate_qr'),
-    
     # 其他
     path('about/', views.about, name='about'),
 ]

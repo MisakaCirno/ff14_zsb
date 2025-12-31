@@ -8,7 +8,6 @@ from django.http import JsonResponse, HttpResponse
 from django.db.models import Q
 from .models import Share, UserProfile
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm
-import qrcode
 from io import BytesIO
 import base64
 
@@ -167,27 +166,6 @@ def user_logout(request):
     logout(request)
     messages.info(request, '已退出登录')
     return redirect('index')
-
-
-def generate_qr_code(request, share_id):
-    """生成分享二维码"""
-    share = get_object_or_404(Share, share_id=share_id)
-    share_url = request.build_absolute_uri(share.get_absolute_url())
-    
-    # 生成二维码
-    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(share_url)
-    qr.make(fit=True)
-    
-    img = qr.make_image(fill_color="black", back_color="white")
-    
-    # 转换为base64
-    buffer = BytesIO()
-    img.save(buffer, format='PNG')
-    buffer.seek(0)
-    img_str = base64.b64encode(buffer.getvalue()).decode()
-    
-    return JsonResponse({'qr_code': f'data:image/png;base64,{img_str}'})
 
 
 @login_required
