@@ -93,3 +93,7 @@ python manage.py runserver
 - 前端使用bootstrap+vue3
 - 短链接使用nanoid
 - 使用虚拟环境
+
+## 📄 致谢
+
+本项目引用了 [Ennea/ffxiv-strategy-board-viewer](https://github.com/Ennea/ffxiv-strategy-board-viewer) 实现战术板相关的部分。
