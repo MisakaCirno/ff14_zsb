@@ -213,7 +213,7 @@
                     const date = new Date(item.timestamp);
                     const dateStr = (date.getMonth() + 1) + '-' + date.getDate();
                     
-                    li.innerHTML = `<a class="dropdown-item text-truncate" href="/share/${item.id}/" title="${item.title}">
+                    li.innerHTML = `<a class="dropdown-item text-truncate" href="/s/${item.id}/" title="${item.title}">
                         <div class="d-flex justify-content-between align-items-center">
                             <span class="text-truncate me-2" style="max-width: 160px;">${item.title}</span>
                             <small class="text-muted" style="font-size: 0.75rem;">${dateStr}</small>
