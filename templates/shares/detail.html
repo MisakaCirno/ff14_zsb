@@ -178,6 +178,37 @@ function copyUrl() {
     alert('链接已复制到剪贴板！');
 }
 
+function calculateRegionComplexity(ctx, x, y, width, height) {
+    try {
+        const imageData = ctx.getImageData(x, y, width, height);
+        const data = imageData.data;
+        let score = 0;
+        
+        // 简单的边缘检测算法 (计算相邻像素差异之和)
+        // 步长为4以提高性能
+        for (let i = 0; i < data.length; i += 16) {
+            // 当前像素亮度
+            const r1 = data[i];
+            const g1 = data[i+1];
+            const b1 = data[i+2];
+            const l1 = 0.299 * r1 + 0.587 * g1 + 0.114 * b1;
+            
+            // 下一个像素亮度 (如果存在)
+            if (i + 4 < data.length) {
+                const r2 = data[i+4];
+                const g2 = data[i+5];
+                const b2 = data[i+6];
+                const l2 = 0.299 * r2 + 0.587 * g2 + 0.114 * b2;
+                score += Math.abs(l1 - l2);
+            }
+        }
+        return score;
+    } catch (e) {
+        console.warn('无法计算区域复杂度:', e);
+        return 0;
+    }
+}
+
 async function generateShareImage() {
     const btn = document.getElementById('generateBtn');
     const spinner = document.getElementById('loadingSpinner');
@@ -187,47 +218,76 @@ async function generateShareImage() {
     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 生成中...';
     spinner.classList.remove('d-none');
     
+    let offscreenIframe = null;
+    let qrContainer = null;
+
     try {
-        // 获取 iframe 元素
-        const iframe = document.querySelector('iframe');
+        // 1. 创建离屏 iframe 用于固定比例渲染
+        // 使用固定尺寸确保不同设备生成图片一致 (4:3 比例)
+        const targetWidth = 960;
+        const targetHeight = 720;
         
-        if (!iframe) {
-            throw new Error('未找到预览窗口');
-        }
+        offscreenIframe = document.createElement('iframe');
+        offscreenIframe.style.position = 'fixed';
+        offscreenIframe.style.left = '-10000px';
+        offscreenIframe.style.top = '0';
+        offscreenIframe.style.width = targetWidth + 'px';
+        offscreenIframe.style.height = targetHeight + 'px';
+        offscreenIframe.style.border = 'none';
+        offscreenIframe.style.visibility = 'hidden'; // 避免闪烁，但保持渲染
         
-        // 等待 iframe 完全加载
+        // 获取当前战术板代码
+        const strategyCode = document.getElementById('strategyCode').value;
+        offscreenIframe.src = '/static/viewer/embed.html#' + strategyCode;
+        
+        document.body.appendChild(offscreenIframe);
+        
+        // 2. 等待 iframe 加载
         await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('加载超时')), 10000);
+            const timeout = setTimeout(() => reject(new Error('加载超时')), 15000);
             
-            if (iframe.contentDocument && iframe.contentDocument.readyState === 'complete') {
+            offscreenIframe.onload = () => {
                 clearTimeout(timeout);
                 resolve();
-            } else {
-                iframe.onload = () => {
-                    clearTimeout(timeout);
-                    resolve();
-                };
-            }
+            };
         });
         
-        // 等待一小段时间确保渲染完成
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // 注入样式确保铺满
+        try {
+            const iframeDoc = offscreenIframe.contentDocument || offscreenIframe.contentWindow.document;
+            const style = iframeDoc.createElement('style');
+            style.textContent = 'body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }';
+            iframeDoc.head.appendChild(style);
+        } catch (e) {
+            console.warn('无法注入样式到 iframe:', e);
+        }
         
-        // 使用 html2canvas 截取 iframe 内容
-        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        // 3. 等待内部渲染 (给予额外时间让 JS 执行和布局稳定)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // 4. 使用 html2canvas 截图
+        const iframeDoc = offscreenIframe.contentDocument || offscreenIframe.contentWindow.document;
         const canvas = await html2canvas(iframeDoc.body, {
             backgroundColor: '#ffffff',
             scale: 2, // 提高清晰度
             useCORS: true,
             allowTaint: true,
             logging: false,
-            width: iframeDoc.body.scrollWidth,
-            height: iframeDoc.body.scrollHeight
+            width: targetWidth,
+            height: targetHeight,
+            windowWidth: targetWidth,
+            windowHeight: targetHeight,
+            x: 0,
+            y: 0
         });
         
         // 创建二维码容器
-        const qrContainer = document.createElement('div');
-        qrContainer.style.display = 'none';
+        qrContainer = document.createElement('div');
+        // 不要使用 display: none，这会导致在某些情况下（如移动端模拟）二维码无法正确渲染
+        qrContainer.style.position = 'absolute';
+        qrContainer.style.left = '-9999px';
+        qrContainer.style.top = '-9999px';
+        qrContainer.style.visibility = 'hidden';
         document.body.appendChild(qrContainer);
         
         // 生成二维码
@@ -243,8 +303,24 @@ async function generateShareImage() {
         // 等待二维码生成
         await new Promise(resolve => setTimeout(resolve, 200));
         
-        // 获取二维码图片
-        const qrImage = qrContainer.querySelector('img');
+        // 优先尝试获取 canvas 元素（更可靠）
+        const qrCanvas = qrContainer.querySelector('canvas');
+        let qrImage = null;
+        
+        if (qrCanvas) {
+            qrImage = qrCanvas;
+        } else {
+            // 降级到 img 元素
+            qrImage = qrContainer.querySelector('img');
+            if (qrImage && !qrImage.complete) {
+                await new Promise((resolve, reject) => {
+                    qrImage.onload = resolve;
+                    qrImage.onerror = reject;
+                    // 设置超时
+                    setTimeout(resolve, 1000);
+                });
+            }
+        }
         
         if (!qrImage) {
             throw new Error('二维码生成失败');
@@ -254,27 +330,39 @@ async function generateShareImage() {
         const finalCanvas = document.getElementById('shareCanvas');
         const ctx = finalCanvas.getContext('2d');
         
-        // 设置画布大小
-        finalCanvas.width = canvas.width;
-        finalCanvas.height = canvas.height;
+        // 设置画布大小 - 使用目标尺寸 (960x720) 以减小文件体积
+        finalCanvas.width = targetWidth;
+        finalCanvas.height = targetHeight;
         
-        // 绘制截图作为背景
-        ctx.drawImage(canvas, 0, 0);
+        // 绘制截图作为背景 (缩放到目标尺寸，保持高质量)
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
         
-        // 二维码参数
-        const qrSize = 220;
-        const padding = 30;
-        const borderRadius = 10;
+        // 二维码参数 - 适配 960x720 的尺寸
+        const qrSize = 120;
+        const padding = 15;
+        const borderRadius = 6;
         
-        // 绘制圆角矩形背景（左下角）
-        const x = padding;
+        // 智能位置选择：计算左下角和右下角的图像复杂度（熵值）
+        // 选择"较空"（复杂度低）的角落放置二维码，减少遮挡
+        const checkSize = qrSize + padding * 2;
+        const leftScore = calculateRegionComplexity(ctx, 0, finalCanvas.height - checkSize, checkSize, checkSize);
+        const rightScore = calculateRegionComplexity(ctx, finalCanvas.width - checkSize, finalCanvas.height - checkSize, checkSize, checkSize);
+
+        // 默认左下角，如果右下角更空则放右下角
+        let x = padding;
+        if (rightScore < leftScore) {
+            x = finalCanvas.width - qrSize - padding;
+        }
+        
         const y = finalCanvas.height - qrSize - padding;
         
         ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
         ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 8;
         ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 5;
+        ctx.shadowOffsetY = 3;
         
         // 绘制圆角矩形
         ctx.beginPath();
@@ -296,11 +384,11 @@ async function generateShareImage() {
         
         // 添加边框
         ctx.strokeStyle = '#0d6efd';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 2;
         ctx.stroke();
         
         // 绘制二维码
-        const qrPadding = 15;
+        const qrPadding = 8;
         ctx.drawImage(qrImage, 
             x + qrPadding, 
             y + qrPadding, 
@@ -309,33 +397,50 @@ async function generateShareImage() {
         );
         
         // 添加顶部标题栏
-        const headerHeight = 60;
+        const headerHeight = 40;
         const gradient = ctx.createLinearGradient(0, 0, finalCanvas.width, 0);
         gradient.addColorStop(0, 'rgba(13, 110, 253, 0.95)');
         gradient.addColorStop(1, 'rgba(102, 126, 234, 0.95)');
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, finalCanvas.width, headerHeight);
         
-        // 添加标题文字
+        // 添加标题信息 (左侧：标题 by 作者)
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 32px "Microsoft YaHei", Arial, sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText('FFXIV 战术板分享', 40, 42);
         
-        // 添加副标题
-        ctx.font = '18px "Microsoft YaHei", Arial, sans-serif';
+        const shareTitle = "{{ share.title|escapejs }}";
+        const shareAuthor = "{% if share.author %}{{ share.author.profile.get_display_name|escapejs }}{% else %}匿名用户{% endif %}";
+        
+        // 标题部分
+        ctx.font = 'bold 20px "Microsoft YaHei", Arial, sans-serif';
+        ctx.fillText(shareTitle, 20, 27);
+        
+        // 作者部分
+        const titleWidth = ctx.measureText(shareTitle).width;
+        ctx.font = '16px "Microsoft YaHei", Arial, sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillText(`  by  ${shareAuthor}`, 20 + titleWidth, 27);
+        
+        // 添加页面链接 (右侧)
         ctx.textAlign = 'right';
-        ctx.fillText('{{ share.title }}', finalCanvas.width - 40, 42);
+        ctx.font = '14px "Microsoft YaHei", Arial, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        // 显示完整链接（去除协议头以节省空间）
+        let linkText = window.location.href.replace(/^https?:\/\//, '');
+        ctx.fillText(linkText, finalCanvas.width - 20, 27);
         
-        // 添加底部提示文字（二维码上方）
-        ctx.fillStyle = '#495057';
-        ctx.font = 'bold 16px "Microsoft YaHei", Arial, sans-serif';
+        // 添加底部提示文字（二维码上方）+ 描边
+        ctx.font = 'bold 14px "Microsoft YaHei", Arial, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('扫码访问', x + qrSize / 2, y - 10);
         
-        // 清理临时元素
-        document.body.removeChild(qrContainer);
+        // 描边
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 3;
+        ctx.strokeText('获取代码', x + qrSize / 2, y - 6);
+        
+        // 文字
+        ctx.fillStyle = '#495057';
+        ctx.fillText('获取代码', x + qrSize / 2, y - 6);
         
         // 显示模态窗口
         const modal = new bootstrap.Modal(document.getElementById('shareImageModal'));
@@ -359,6 +464,14 @@ async function generateShareImage() {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-image"></i> 生成分享图';
         spinner.classList.add('d-none');
+        
+        // 清理临时元素
+        if (offscreenIframe) {
+            document.body.removeChild(offscreenIframe);
+        }
+        if (qrContainer) {
+            document.body.removeChild(qrContainer);
+        }
     }
 }
 
