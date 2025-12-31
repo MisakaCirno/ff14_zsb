@@ -74,10 +74,8 @@ def create_share(request):
                 share.author = request.user
             else:
                 share.author = None
-                # 匿名用户不能创建私有分享，强制设为公开或不公开
-                if share.visibility == Share.Visibility.PRIVATE:
-                    share.visibility = Share.Visibility.PUBLIC
-                    messages.warning(request, '匿名用户无法创建私有分享，已自动调整为公开。')
+                # 匿名用户强制设为不公开（仅链接访问）
+                share.visibility = Share.Visibility.UNLISTED
             
             share.save()
             messages.success(request, '分享创建成功！')

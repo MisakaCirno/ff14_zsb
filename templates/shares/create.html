@@ -54,10 +54,20 @@
                             <label for="{{ form.visibility.id_for_label }}" class="form-label">
                                 {{ form.visibility.label }}
                             </label>
-                            {{ form.visibility }}
-                            <div class="form-text">
-                                公开：在广场可见 | 不公开：仅通过链接/ID可见 | 私有：仅自己可见
-                            </div>
+                            {% if user.is_authenticated %}
+                                {{ form.visibility }}
+                                <div class="form-text">
+                                    公开：在广场可见 | 不公开：仅通过链接/ID可见 | 私有：仅自己可见
+                                </div>
+                            {% else %}
+                                <select class="form-select" disabled>
+                                    <option selected>不公开 (仅链接/ID可见)</option>
+                                </select>
+                                <input type="hidden" name="visibility" value="unlisted">
+                                <div class="form-text text-warning">
+                                    <i class="bi bi-exclamation-triangle"></i> 当前未登录，仅支持创建链接分享，且创建后无法编辑或删除。
+                                </div>
+                            {% endif %}
                             {% if form.visibility.errors %}
                             <div class="text-danger small">{{ form.visibility.errors }}</div>
                             {% endif %}
