@@ -29,4 +29,10 @@ urlpatterns = [
     path('staff/reviews/', views.admin_review_list, name='admin_review_list'),
     path('staff/reviews/<str:share_id>/approve/', views.admin_approve_share, name='admin_approve_share'),
     path('staff/reviews/<str:share_id>/reject/', views.admin_reject_share, name='admin_reject_share'),
+    
+    # 举报处理
+    path('share/<str:share_id>/report/', views.report_share, name='report_share'),
+    path('staff/reports/', views.admin_report_list, name='admin_report_list'),
+    path('staff/reports/<int:report_id>/<str:action>/', views.admin_resolve_report, name='admin_resolve_report'),
+    path('staff/reports/share/<str:share_id>/<str:action>/', views.admin_resolve_share_reports, name='admin_resolve_share_reports'),
 ]

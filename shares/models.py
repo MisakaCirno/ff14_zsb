@@ -123,3 +123,34 @@ class Share(models.Model):
     def get_absolute_url(self):
         from django.urls import reverse
         return reverse('share_detail', kwargs={'share_id': self.share_id})
+
+
+class Report(models.Model):
+    """举报模型"""
+    share = models.ForeignKey(Share, on_delete=models.CASCADE, related_name='reports', verbose_name='被举报分享')
+    reporter = models.ForeignKey(User, on_delete=models.CASCADE, related_name='submitted_reports', verbose_name='举报人')
+    reason = models.TextField(verbose_name='举报原因')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='举报时间')
+    
+    class Status(models.TextChoices):
+        PENDING = 'pending', '待处理'
+        RESOLVED = 'resolved', '已处理(认可)'
+        DISMISSED = 'dismissed', '已驳回'
+
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.PENDING,
+        verbose_name='处理状态'
+    )
+    
+    resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='处理时间')
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_reports', verbose_name='处理人')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = '举报'
+        verbose_name_plural = '举报'
+
+    def __str__(self):
+        return f"举报: {self.share.title} - {self.get_status_display()}"

@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+
+{% block title %}举报分享 - {{ share.title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="bi bi-flag-fill"></i> 举报分享</h4>
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">您正在举报：{{ share.title }}</h5>
+                    <p class="text-muted">ID: {{ share.share_id }}</p>
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.reason.id_for_label }}" class="form-label">
+                                {{ form.reason.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.reason }}
+                            <div class="form-text">
+                                请详细描述您举报的原因，例如：包含违规内容、垃圾广告、侵犯版权等。
+                            </div>
+                            {% if form.reason.errors %}
+                            <div class="text-danger small">{{ form.reason.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-flag"></i> 提交举报
+                            </button>
+                            <a href="{% url 'share_detail' share.share_id %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i> 取消
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

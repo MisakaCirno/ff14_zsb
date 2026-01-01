@@ -118,6 +118,15 @@
                         </a>
                     </div>
                     {% endif %}
+
+                    {% if user.is_authenticated and user != share.author %}
+                    <hr>
+                    <div class="d-grid">
+                        <a href="{% url 'report_share' share.share_id %}" class="btn btn-outline-secondary btn-sm text-danger border-danger">
+                            <i class="bi bi-flag"></i> 举报此分享
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 

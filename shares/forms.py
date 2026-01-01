@@ -1,7 +1,20 @@
 from django import forms
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
-from .models import Share, UserProfile
+from .models import Share, UserProfile, Report
+
+
+class ReportForm(forms.ModelForm):
+    """举报表单"""
+    class Meta:
+        model = Report
+        fields = ['reason']
+        widgets = {
+            'reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '请详细描述违规情况...'}),
+        }
+        labels = {
+            'reason': '举报原因',
+        }
 
 
 class ShareForm(forms.ModelForm):

@@ -5,9 +5,10 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
-from django.db.models import Q
-from .models import Share, UserProfile
-from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm
+from django.db.models import Q, Count, Prefetch
+from django.utils import timezone
+from .models import Share, UserProfile, Report
+from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm
 from io import BytesIO
 import base64
 
@@ -353,4 +354,97 @@ def admin_reject_share(request, share_id):
     share.save()
     messages.warning(request, f'分享 "{share.title}" 已被拒绝并设为私有')
     return redirect('admin_review_list')
+
+
+@login_required
+def report_share(request, share_id):
+    """举报分享"""
+    share = get_object_or_404(Share, share_id=share_id)
+    
+    if request.method == 'POST':
+        form = ReportForm(request.POST)
+        if form.is_valid():
+            report = form.save(commit=False)
+            report.share = share
+            report.reporter = request.user
+            report.save()
+            messages.success(request, '举报已提交，管理员将尽快处理。')
+            return redirect('share_detail', share_id=share_id)
+    else:
+        form = ReportForm()
+    
+    return render(request, 'shares/report_share.html', {'form': form, 'share': share})
+
+
+@user_passes_test(is_admin)
+def admin_report_list(request):
+    """管理员举报处理列表 - 按分享聚合"""
+    # 查找所有有待处理举报的分享
+    reported_shares = Share.objects.annotate(
+        pending_count=Count('reports', filter=Q(reports__status=Report.Status.PENDING))
+    ).filter(
+        pending_count__gt=0
+    ).prefetch_related(
+        Prefetch('reports', queryset=Report.objects.filter(status=Report.Status.PENDING).select_related('reporter'), to_attr='pending_reports')
+    ).order_by('-pending_count', '-updated_at')
+    
+    paginator = Paginator(reported_shares, 10)
+    page_number = request.GET.get('page')
+    shares = paginator.get_page(page_number)
+    
+    return render(request, 'shares/admin_report_list.html', {'shares': shares})
+
+
+@user_passes_test(is_admin)
+def admin_resolve_report(request, report_id, action):
+    """管理员处理单条举报"""
+    report = get_object_or_404(Report, id=report_id)
+    
+    if action == 'resolve':
+        # 认可举报：将分享设为私有，标记举报为已处理
+        report.status = Report.Status.RESOLVED
+        share = report.share
+        share.visibility = Share.Visibility.PRIVATE
+        share.save()
+        messages.success(request, f'举报已认可，分享 "{share.title}" 已被设为私有')
+    elif action == 'dismiss':
+        # 驳回举报
+        report.status = Report.Status.DISMISSED
+        messages.info(request, '举报已驳回')
+    else:
+        messages.error(request, '无效的操作')
+        return redirect('admin_report_list')
+        
+    report.resolved_at = timezone.now()
+    report.resolved_by = request.user
+    report.save()
+    
+    return redirect('admin_report_list')
+
+
+@user_passes_test(is_admin)
+def admin_resolve_share_reports(request, share_id, action):
+    """批量处理某分享的所有待处理举报"""
+    share = get_object_or_404(Share, share_id=share_id)
+    pending_reports = share.reports.filter(status=Report.Status.PENDING)
+    
+    if not pending_reports.exists():
+        messages.warning(request, '该分享没有待处理的举报')
+        return redirect('admin_report_list')
+
+    if action == 'resolve':
+        # 认可举报：分享设为私有，所有待处理举报设为已解决
+        share.visibility = Share.Visibility.PRIVATE
+        share.save()
+        pending_reports.update(status=Report.Status.RESOLVED, resolved_at=timezone.now(), resolved_by=request.user)
+        messages.success(request, f'已认可举报，分享 "{share.title}" 已设为私有，相关举报已标记为处理。')
+        
+    elif action == 'dismiss':
+        # 驳回举报：所有待处理举报设为已驳回
+        pending_reports.update(status=Report.Status.DISMISSED, resolved_at=timezone.now(), resolved_by=request.user)
+        messages.info(request, f'已驳回分享 "{share.title}" 的所有举报。')
+        
+    return redirect('admin_report_list')
+
+
 

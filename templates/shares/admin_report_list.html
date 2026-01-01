@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block title %}举报处理{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-shield-exclamation"></i> 举报处理</h2>
+        <a href="{% url 'admin_review_list' %}" class="btn btn-outline-primary">
+            <i class="bi bi-list-check"></i> 审核列表
+        </a>
+    </div>
+
+    {% if shares %}
+        <div class="accordion" id="reportAccordion">
+            {% for share in shares %}
+            <div class="accordion-item mb-3 border shadow-sm">
+                <h2 class="accordion-header" id="heading{{ share.share_id }}">
+                    <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ share.share_id }}" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" aria-controls="collapse{{ share.share_id }}">
+                        <div class="d-flex align-items-center w-100 me-3">
+                            <span class="badge bg-danger me-2">{{ share.pending_count }} 条举报</span>
+                            <span class="fw-bold me-2">{{ share.title }}</span>
+                            <small class="text-muted">ID: {{ share.share_id }}</small>
+                            <span class="ms-auto text-muted small">
+                                作者: {% if share.author %}{{ share.author.username }}{% else %}匿名{% endif %}
+                            </span>
+                        </div>
+                    </button>
+                </h2>
+                <div id="collapse{{ share.share_id }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" aria-labelledby="heading{{ share.share_id }}" data-bs-parent="#reportAccordion">
+                    <div class="accordion-body bg-light">
+                        <!-- 批量操作栏 -->
+                        <div class="d-flex justify-content-between align-items-center mb-3 p-2 bg-white rounded border">
+                            <div>
+                                <a href="{% url 'share_detail' share.share_id %}" target="_blank" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-box-arrow-up-right"></i> 查看分享详情
+                                </a>
+                            </div>
+                            <div class="btn-group">
+                                <a href="{% url 'admin_resolve_share_reports' share.share_id 'resolve' %}" 
+                                   class="btn btn-danger btn-sm"
+                                   onclick="return confirm('确定要认可所有举报吗？该分享将被设为私有。')">
+                                    <i class="bi bi-check-circle"></i> 认可所有举报 (下架分享)
+                                </a>
+                                <a href="{% url 'admin_resolve_share_reports' share.share_id 'dismiss' %}" 
+                                   class="btn btn-secondary btn-sm"
+                                   onclick="return confirm('确定要驳回所有举报吗？')">
+                                    <i class="bi bi-x-circle"></i> 驳回所有举报
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- 举报列表 -->
+                        <div class="list-group">
+                            {% for report in share.pending_reports %}
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">
+                                        <i class="bi bi-person"></i> {{ report.reporter.username }}
+                                    </h6>
+                                    <small class="text-muted">{{ report.created_at|date:"Y-m-d H:i" }}</small>
+                                </div>
+                                <p class="mb-1 mt-2">{{ report.reason }}</p>
+                                <div class="mt-2 text-end">
+                                    <small class="text-muted me-2">单条操作:</small>
+                                    <a href="{% url 'admin_resolve_report' report.id 'dismiss' %}" 
+                                       class="text-secondary text-decoration-none small"
+                                       onclick="return confirm('确定要驳回此条举报吗？')">
+                                        [驳回]
+                                    </a>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- 分页 -->
+        {% if shares.has_other_pages %}
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if shares.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ shares.previous_page_number }}">上一页</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">上一页</span>
+                </li>
+                {% endif %}
+
+                {% for i in shares.paginator.page_range %}
+                    {% if shares.number == i %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ i }}</span>
+                    </li>
+                    {% else %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ i }}">{{ i }}</a>
+                    </li>
+                    {% endif %}
+                {% endfor %}
+
+                {% if shares.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ shares.next_page_number }}">下一页</a>
+                </li>
+                {% else %}
+                <li class="page-item disabled">
+                    <span class="page-link">下一页</span>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+    {% else %}
+        <div class="alert alert-success text-center py-5">
+            <i class="bi bi-check-circle-fill fs-1 text-success mb-3"></i>
+            <h4>暂无待处理的举报</h4>
+            <p class="text-muted">社区环境很健康！</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
