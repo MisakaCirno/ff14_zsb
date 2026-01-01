@@ -163,16 +163,16 @@
     </nav>
 
     <!-- 消息提示 -->
-    {% if messages %}
-    <div class="container mt-3">
+    <div class="container mt-3" id="message-container">
+        {% if messages %}
         {% for message in messages %}
         <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
             {{ message }}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
         {% endfor %}
+        {% endif %}
     </div>
-    {% endif %}
 
     <!-- 主内容 -->
     <main class="py-4">
@@ -186,7 +186,7 @@
                 FINAL FANTASY XIV © 2010 - 2025 SQUARE ENIX CO., LTD. All Rights Reserved. 
             </p>
             <p class="mb-0">
-                <span class="text-decoration-underline" style="cursor: pointer;" onclick="copyQQGroup()" title="点击复制群号">交流QQ群：1075777023</span> | <a href="{% url 'about' %}" class="text-light text-decoration-underline">关于本站</a>
+                <span class="text-decoration-underline" style="cursor: pointer;" onclick="copyQQGroup(this)" title="点击复制群号">交流QQ群：1075777023</span> | <a href="{% url 'about' %}" class="text-light text-decoration-underline">关于本站</a>
             </p>
         </div>
     </footer>
@@ -246,19 +246,71 @@
             }
         }
 
-        function copyQQGroup() {
+        function showMessage(message, type = 'success') {
+            const container = document.getElementById('message-container');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.role = 'alert';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            container.appendChild(alertDiv);
+            
+            // Auto dismiss after 3 seconds
+            setTimeout(() => {
+                const bsAlert = new bootstrap.Alert(alertDiv);
+                bsAlert.close();
+            }, 3000);
+        }
+
+        function copyQQGroup(element) {
             const text = '1075777023';
-            const input = document.createElement('input');
-            input.setAttribute('value', text);
-            document.body.appendChild(input);
-            input.select();
-            try {
-                document.execCommand('copy');
-                alert('QQ群号 ' + text + ' 已复制到剪贴板！');
-            } catch (err) {
-                alert('复制失败，请手动复制：' + text);
+            const originalText = element.innerText;
+            
+            const onSuccess = () => {
+                showMessage('QQ群号 ' + text + ' 已复制到剪贴板！', 'success');
+                element.innerText = "已复制！";
+                setTimeout(() => {
+                    element.innerText = originalText;
+                }, 2000);
+            };
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(onSuccess).catch(err => {
+                    console.error('Failed to copy: ', err);
+                    fallbackCopyTextToClipboard(text, onSuccess);
+                });
+            } else {
+                fallbackCopyTextToClipboard(text, onSuccess);
             }
-            document.body.removeChild(input);
+        }
+
+        function fallbackCopyTextToClipboard(text, onSuccess) {
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            
+            // Avoid scrolling to bottom
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    if (onSuccess) onSuccess();
+                } else {
+                    showMessage('复制失败，请手动复制：' + text, 'warning');
+                }
+            } catch (err) {
+                showMessage('复制失败，请手动复制：' + text, 'warning');
+            }
+
+            document.body.removeChild(textArea);
         }
     </script>
     {% block extra_js %}{% endblock %}

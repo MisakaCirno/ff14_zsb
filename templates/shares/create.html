@@ -162,7 +162,7 @@
             var strategyCodeInput = document.getElementById('{{ form.strategy_code.id_for_label }}');
             var code = strategyCodeInput.value.trim();
             if (!code.startsWith('[stgy:') || !code.endsWith(']')) {
-                alert('战术板代码格式不正确！\n必须以 "[stgy:" 开头，并以 "]" 结尾。');
+                showMessage('战术板代码格式不正确！<br>必须以 "[stgy:" 开头，并以 "]" 结尾。', 'danger');
                 if (e) e.preventDefault();
                 return false;
             }

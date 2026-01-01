@@ -45,7 +45,7 @@
                         <h6 class="fw-bold">战术板代码</h6>
                         <div class="input-group">
                             <input type="text" class="form-control strategy-code" id="strategyCode" value="{{ share.strategy_code }}" readonly>
-                            <button class="btn btn-outline-secondary" type="button" onclick="copyCode()">
+                            <button class="btn btn-outline-secondary" type="button" onclick="copyCode(this)">
                                 <i class="bi bi-clipboard"></i> 复制
                             </button>
                         </div>
@@ -55,7 +55,7 @@
                         <h6 class="fw-bold">分享链接</h6>
                         <div class="input-group">
                             <input type="text" class="form-control" id="shareUrl" readonly>
-                            <button class="btn btn-outline-secondary" type="button" onclick="copyUrl()">
+                            <button class="btn btn-outline-secondary" type="button" onclick="copyUrl(this)">
                                 <i class="bi bi-link-45deg"></i> 复制链接
                             </button>
                             <button class="btn btn-outline-primary" onclick="generateShareImage()" id="generateBtn">
@@ -201,18 +201,34 @@
 <script src="{% static 'js/html2canvas.min.js' %}"></script>
 <script src="{% static 'js/qrcode.min.js' %}"></script>
 <script>
-function copyCode() {
+function copyCode(btn) {
     const codeInput = document.getElementById('strategyCode');
     codeInput.select();
     document.execCommand('copy');
-    alert('代码已复制到剪贴板！');
+    showMessage('代码已复制到剪贴板！', 'success');
+    
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check"></i> 已复制';
+    btn.classList.replace('btn-outline-secondary', 'btn-success');
+    setTimeout(() => {
+        btn.innerHTML = originalHtml;
+        btn.classList.replace('btn-success', 'btn-outline-secondary');
+    }, 2000);
 }
 
-function copyUrl() {
+function copyUrl(btn) {
     const urlInput = document.getElementById('shareUrl');
     urlInput.select();
     document.execCommand('copy');
-    alert('链接已复制到剪贴板！');
+    showMessage('链接已复制到剪贴板！', 'success');
+    
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check"></i> 已复制';
+    btn.classList.replace('btn-outline-secondary', 'btn-success');
+    setTimeout(() => {
+        btn.innerHTML = originalHtml;
+        btn.classList.replace('btn-success', 'btn-outline-secondary');
+    }, 2000);
 }
 
 function calculateRegionComplexity(ctx, x, y, width, height) {
@@ -485,17 +501,12 @@ async function generateShareImage() {
         
         // 显示成功提示
         setTimeout(() => {
-            const toast = document.createElement('div');
-            toast.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3';
-            toast.style.zIndex = '9999';
-            toast.innerHTML = '<i class="bi bi-check-circle"></i> 分享图生成成功！';
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
+            showMessage('分享图生成成功！', 'success');
         }, 100);
         
     } catch (error) {
         console.error('生成分享图失败:', error);
-        alert('生成分享图失败：' + error.message + '\n请确保预览已加载完成后再试');
+        showMessage('生成分享图失败：' + error.message + ' 请确保预览已加载完成后再试', 'danger');
     } finally {
         // 恢复按钮状态
         btn.disabled = false;
@@ -556,18 +567,18 @@ async function copyShareImage() {
                     
                     btn.innerHTML = originalText;
                     btn.disabled = false;
-                    alert('图片数据已复制到剪贴板！\n（部分浏览器可能需要使用下载功能）');
+                    showMessage('图片数据已复制到剪贴板！（部分浏览器可能需要使用下载功能）', 'warning');
                 }
             } catch (err) {
                 console.error('复制失败:', err);
                 btn.innerHTML = originalText;
                 btn.disabled = false;
-                alert('复制失败，请尝试使用"下载图片"功能，或右键保存图片');
+                showMessage('复制失败，请尝试使用"下载图片"功能，或右键保存图片', 'danger');
             }
         }, 'image/png');
     } catch (error) {
         console.error('复制失败:', error);
-        alert('复制失败，请尝试使用"下载图片"功能');
+        showMessage('复制失败，请尝试使用"下载图片"功能', 'danger');
     }
 }
 
@@ -581,15 +592,10 @@ function downloadShareImage() {
         link.click();
         
         // 显示成功提示
-        const toast = document.createElement('div');
-        toast.className = 'alert alert-success position-fixed top-0 start-50 translate-middle-x mt-3';
-        toast.style.zIndex = '9999';
-        toast.innerHTML = '<i class="bi bi-check-circle"></i> 图片下载已开始！';
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 2000);
+        showMessage('图片下载已开始！', 'success');
     } catch (error) {
         console.error('下载失败:', error);
-        alert('下载失败，请右键点击图片另存为');
+        showMessage('下载失败，请右键点击图片另存为', 'danger');
     }
 }
 </script>
