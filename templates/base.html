@@ -163,10 +163,10 @@
     </nav>
 
     <!-- 消息提示 -->
-    <div class="container mt-3" id="message-container">
+    <div id="message-container" class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 1100; min-width: 300px; max-width: 80%;">
         {% if messages %}
         {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow" role="alert">
             {{ message }}
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
@@ -249,7 +249,7 @@
         function showMessage(message, type = 'success') {
             const container = document.getElementById('message-container');
             const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show shadow`;
             alertDiv.role = 'alert';
             alertDiv.innerHTML = `
                 ${message}
