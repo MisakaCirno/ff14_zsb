@@ -183,8 +183,10 @@
     <footer class="bg-dark text-light py-3 mt-auto">
         <div class="container text-center">
             <p class="mb-0">
-                FINAL FANTASY XIV © 2010 - 2025 SQUARE ENIX CO., LTD. All Rights Reserved. | 
-                <a href="{% url 'about' %}" class="text-light text-decoration-none">关于本站</a>
+                FINAL FANTASY XIV © 2010 - 2025 SQUARE ENIX CO., LTD. All Rights Reserved. 
+            </p>
+            <p class="mb-0">
+                <span class="text-decoration-underline" style="cursor: pointer;" onclick="copyQQGroup()" title="点击复制群号">交流QQ群：1075777023</span> | <a href="{% url 'about' %}" class="text-light text-decoration-underline">关于本站</a>
             </p>
         </div>
     </footer>
@@ -242,6 +244,21 @@
                 localStorage.removeItem('visitHistory');
                 updateHistoryDropdown();
             }
+        }
+
+        function copyQQGroup() {
+            const text = '1075777023';
+            const input = document.createElement('input');
+            input.setAttribute('value', text);
+            document.body.appendChild(input);
+            input.select();
+            try {
+                document.execCommand('copy');
+                alert('QQ群号 ' + text + ' 已复制到剪贴板！');
+            } catch (err) {
+                alert('复制失败，请手动复制：' + text);
+            }
+            document.body.removeChild(input);
         }
     </script>
     {% block extra_js %}{% endblock %}
