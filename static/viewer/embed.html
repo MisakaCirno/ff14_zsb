@@ -25,35 +25,6 @@
 
 <body>
     <canvas id="canvas" width="1024" height="768"></canvas>
-    <script>
-        (function() {
-            try {
-                var hash = window.location.hash.substring(1);
-                // Check if it's NOT a standard strategy code (which starts with [stgy:)
-                // If it doesn't start with [stgy:, we assume it's base64 encoded
-                if (hash && hash.indexOf('[stgy:') !== 0) {
-                    // Restore base64 padding and standard characters if needed
-                    // URL-safe base64 uses - and _ instead of + and /
-                    var base64 = hash.replace(/-/g, '+').replace(/_/g, '/');
-                    var pad = base64.length % 4;
-                    if (pad) {
-                        base64 += new Array(5 - pad).join('=');
-                    }
-                    
-                    // Decode
-                    var decoded = atob(base64);
-                    
-                    // If the decoded string looks like a strategy code, set it to global variable
-                    if (decoded.indexOf('[stgy:') === 0) {
-                        // Set global variable for bundle.js to read
-                        window.strategyCode = decoded;
-                    }
-                }
-            } catch (e) {
-                console.warn('Auto-decoding of hash failed:', e);
-            }
-        })();
-    </script>
     <script src="bundle.js"></script>
 </body>
 </html>
