@@ -1,7 +1,15 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
-from .models import Share, UserProfile
+from .models import Share, UserProfile, Announcement
+
+
+@admin.register(Announcement)
+class AnnouncementAdmin(admin.ModelAdmin):
+    list_display = ['title', 'is_active', 'created_at', 'updated_at']
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['title', 'content']
+    readonly_fields = ['created_at', 'updated_at']
 
 
 @admin.register(Share)

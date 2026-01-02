@@ -7,10 +7,14 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count, Prefetch
 from django.utils import timezone
-from .models import Share, UserProfile, Report
+from .models import Share, UserProfile, Report, Announcement
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm
 from io import BytesIO
 import base64
+
+
+def is_admin(user):
+    return user.is_authenticated and (user.is_staff or user.is_superuser)
 
 
 def index(request):
@@ -38,13 +42,42 @@ def index(request):
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
     
+    # 获取最新站点动态
+    latest_announcement = Announcement.objects.filter(is_active=True).order_by('-created_at').first()
+    
     context = {
         'shares': shares,
         'current_category': category,
         'hide_spoiler': hide_spoiler,
         'hide_nsfw': hide_nsfw,
+        'latest_announcement': latest_announcement,
     }
     return render(request, 'shares/index.html', context)
+
+
+def announcement_list(request):
+    """站点动态列表页"""
+    # 管理员可以看到所有动态，普通用户只能看到激活的
+    if request.user.is_staff or request.user.is_superuser:
+        announcements_list = Announcement.objects.all().order_by('-created_at')
+    else:
+        announcements_list = Announcement.objects.filter(is_active=True).order_by('-created_at')
+        
+    paginator = Paginator(announcements_list, 10)
+    page_number = request.GET.get('page')
+    announcements = paginator.get_page(page_number)
+    return render(request, 'shares/announcement_list.html', {'announcements': announcements})
+
+
+@user_passes_test(is_admin)
+def toggle_announcement_visibility(request, announcement_id):
+    """切换站点动态可见性"""
+    announcement = get_object_or_404(Announcement, id=announcement_id)
+    announcement.is_active = not announcement.is_active
+    announcement.save()
+    status = "激活" if announcement.is_active else "隐藏"
+    messages.success(request, f'站点动态 "{announcement.title}" 已{status}')
+    return redirect('announcement_list')
 
 
 def share_detail(request, share_id):
@@ -341,10 +374,6 @@ def about(request):
 def page_not_found(request, exception):
     """自定义404页面"""
     return render(request, '404.html', status=404)
-
-
-def is_admin(user):
-    return user.is_authenticated and (user.is_staff or user.is_superuser)
 
 
 @user_passes_test(is_admin)

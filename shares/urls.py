@@ -24,6 +24,8 @@ urlpatterns = [
     
     # 其他
     path('about/', views.about, name='about'),
+    path('announcements/', views.announcement_list, name='announcement_list'),
+    path('announcements/<int:announcement_id>/toggle/', views.toggle_announcement_visibility, name='toggle_announcement_visibility'),
     
     # 管理员审核 (使用 staff 前缀避免与 Django Admin 冲突)
     path('staff/reviews/', views.admin_review_list, name='admin_review_list'),

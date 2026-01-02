@@ -21,9 +21,31 @@
             <p class="lead text-muted mb-4">探索和分享最终幻想XIV的战术板配置</p>
             {% endif %}
             
-            <a href="{% url 'create_share' %}" class="btn btn-lg btn-primary shadow-sm">
-                <i class="bi bi-plus-circle"></i> 创建新分享
-            </a>
+            <div id="hero-action-area" style="min-height: 60px;">
+                {% if latest_announcement %}
+                <div id="announcement-banner" class="card border-0 shadow-sm mb-4 text-start bg-light" style="display: none;">
+                    <div class="card-body position-relative">
+                        <button type="button" class="btn-close position-absolute top-0 end-0 m-3" aria-label="Close" onclick="dismissAnnouncement()"></button>
+                        <div class="d-flex align-items-center mb-2 text-primary">
+                            <i class="bi bi-megaphone-fill me-2"></i>
+                            <span class="fw-bold">站点动态</span>
+                        </div>
+                        <h5 class="card-title fw-bold">{{ latest_announcement.title }}</h5>
+                        <div class="card-text announcement-content text-secondary mb-3">{{ latest_announcement.content|safe|truncatechars_html:200 }}</div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">{{ latest_announcement.created_at|date:"Y-m-d" }}</small>
+                            <a href="{% url 'announcement_list' %}" class="btn btn-outline-primary btn-sm">查看更多</a>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div id="create-share-btn-container" {% if latest_announcement %}style="display: none;"{% endif %}>
+                    <a href="{% url 'create_share' %}" class="btn btn-lg btn-primary shadow-sm">
+                        <i class="bi bi-plus-circle"></i> 创建新分享
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -263,4 +285,107 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const announcementId = '{{ latest_announcement.id|default:"" }}';
+        const banner = document.getElementById('announcement-banner');
+        const createBtn = document.getElementById('create-share-btn-container');
+        
+        if (banner && announcementId) {
+            const dismissedId = localStorage.getItem('dismissed_announcement_id');
+            if (dismissedId !== announcementId) {
+                banner.style.display = 'block';
+                if (createBtn) createBtn.style.display = 'none';
+            } else {
+                if (createBtn) createBtn.style.display = 'block';
+            }
+        } else {
+             if (createBtn) createBtn.style.display = 'block';
+        }
+    });
+
+    function dismissAnnouncement() {
+        const banner = document.getElementById('announcement-banner');
+        const navLink = document.getElementById('nav-announcement-link');
+        const createBtn = document.getElementById('create-share-btn-container');
+        const announcementId = '{{ latest_announcement.id|default:"" }}';
+
+        if (!banner) return;
+
+        // Check if nav link exists and is visible
+        const isNavLinkVisible = navLink && navLink.offsetParent !== null;
+
+        // If nav link exists and is visible, animate to it
+        if (isNavLinkVisible) {
+            // Create a clone for animation
+            const clone = banner.cloneNode(true);
+            const rect = banner.getBoundingClientRect();
+            const targetRect = navLink.getBoundingClientRect();
+
+            clone.style.position = 'fixed';
+            clone.style.left = rect.left + 'px';
+            clone.style.top = rect.top + 'px';
+            clone.style.width = rect.width + 'px';
+            clone.style.height = rect.height + 'px';
+            clone.style.zIndex = '9999';
+            clone.style.transition = 'all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)'; // Bouncy effect
+            clone.style.opacity = '1';
+            clone.classList.remove('mb-4'); 
+            
+            // Remove close button from clone to make it look cleaner during animation
+            const closeBtn = clone.querySelector('.btn-close');
+            if (closeBtn) closeBtn.remove();
+
+            document.body.appendChild(clone);
+            
+            // Hide original immediately
+            banner.style.display = 'none';
+            
+            // Force reflow
+            clone.offsetHeight;
+            
+            // Trigger animation
+            requestAnimationFrame(() => {
+                clone.style.left = targetRect.left + 'px';
+                clone.style.top = targetRect.top + 'px';
+                clone.style.width = '20px'; // Shrink to small size
+                clone.style.height = '20px';
+                clone.style.opacity = '0';
+                clone.style.transform = 'scale(0.1)';
+            });
+
+            // Cleanup
+            setTimeout(() => {
+                clone.remove();
+            }, 800);
+        } else {
+            // If nav link is not visible (e.g. mobile menu collapsed), just fade out
+            banner.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+            banner.style.opacity = '0';
+            banner.style.transform = 'scale(0.9)';
+            
+            setTimeout(() => {
+                banner.style.display = 'none';
+            }, 300);
+        }
+
+        // Show create button with fade in
+        if (createBtn) {
+            createBtn.style.display = 'block';
+            createBtn.style.opacity = '0';
+            createBtn.style.transition = 'opacity 0.5s ease';
+            // Small delay to let the banner clear out a bit visually or just start immediately
+            requestAnimationFrame(() => {
+                createBtn.style.opacity = '1';
+            });
+        }
+        
+        if (announcementId) {
+            localStorage.setItem('dismissed_announcement_id', announcementId);
+        }
+    }
+</script>
 {% endblock %}

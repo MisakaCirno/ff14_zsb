@@ -19,6 +19,10 @@
         main {
             flex: 1;
         }
+        .announcement-content img {
+            max-width: 100%;
+            height: auto;
+        }
         .card-hover:hover {
             transform: translateY(-5px);
             box-shadow: 0 8px 25px rgba(0,0,0,0.15);
@@ -105,25 +109,21 @@
                             <i class="bi bi-house"></i> 主页
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'announcement_list' %}" id="nav-announcement-link">
+                            <i class="bi bi-megaphone"></i> 站点动态
+                        </a>
+                    </li>
                     {% if user.is_authenticated %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'my_shares' %}">
                             <i class="bi bi-person-circle"></i> 我的分享
                         </a>
                     </li>
-                    {% if user.is_staff or user.is_superuser %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'admin_review_list' %}">
-                            <i class="bi bi-shield-check"></i> 审核列表
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'admin_report_list' %}">
-                            <i class="bi bi-shield-exclamation"></i> 举报处理
-                        </a>
-                    </li>
                     {% endif %}
-                    {% endif %}
+                </ul>
+
+                <ul class="navbar-nav me-2">
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="historyDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-clock-history"></i> 浏览记录
@@ -170,6 +170,21 @@
                             <li><a class="dropdown-item" href="{% url 'my_shares' %}">
                                 <i class="bi bi-collection"></i> 我的分享
                             </a></li>
+                            
+                            {% if user.is_staff or user.is_superuser %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">管理</h6></li>
+                            <li><a class="dropdown-item" href="/admin/shares/announcement/add/" target="_blank">
+                                <i class="bi bi-megaphone"></i> 发布动态
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'admin_review_list' %}">
+                                <i class="bi bi-shield-check"></i> 审核列表
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'admin_report_list' %}">
+                                <i class="bi bi-shield-exclamation"></i> 举报处理
+                            </a></li>
+                            {% endif %}
+
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="{% url 'logout' %}">
                                 <i class="bi bi-box-arrow-right"></i> 退出登录

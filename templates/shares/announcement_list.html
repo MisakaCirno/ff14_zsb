@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block title %}站点动态 - 粘鼠板儿{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0"><i class="bi bi-megaphone"></i> 站点动态</h2>
+            </div>
+
+            <div class="list-group shadow-sm">
+                {% for announcement in announcements %}
+                <div class="list-group-item list-group-item-action p-4 border-start-0 border-end-0 border-top-0 border-bottom {% if not announcement.is_active %}bg-light text-muted{% endif %}">
+                    <div class="d-flex w-100 justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center">
+                            <h5 class="mb-1 fw-bold {% if announcement.is_active %}text-primary{% endif %}">{{ announcement.title }}</h5>
+                            {% if not announcement.is_active %}
+                            <span class="badge bg-secondary ms-2">已隐藏</span>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <small class="text-muted me-3">
+                                <i class="bi bi-clock"></i> {{ announcement.created_at|date:"Y-m-d H:i" }}
+                            </small>
+                            {% if user.is_staff or user.is_superuser %}
+                            <a href="{% url 'toggle_announcement_visibility' announcement.id %}" class="btn btn-sm {% if announcement.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                                {% if announcement.is_active %}
+                                <i class="bi bi-eye-slash"></i> 隐藏
+                                {% else %}
+                                <i class="bi bi-eye"></i> 显示
+                                {% endif %}
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="mb-1 text-break announcement-content">{{ announcement.content|safe }}</div>
+                </div>
+                {% empty %}
+                <div class="list-group-item p-5 text-center text-muted">
+                    <i class="bi bi-inbox display-4 mb-3 d-block"></i>
+                    <p class="mb-0">暂无动态</p>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- 分页 -->
+            {% if announcements.has_other_pages %}
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if announcements.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ announcements.previous_page_number }}" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">&laquo;</span>
+                    </li>
+                    {% endif %}
+
+                    {% for num in announcements.paginator.page_range %}
+                        {% if announcements.number == num %}
+                        <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                        {% elif num > announcements.number|add:'-3' and num < announcements.number|add:'3' %}
+                        <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if announcements.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ announcements.next_page_number }}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">&raquo;</span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
