@@ -102,6 +102,21 @@
                             {% endif %}
                         </div>
 
+                        <div class="mb-3">
+                            <div class="form-check form-check-inline">
+                                {{ form.is_spoiler }}
+                                <label class="form-check-label" for="{{ form.is_spoiler.id_for_label }}">
+                                    {{ form.is_spoiler.label }}
+                                </label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                {{ form.is_nsfw }}
+                                <label class="form-check-label" for="{{ form.is_nsfw.id_for_label }}">
+                                    {{ form.is_nsfw.label }}
+                                </label>
+                            </div>
+                        </div>
+
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary btn-lg">
                                 <i class="bi bi-check-circle"></i> 创建分享

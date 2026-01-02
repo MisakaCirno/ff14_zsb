@@ -20,9 +20,39 @@
                 <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-eye"></i> 战术板预览</h5>
                 </div>
-                <div class="card-body p-0">
+                <div class="card-body p-0 position-relative">
+                    {% if share.is_nsfw %}
+                    <div class="spoiler-overlay" id="nsfwOverlay" onclick="revealContent('nsfwOverlay')" style="z-index: 22;">
+                        <div class="text-center">
+                            <i class="bi bi-exclamation-diamond-fill fs-1 text-danger mb-2"></i>
+                            <h5 class="fw-bold">预览图被隐藏</h5>
+                            <p class="mb-3">此分享可能包含令人不适的内容</p>
+                            <button class="btn btn-outline-light btn-sm">
+                                <i class="bi bi-eye"></i> 点击查看
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if share.is_spoiler %}
+                    <div class="spoiler-overlay" id="spoilerOverlay" onclick="revealContent('spoilerOverlay')" style="z-index: 21;">
+                        <div class="text-center">
+                            <i class="bi bi-eye-slash-fill fs-1 mb-2"></i>
+                            <h5 class="fw-bold">预览图被隐藏</h5>
+                            <p class="mb-3">此分享可能包含剧透内容</p>
+                            <button class="btn btn-outline-light btn-sm">
+                                <i class="bi bi-eye"></i> 点击查看
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <div class="ratio" style="--bs-aspect-ratio: 75%;">
-                        <iframe src="/static/viewer/embed.html#{{ share.strategy_code|urlsafe_base64 }}" style="border: none;"></iframe>
+                        <iframe src="/static/viewer/embed.html#{{ share.strategy_code|urlsafe_base64 }}" 
+                                style="border: none;"
+                                id="previewIframe"
+                                class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}">
+                        </iframe>
                     </div>
                 </div>
             </div>
@@ -102,6 +132,20 @@
                                 <span class="badge bg-warning text-dark">不公开</span>
                                 {% endif %}
                             </span>
+                        </div>
+                        {% endif %}
+
+                        {% if share.is_spoiler %}
+                        <div class="d-flex justify-content-between mt-1">
+                            <span><i class="bi bi-eye-slash"></i> 内容标记</span>
+                            <span class="badge bg-secondary">可能包含剧透</span>
+                        </div>
+                        {% endif %}
+                        
+                        {% if share.is_nsfw %}
+                        <div class="d-flex justify-content-between mt-1">
+                            <span><i class="bi bi-exclamation-diamond"></i> 内容标记</span>
+                            <span class="badge bg-danger">可能令人不适</span>
                         </div>
                         {% endif %}
                     </div>
@@ -202,6 +246,34 @@
 <script src="{% static 'js/html2canvas.min.js' %}"></script>
 <script src="{% static 'js/qrcode.min.js' %}"></script>
 <script>
+function revealContent(overlayId) {
+    const overlay = document.getElementById(overlayId);
+    if (overlay) {
+        overlay.style.transition = 'opacity 0.3s';
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            
+            // Check if any other overlays are still visible
+            const overlays = document.querySelectorAll('.spoiler-overlay');
+            let hasVisibleOverlay = false;
+            
+            overlays.forEach(el => {
+                if (el.style.display !== 'none') {
+                    hasVisibleOverlay = true;
+                }
+            });
+            
+            if (!hasVisibleOverlay) {
+                const iframe = document.getElementById('previewIframe');
+                if (iframe) {
+                    iframe.classList.remove('blur-content');
+                }
+            }
+        }, 300);
+    }
+}
+
 function copyCode(btn) {
     const codeInput = document.getElementById('strategyCode');
     codeInput.select();
