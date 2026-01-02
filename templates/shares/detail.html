@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load share_extras %}
 
 {% block title %}{{ share.title }} - 详情{% endblock %}
 
@@ -21,7 +22,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="ratio" style="--bs-aspect-ratio: 75%;">
-                        <iframe src="/static/viewer/embed.html#{{ share.strategy_code }}" style="border: none;"></iframe>
+                        <iframe src="/static/viewer/embed.html#{{ share.strategy_code|urlsafe_base64 }}" style="border: none;"></iframe>
                     </div>
                 </div>
             </div>
@@ -289,9 +290,9 @@ async function generateShareImage() {
         offscreenIframe.style.border = 'none';
         offscreenIframe.style.visibility = 'hidden'; // 避免闪烁，但保持渲染
         
-        // 获取当前战术板代码
-        const strategyCode = document.getElementById('strategyCode').value;
-        offscreenIframe.src = '/static/viewer/embed.html#' + strategyCode;
+        // 获取当前战术板代码 (使用服务端预编码的 Base64 安全字符串)
+        const encodedStrategyCode = "{{ share.strategy_code|urlsafe_base64 }}";
+        offscreenIframe.src = '/static/viewer/embed.html#' + encodedStrategyCode;
         
         document.body.appendChild(offscreenIframe);
         
