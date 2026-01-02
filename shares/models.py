@@ -75,6 +75,7 @@ class Share(models.Model):
     
     is_spoiler = models.BooleanField(default=False, verbose_name='可能包含剧透')
     is_nsfw = models.BooleanField(default=False, verbose_name='可能令人不适')
+    is_original = models.BooleanField(default=False, verbose_name='原创')
 
     views = models.IntegerField(default=0, verbose_name='浏览量')
 

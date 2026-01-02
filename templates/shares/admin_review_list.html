@@ -81,6 +81,9 @@
                     <div class="mb-2">
                         <small class="text-muted">
                             <i class="bi bi-person"></i> {{ share.author.profile.nickname|default:share.author.username }}
+                            {% if share.is_original %}
+                            <span class="badge bg-success ms-1" style="font-size: 0.6rem;">原创</span>
+                            {% endif %}
                         </small>
                     </div>
                     <div class="mb-2">
