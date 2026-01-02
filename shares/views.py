@@ -19,10 +19,32 @@ def index(request):
         visibility=Share.Visibility.PUBLIC,
         status=Share.Status.APPROVED
     )
+
+    # 筛选分类
+    category = request.GET.get('category')
+    if category in ['entertainment', 'combat']:
+        shares_list = shares_list.filter(category=category)
+
+    # 筛选剧透/NSFW
+    hide_spoiler = request.GET.get('hide_spoiler') == 'on'
+    if hide_spoiler:
+        shares_list = shares_list.filter(is_spoiler=False)
+
+    hide_nsfw = request.GET.get('hide_nsfw') == 'on'
+    if hide_nsfw:
+        shares_list = shares_list.filter(is_nsfw=False)
+
     paginator = Paginator(shares_list, 12)  # 每页12个
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
-    return render(request, 'shares/index.html', {'shares': shares})
+    
+    context = {
+        'shares': shares,
+        'current_category': category,
+        'hide_spoiler': hide_spoiler,
+        'hide_nsfw': hide_nsfw,
+    }
+    return render(request, 'shares/index.html', context)
 
 
 def share_detail(request, share_id):

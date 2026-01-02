@@ -59,6 +59,17 @@ class Share(models.Model):
         APPROVED = 'approved', '已通过'
         REJECTED = 'rejected', '已拒绝'
 
+    class Category(models.TextChoices):
+        ENTERTAINMENT = 'entertainment', '娱乐'
+        COMBAT = 'combat', '战斗'
+
+    category = models.CharField(
+        max_length=20,
+        choices=Category.choices,
+        default=Category.ENTERTAINMENT,
+        verbose_name='分类'
+    )
+
     visibility = models.CharField(
         max_length=10,
         choices=Visibility.choices,

@@ -66,6 +66,17 @@
                     </iframe>
                     <!-- 半透明遮罩 -->
                     <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay" style="background: rgba(0,0,0,0.05); pointer-events: none;"></div>
+                    <!-- 分类和原创标签 -->
+                    <div class="position-absolute top-0 start-0 m-2">
+                        {% if share.category == 'combat' %}
+                        <span class="badge bg-danger shadow-sm">战斗</span>
+                        {% else %}
+                        <span class="badge bg-success shadow-sm">娱乐</span>
+                        {% endif %}
+                        {% if share.is_original %}
+                        <span class="badge bg-primary shadow-sm ms-1">原创</span>
+                        {% endif %}
+                    </div>
                     <!-- 状态标签 -->
                     <div class="position-absolute top-0 end-0 m-2">
                         <span class="badge bg-warning text-dark">
@@ -81,9 +92,6 @@
                     <div class="mb-2">
                         <small class="text-muted">
                             <i class="bi bi-person"></i> {{ share.author.profile.nickname|default:share.author.username }}
-                            {% if share.is_original %}
-                            <span class="badge bg-success ms-1" style="font-size: 0.6rem;">原创</span>
-                            {% endif %}
                         </small>
                     </div>
                     <div class="mb-2">

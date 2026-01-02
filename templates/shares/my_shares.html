@@ -72,14 +72,19 @@
                         </iframe>
                         <!-- 半透明遮罩 -->
                         <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay" style="background: rgba(0,0,0,0.05); pointer-events: none;"></div>
+                        <!-- 分类和原创标签 -->
+                        <div class="position-absolute top-0 start-0 m-2">
+                            {% if share.category == 'combat' %}
+                            <span class="badge bg-danger shadow-sm">战斗</span>
+                            {% else %}
+                            <span class="badge bg-success shadow-sm">娱乐</span>
+                            {% endif %}
+                            {% if share.is_original %}
+                            <span class="badge bg-primary shadow-sm ms-1">原创</span>
+                            {% endif %}
+                        </div>
                         <!-- 状态和浏览量标签 -->
                         <div class="position-absolute top-0 end-0 m-2">
-                            {% if share.is_original %}
-                            <span class="badge bg-success me-1">
-                                <i class="bi bi-patch-check-fill"></i> 原创
-                            </span>
-                            {% endif %}
-
                             {% if share.status == 'pending' %}
                             <span class="badge bg-info text-dark me-1">
                                 <i class="bi bi-hourglass-split"></i> 待审核

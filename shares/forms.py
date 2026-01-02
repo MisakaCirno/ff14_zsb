@@ -21,11 +21,12 @@ class ShareForm(forms.ModelForm):
     """分享创建/编辑表单"""
     class Meta:
         model = Share
-        fields = ['title', 'strategy_code', 'description', 'visibility', 'is_spoiler', 'is_nsfw', 'is_original']
+        fields = ['title', 'strategy_code', 'description', 'category', 'visibility', 'is_spoiler', 'is_nsfw', 'is_original']
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '输入标题'}),
             'strategy_code': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '粘贴战术板代码，例如：[stgy:a0+k-wvpr...]'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '添加描述（可选）'}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
             'visibility': forms.Select(attrs={'class': 'form-select'}),
             'is_spoiler': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_nsfw': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -35,6 +36,7 @@ class ShareForm(forms.ModelForm):
             'title': '标题',
             'strategy_code': '战术板代码',
             'description': '描述',
+            'category': '分类',
             'visibility': '可见性',
             'is_spoiler': '可能包含剧透',
             'is_nsfw': '可能令人不适',

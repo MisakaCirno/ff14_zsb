@@ -46,6 +46,51 @@
         </div>
     </div>
 
+    <!-- 筛选工具栏 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body py-3">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <!-- 分类切换 -->
+                        <div class="btn-group" role="group">
+                            <a href="?category={% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" 
+                               class="btn btn-outline-primary {% if not current_category %}active{% endif %}">
+                                全部
+                            </a>
+                            <a href="?category=entertainment{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" 
+                               class="btn btn-outline-success {% if current_category == 'entertainment' %}active{% endif %}">
+                                娱乐
+                            </a>
+                            <a href="?category=combat{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" 
+                               class="btn btn-outline-danger {% if current_category == 'combat' %}active{% endif %}">
+                                战斗
+                            </a>
+                        </div>
+
+                        <!-- 过滤选项 -->
+                        <form method="get" action="{% url 'index' %}" class="d-flex gap-3 align-items-center m-0">
+                            {% if current_category %}
+                            <input type="hidden" name="category" value="{{ current_category }}">
+                            {% endif %}
+                            
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="hideSpoiler" name="hide_spoiler" 
+                                       {% if hide_spoiler %}checked{% endif %} onchange="this.form.submit()">
+                                <label class="form-check-label" for="hideSpoiler">隐藏剧透</label>
+                            </div>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="hideNsfw" name="hide_nsfw" 
+                                       {% if hide_nsfw %}checked{% endif %} onchange="this.form.submit()">
+                                <label class="form-check-label" for="hideNsfw">隐藏令人不适</label>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 瀑布流布局 -->
     <div id="app">
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
@@ -85,6 +130,17 @@
                             </iframe>
                             <!-- 半透明遮罩 -->
                             <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay" style="background: rgba(0,0,0,0.05); pointer-events: none;"></div>
+                            <!-- 分类和原创标签 -->
+                            <div class="position-absolute top-0 start-0 m-2">
+                                {% if share.category == 'combat' %}
+                                <span class="badge bg-danger shadow-sm">战斗</span>
+                                {% else %}
+                                <span class="badge bg-success shadow-sm">娱乐</span>
+                                {% endif %}
+                                {% if share.is_original %}
+                                <span class="badge bg-primary shadow-sm ms-1">原创</span>
+                                {% endif %}
+                            </div>
                             <!-- 浏览量标签 -->
                             <div class="position-absolute top-0 end-0 m-2">
                                 <span class="badge bg-dark bg-opacity-75">
@@ -101,9 +157,6 @@
                         <div class="mb-2">
                             <small class="text-muted">
                                 <i class="bi bi-person-circle"></i> {% if share.author %}{{ share.author.profile.get_display_name }}{% else %}匿名用户{% endif %}
-                                {% if share.is_original %}
-                                <span class="badge bg-success ms-1" style="font-size: 0.6rem;" title="原创内容">原创</span>
-                                {% endif %}
                                 <span class="ms-2">
                                     <i class="bi bi-calendar3"></i> {{ share.created_at|date:"m-d" }}
                                 </span>
@@ -154,12 +207,12 @@
             <ul class="pagination pagination-lg justify-content-center">
                 {% if shares.has_previous %}
                 <li class="page-item">
-                    <a class="page-link" href="?page=1" aria-label="首页">
+                    <a class="page-link" href="?page=1{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" aria-label="首页">
                         <i class="bi bi-chevron-bar-left"></i>
                     </a>
                 </li>
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ shares.previous_page_number }}" aria-label="上一页">
+                    <a class="page-link" href="?page={{ shares.previous_page_number }}{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" aria-label="上一页">
                         <i class="bi bi-chevron-left"></i> 上一页
                     </a>
                 </li>
@@ -184,12 +237,12 @@
                 
                 {% if shares.has_next %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ shares.next_page_number }}" aria-label="下一页">
+                    <a class="page-link" href="?page={{ shares.next_page_number }}{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" aria-label="下一页">
                         下一页 <i class="bi bi-chevron-right"></i>
                     </a>
                 </li>
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ shares.paginator.num_pages }}" aria-label="末页">
+                    <a class="page-link" href="?page={{ shares.paginator.num_pages }}{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" aria-label="末页">
                         <i class="bi bi-chevron-bar-right"></i>
                     </a>
                 </li>

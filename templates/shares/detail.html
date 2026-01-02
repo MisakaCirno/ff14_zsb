@@ -106,7 +106,14 @@
             <!-- 标题和作者信息 -->
             <div class="card mb-4">
                 <div class="card-body">
-                    <h4 class="card-title fw-bold mb-3">{{ share.title }}</h4>
+                    <h4 class="card-title fw-bold mb-3">
+                        {% if share.category == 'combat' %}
+                        <span class="badge bg-danger fs-6 align-middle me-1">战斗</span>
+                        {% else %}
+                        <span class="badge bg-success fs-6 align-middle me-1">娱乐</span>
+                        {% endif %}
+                        {{ share.title }}
+                    </h4>
                     
                     <div class="d-flex align-items-center mb-3">
                         <div class="flex-shrink-0">
