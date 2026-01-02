@@ -41,7 +41,20 @@
                     }
                     
                     // Decode
-                    var decoded = atob(base64);
+                    var binaryString = atob(base64);
+                    
+                    // Correctly decode UTF-8
+                    try {
+                        var bytes = new Uint8Array(binaryString.length);
+                        for (var i = 0; i < binaryString.length; i++) {
+                            bytes[i] = binaryString.charCodeAt(i);
+                        }
+                        var decoded = new TextDecoder('utf-8').decode(bytes);
+                    } catch (e) {
+                        // Fallback for older browsers or if TextDecoder fails
+                        console.warn('TextDecoder failed, falling back to simple decode', e);
+                        decoded = binaryString;
+                    }
                     
                     // If the decoded string looks like a strategy code, set it to global variable
                     if (decoded.indexOf('[stgy:') === 0) {
