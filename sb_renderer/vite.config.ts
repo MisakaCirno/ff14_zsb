@@ -13,4 +13,8 @@ export default defineConfig({
     tailwindcss(),
   ],
   base: './',
+  build: {
+    outDir: '../static/viewer_new',
+    emptyOutDir: true,
+  },
 })
