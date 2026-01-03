@@ -47,7 +47,7 @@
                     {% endif %}
 
                     <div class="ratio" style="--bs-aspect-ratio: 75%;">
-                        <iframe src="/static/viewer/embed.html#{{ share.strategy_code }}" 
+                        <iframe src="/static/viewer_new/index.html#{{ share.strategy_code }}" 
                                 style="border: none;"
                                 id="previewIframe"
                                 class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}">
@@ -375,7 +375,7 @@ async function generateShareImage() {
         
         // 获取当前战术板代码
         const strategyCode = document.getElementById('strategyCode').value;
-        offscreenIframe.src = '/static/viewer/embed.html#' + strategyCode;
+        offscreenIframe.src = '/static/viewer_new/index.html#' + strategyCode;
         
         document.body.appendChild(offscreenIframe);
         

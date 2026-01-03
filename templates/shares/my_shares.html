@@ -40,7 +40,18 @@
             <div class="card h-100 card-hover shadow-sm">
                 <!-- 预览区域 -->
                 <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none">
-                    <div class="card-img-top position-relative" style="height: 220px; overflow: hidden; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                    <div class="card-img-top position-relative" style="overflow: hidden; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <div class="ratio ratio-4x3">
+                            <iframe 
+                                src="/static/viewer_new/index.html#{{ share.strategy_code }}" 
+                                style="border: none; pointer-events: none;"
+                                class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
+                                loading="lazy"
+                                title="战术板预览"
+                                onload="this.closest('.card-img-top').querySelector('.preview-loading').style.display='none'">
+                            </iframe>
+                        </div>
+
                         {% if share.is_spoiler or share.is_nsfw %}
                         <div class="spoiler-overlay">
                             <div class="text-center">
@@ -61,14 +72,7 @@
                                 <span class="visually-hidden">加载中...</span>
                             </div>
                         </div>
-                        <iframe 
-                            src="/static/viewer/embed.html#{{ share.strategy_code }}" 
-                            style="width: 100%; height: 100%; border: none; pointer-events: none;"
-                            class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
-                            loading="lazy"
-                            title="战术板预览"
-                            onload="this.previousElementSibling.style.display='none'">
-                        </iframe>
+                        
                         <!-- 半透明遮罩 -->
                         <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay" style="background: rgba(0,0,0,0.05); pointer-events: none;"></div>
                         <!-- 分类和原创标签 -->
