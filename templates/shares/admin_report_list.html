@@ -22,7 +22,11 @@
                             <span class="fw-bold me-2">{{ share.title }}</span>
                             <small class="text-muted">ID: {{ share.share_id }}</small>
                             <span class="ms-auto text-muted small">
-                                作者: {% if share.author %}{{ share.author.username }}{% else %}匿名{% endif %}
+                                作者: {% if share.author %}
+                                <a href="{% url 'user_public_profile' share.author.username %}" class="text-decoration-none text-muted" target="_blank">
+                                    {{ share.author.username }}
+                                </a>
+                                {% else %}匿名{% endif %}
                             </span>
                         </div>
                     </button>

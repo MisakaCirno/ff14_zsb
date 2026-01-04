@@ -19,6 +19,7 @@ urlpatterns = [
     path('logout/', views.user_logout, name='logout'),
     
     # 用户资料
+    path('u/<str:username>/', views.user_public_profile, name='user_public_profile'),
     path('profile/edit/', views.profile_edit, name='profile_edit'),
     path('profile/password/', views.password_change, name='password_change'),
     

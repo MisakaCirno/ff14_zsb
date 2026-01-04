@@ -181,7 +181,14 @@
                         </h5>
                         <div class="mb-2">
                             <small class="text-muted">
-                                <i class="bi bi-person-circle"></i> {% if share.author %}{{ share.author.profile.get_display_name }}{% else %}匿名用户{% endif %}
+                                <i class="bi bi-person-circle"></i> 
+                                {% if share.author %}
+                                <a href="{% url 'user_public_profile' share.author.username %}" class="text-decoration-none text-muted">
+                                    {{ share.author.profile.get_display_name }}
+                                </a>
+                                {% else %}
+                                匿名用户
+                                {% endif %}
                                 <span class="ms-2">
                                     <i class="bi bi-calendar3"></i> {{ share.created_at|date:"m-d" }}
                                 </span>

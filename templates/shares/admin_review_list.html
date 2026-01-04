@@ -94,7 +94,10 @@
                     </h5>
                     <div class="mb-2">
                         <small class="text-muted">
-                            <i class="bi bi-person"></i> {{ share.author.profile.nickname|default:share.author.username }}
+                            <i class="bi bi-person"></i> 
+                            <a href="{% url 'user_public_profile' share.author.username %}" class="text-decoration-none text-muted" target="_blank">
+                                {{ share.author.profile.nickname|default:share.author.username }}
+                            </a>
                         </small>
                     </div>
                     <div class="mb-2">

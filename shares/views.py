@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
@@ -496,6 +497,28 @@ def admin_resolve_share_reports(request, share_id, action):
         messages.info(request, f'已驳回分享 "{share.title}" 的所有举报。')
         
     return redirect('admin_report_list')
+
+
+def user_public_profile(request, username):
+    """用户公开个人主页"""
+    author = get_object_or_404(User, username=username)
+    
+    # 获取该用户发布的所有公开且已通过审核的分享
+    shares_list = Share.objects.filter(
+        author=author,
+        visibility=Share.Visibility.PUBLIC,
+        status=Share.Status.APPROVED
+    ).order_by('-created_at')
+    
+    paginator = Paginator(shares_list, 12)
+    page_number = request.GET.get('page')
+    shares = paginator.get_page(page_number)
+    
+    return render(request, 'shares/user_public_profile.html', {
+        'author': author,
+        'shares': shares,
+    })
+
 
 
 

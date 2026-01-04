@@ -120,7 +120,13 @@
                         </div>
                         <div class="flex-grow-1 ms-3">
                             <h6 class="mb-0">
-                                {% if share.author %}{{ share.author.profile.get_display_name }}{% else %}匿名用户{% endif %}
+                                {% if share.author %}
+                                <a href="{% url 'user_public_profile' share.author.username %}" class="text-decoration-none text-dark">
+                                    {{ share.author.profile.get_display_name }}
+                                </a>
+                                {% else %}
+                                匿名用户
+                                {% endif %}
                                 {% if share.is_original %}
                                 <span class="badge bg-success ms-1" style="font-size: 0.7rem;" title="原创内容">原创</span>
                                 {% endif %}
