@@ -131,6 +131,11 @@
                                 <span class="badge bg-success ms-1" style="font-size: 0.7rem;" title="原创内容">原创</span>
                                 {% endif %}
                             </h6>
+                            {% if share.author.profile.bio %}
+                            <p class="text-muted small mb-0 mt-1 text-truncate" style="max-width: 200px;" title="{{ share.author.profile.bio }}">
+                                {{ share.author.profile.bio }}
+                            </p>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -209,7 +214,7 @@
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card mb-4">
                 <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-info-circle"></i> 使用说明</h5>
                 </div>
@@ -241,21 +246,30 @@
                                     {{ collection.title }}
                                 </a>
                             </h6>
-                            <button class="btn btn-sm btn-link text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#collection-{{ collection.id }}" aria-expanded="false">
+                            <button class="btn btn-sm btn-link text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#collection-{{ collection.id }}" aria-expanded="{% if request.GET.collection_id == collection.id|stringformat:'s' %}true{% else %}false{% endif %}">
                                 展开 <i class="bi bi-chevron-down"></i>
                             </button>
                         </div>
-                        <div class="collapse" id="collection-{{ collection.id }}">
+                        <div class="collapse {% if request.GET.collection_id == collection.id|stringformat:'s' %}show{% endif %}" id="collection-{{ collection.id }}">
                             <div class="small text-muted mb-2">
                                 <i class="bi bi-person"></i> {{ collection.author.profile.get_display_name }}
                             </div>
                             <div class="list-group list-group-flush border-top">
                                 {% for item in collection.collectionitem_set.all|slice:":5" %}
-                                <a href="{% url 'share_detail' item.share.share_id %}" class="list-group-item list-group-item-action px-0 py-2 border-0 {% if item.share.share_id == share.share_id %}active text-white bg-primary rounded px-2{% endif %}">
+                                {% if item.share.share_id == share.share_id %}
+                                <div class="list-group-item px-0 py-2 border-0 active text-white bg-primary rounded px-2">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <span class="text-truncate" style="max-width: 200px;">{{ forloop.counter }}. {{ item.share.title }}</span>
+                                        <span class="badge bg-light text-primary rounded-pill" style="font-size: 0.7em;">当前</span>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <a href="{% url 'share_detail' item.share.share_id %}?collection_id={{ collection.id }}" class="list-group-item list-group-item-action px-0 py-2 border-0">
                                     <div class="d-flex w-100 justify-content-between">
                                         <span class="text-truncate" style="max-width: 200px;">{{ forloop.counter }}. {{ item.share.title }}</span>
                                     </div>
                                 </a>
+                                {% endif %}
                                 {% endfor %}
                                 {% if collection.collectionitem_set.count > 5 %}
                                 <a href="{% url 'collection_detail' collection.id %}" class="list-group-item list-group-item-action px-0 py-2 border-0 text-center text-primary">
@@ -298,10 +312,15 @@
                         <button type="submit" class="btn btn-primary">确定添加</button>
                     </div>
                 </form>
+                <div class="text-center mt-3 pt-3 border-top">
+                    <a href="{% url 'create_collection' %}?next={{ request.path }}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-plus-lg"></i> 创建新合集
+                    </a>
+                </div>
                 {% else %}
                 <div class="text-center py-3">
                     <p class="text-muted">您还没有创建任何合集</p>
-                    <a href="{% url 'create_collection' %}" class="btn btn-outline-primary btn-sm">
+                    <a href="{% url 'create_collection' %}?next={{ request.path }}" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-plus-lg"></i> 创建新合集
                     </a>
                 </div>
@@ -520,8 +539,9 @@ async function generateShareImage() {
         document.body.appendChild(qrContainer);
         
         // 生成二维码
+        const cleanUrl = window.location.origin + window.location.pathname;
         const qrCode = new QRCode(qrContainer, {
-            text: window.location.href,
+            text: cleanUrl,
             width: 180,
             height: 180,
             colorDark: '#000000',
@@ -655,7 +675,7 @@ async function generateShareImage() {
         ctx.font = '14px "Microsoft YaHei", Arial, sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         // 显示完整链接（去除协议头以节省空间）
-        let linkText = window.location.href.replace(/^https?:\/\//, '');
+        let linkText = cleanUrl.replace(/^https?:\/\//, '');
         ctx.fillText(linkText, finalCanvas.width - 20, 27);
         
         // 添加底部提示文字（二维码上方）+ 描边
@@ -778,8 +798,8 @@ function downloadShareImage() {
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Set share URL from window location
-        document.getElementById('shareUrl').value = window.location.href;
+        // Set share URL from window location (excluding query parameters)
+        document.getElementById('shareUrl').value = window.location.origin + window.location.pathname;
 
         // Save visit history
         const shareId = "{{ share.share_id }}";

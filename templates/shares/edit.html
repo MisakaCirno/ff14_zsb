@@ -51,7 +51,7 @@
 
                         <div class="mb-3">
                             <label for="{{ form.description.id_for_label }}" class="form-label">
-                                {{ form.description.label }}
+                                {{ form.description.label }} (可选)
                             </label>
                             <div style="display: none;">
                                 {{ form.description }}
@@ -67,6 +67,9 @@
                                 {{ form.category.label }}
                             </label>
                             {{ form.category }}
+                            <div class="form-text">
+                                战斗：副本攻略、机制解法等 | 娱乐：绘画、风景、趣味玩法等
+                            </div>
                             {% if form.category.errors %}
                             <div class="text-danger small">{{ form.category.errors }}</div>
                             {% endif %}

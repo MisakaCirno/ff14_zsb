@@ -575,6 +575,12 @@ def create_collection(request):
             collection.author = request.user
             collection.save()
             messages.success(request, '合集创建成功！')
+            
+            # 支持 next 参数重定向
+            next_url = request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
+                
             return redirect('my_shares')  # 或者跳转到合集详情页
     else:
         form = CollectionForm()
