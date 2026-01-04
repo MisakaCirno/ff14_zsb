@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strategy Board Viewer</title>
+    <link href="https://ff14hub.com/static/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #app {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #left-pane {
+            flex: 1;
+            height: 100%;
+            background-color: #f0f0f0;
+            position: relative;
+        }
+
+        #preview-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .preview-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .preview-frame.active {
+            display: block;
+        }
+
+        #right-pane {
+            width: 250px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid #dee2e6;
+            background-color: #fff;
+            flex-shrink: 0;
+        }
+
+        #toolbar {
+            padding: 10px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-around;
+            background-color: #f8f9fa;
+        }
+
+        #toolbar button {
+            width: 35px;
+            height: 35px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        #list-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+
+        .list-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-family: monospace;
+            text-align: right;
+        }
+
+        .list-item:hover {
+            background-color: #e9ecef;
+        }
+
+        .list-item.active {
+            background-color: #0d6efd;
+            color: white;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1050;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-box {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="app">
+        <div id="left-pane">
+            <div id="preview-container"></div>
+        </div>
+        <div id="right-pane">
+            <div id="toolbar">
+                <button class="btn btn-outline-primary" onclick="openAddModal()" title="添加">+</button>
+                <button class="btn btn-outline-danger" onclick="deleteItem()" title="删除">-</button>
+                <button class="btn btn-outline-secondary" onclick="moveItem(-1)" title="上移">↑</button>
+                <button class="btn btn-outline-secondary" onclick="moveItem(1)" title="下移">↓</button>
+                <button class="btn btn-outline-danger" onclick="clearList()" title="清空">x</button>
+            </div>
+            <ul id="list-container">
+                <!-- Items will be injected here -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- Add Modal -->
+    <div id="addModal" class="modal-overlay">
+        <div class="modal-box">
+            <h5 class="mb-3">添加数据</h5>
+            <div class="mb-3">
+                <input id="inputTitle" class="form-control mb-2" type="text" placeholder="标题">
+                <textarea id="inputData" class="form-control" rows="6" placeholder="在此输入数据字符串..."></textarea>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button class="btn btn-secondary" onclick="closeAddModal()">取消</button>
+                <button class="btn btn-primary" onclick="confirmAdd()">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = "https://ff14hub.com/static/viewer_new/index.html#";
+        // Initial data from the original file
+        const initialHash = "[stgy:a-aB7kRpCUwm3PyeNbj84lAp7FdW-7xxwEaxKNTQNXswBAlUtSUOyjcAfrbQPhYzPG7nnbD1oIXN6aLi7NE18M4kM5lntfVsjq1WlsE2SEQLth4kzW-R0F2Y3uYnp3KqN-TU0ZO6CIveGpIuHp4eekV5XSrbx38dSXwCnyVQMhP+TGxUib2IzeKnoU5MYjO5uxYL8JFyXOEzimbCya+9FEDyPSXoKgR2zcN5tq7Kw7x3SbqK4PNElaYxzOq4WbjCdvpOZHO+qcQiZAUT-j]";
+
+        let nextId = 1;
+        let items = [{ id: nextId++, title: "默认", hash: initialHash }];
+        let currentIndex = 0;
+
+        const listContainer = document.getElementById('list-container');
+        const previewContainer = document.getElementById('preview-container');
+        const addModal = document.getElementById('addModal');
+        const inputTitle = document.getElementById('inputTitle');
+        const inputData = document.getElementById('inputData');
+
+        function renderList() {
+            listContainer.innerHTML = '';
+            items.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.className = `list-item ${index === currentIndex ? 'active' : ''}`;
+                li.textContent = item.title || `Item ${index + 1}`;
+                li.onclick = () => selectItem(index);
+                listContainer.appendChild(li);
+            });
+            syncIframes();
+        }
+
+        function syncIframes() {
+            // 1. Create missing iframes
+            items.forEach((item, index) => {
+                let iframe = document.getElementById(`iframe-${item.id}`);
+                if (!iframe) {
+                    iframe = document.createElement('iframe');
+                    iframe.id = `iframe-${item.id}`;
+                    iframe.className = 'preview-frame';
+                    iframe.src = BASE_URL + item.hash;
+                    previewContainer.appendChild(iframe);
+                }
+                
+                // Update visibility
+                if (index === currentIndex) {
+                    iframe.classList.add('active');
+                } else {
+                    iframe.classList.remove('active');
+                }
+            });
+
+            // 2. Remove extra iframes
+            const currentIds = new Set(items.map(i => `iframe-${i.id}`));
+            const existingIframes = Array.from(previewContainer.children);
+            existingIframes.forEach(iframe => {
+                if (!currentIds.has(iframe.id)) {
+                    iframe.src = 'about:blank'; // Help browser release resources
+                    try {
+                        iframe.contentWindow.document.write('');
+                        iframe.contentWindow.close();
+                    } catch(e) { /* ignore cross-origin errors */ }
+                    iframe.remove();
+                }
+            });
+        }
+
+        function selectItem(index) {
+            currentIndex = index;
+            renderList();
+        }
+
+        // Toolbar Actions
+        function openAddModal() {
+            inputTitle.value = '';
+            inputData.value = '';
+            addModal.classList.add('show');
+            inputTitle.focus();
+        }
+
+        function closeAddModal() {
+            addModal.classList.remove('show');
+        }
+
+        function confirmAdd() {
+            const title = inputTitle.value.trim();
+            const text = inputData.value.trim();
+            if (text) {
+                items.push({
+                    id: nextId++,
+                    title: title || `Item ${items.length + 1}`,
+                    hash: text
+                });
+                currentIndex = items.length - 1;
+                renderList();
+            }
+            closeAddModal();
+        }
+
+        function deleteItem() {
+            if (items.length === 0) return;
+            items.splice(currentIndex, 1);
+            if (items.length === 0) {
+                currentIndex = -1;
+            } else if (currentIndex >= items.length) {
+                currentIndex = items.length - 1;
+            }
+            renderList();
+        }
+
+        function moveItem(direction) {
+            if (items.length === 0) return;
+            const newIndex = currentIndex + direction;
+            if (newIndex < 0 || newIndex >= items.length) return;
+
+            // Swap
+            const temp = items[currentIndex];
+            items[currentIndex] = items[newIndex];
+            items[newIndex] = temp;
+
+            currentIndex = newIndex;
+            renderList();
+        }
+
+        function clearList() {
+            if (confirm('确定要清空列表吗？')) {
+                items = [];
+                currentIndex = -1;
+                // Manually clear to ensure proper cleanup and avoid potential hangs
+                listContainer.innerHTML = '';
+                const iframes = Array.from(previewContainer.children);
+                iframes.forEach(iframe => {
+                    iframe.src = 'about:blank';
+                    try {
+                        iframe.contentWindow.document.write('');
+                        iframe.contentWindow.close();
+                    } catch(e) { /* ignore */ }
+                    iframe.remove();
+                });
+            }
+        }
+
+        // Initialize
+        renderList();
+
+    </script>
+</body>
+
+</html>
