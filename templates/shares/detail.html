@@ -171,6 +171,9 @@
                     <hr>
                     <div class="d-grid gap-2">
                         {% if user == share.author %}
+                        <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#addToCollectionModal">
+                            <i class="bi bi-folder-plus"></i> 添加到合集
+                        </button>
                         <a href="{% url 'edit_share' share.share_id %}" class="btn btn-outline-primary">
                             <i class="bi bi-pencil"></i> 编辑
                         </a>
@@ -222,9 +225,92 @@
                     </ol>
                 </div>
             </div>
+
+            <!-- 所属合集 -->
+            {% if related_collections %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-collection"></i> 所属合集</h5>
+                </div>
+                <div class="list-group list-group-flush">
+                    {% for collection in related_collections %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0 fw-bold">
+                                <a href="{% url 'collection_detail' collection.id %}" class="text-decoration-none text-dark">
+                                    {{ collection.title }}
+                                </a>
+                            </h6>
+                            <button class="btn btn-sm btn-link text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#collection-{{ collection.id }}" aria-expanded="false">
+                                展开 <i class="bi bi-chevron-down"></i>
+                            </button>
+                        </div>
+                        <div class="collapse" id="collection-{{ collection.id }}">
+                            <div class="small text-muted mb-2">
+                                <i class="bi bi-person"></i> {{ collection.author.profile.get_display_name }}
+                            </div>
+                            <div class="list-group list-group-flush border-top">
+                                {% for item in collection.collectionitem_set.all|slice:":5" %}
+                                <a href="{% url 'share_detail' item.share.share_id %}" class="list-group-item list-group-item-action px-0 py-2 border-0 {% if item.share.share_id == share.share_id %}active text-white bg-primary rounded px-2{% endif %}">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <span class="text-truncate" style="max-width: 200px;">{{ forloop.counter }}. {{ item.share.title }}</span>
+                                    </div>
+                                </a>
+                                {% endfor %}
+                                {% if collection.collectionitem_set.count > 5 %}
+                                <a href="{% url 'collection_detail' collection.id %}" class="list-group-item list-group-item-action px-0 py-2 border-0 text-center text-primary">
+                                    查看全部 {{ collection.collectionitem_set.count }} 个内容
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
+
+<!-- 添加到合集模态框 -->
+{% if user.is_authenticated and user == share.author %}
+<div class="modal fade" id="addToCollectionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加到合集</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% if user_collections %}
+                <form action="{% url 'add_share_to_collection' share.share_id %}" method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">选择合集</label>
+                        <select name="collection_id" class="form-select" required>
+                            {% for collection in user_collections %}
+                            <option value="{{ collection.id }}">{{ collection.title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">确定添加</button>
+                    </div>
+                </form>
+                {% else %}
+                <div class="text-center py-3">
+                    <p class="text-muted">您还没有创建任何合集</p>
+                    <a href="{% url 'create_collection' %}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-plus-lg"></i> 创建新合集
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- 分享图模态窗口 -->
 <div class="modal fade" id="shareImageModal" tabindex="-1" aria-hidden="true">

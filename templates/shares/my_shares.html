@@ -4,228 +4,280 @@
 
 {% block content %}
 <div class="container">
-    <div class="row mb-4">
-        <div class="col-12 text-center">
-            <h1 class="display-4 mb-3">
-                <i class="bi bi-collection text-primary"></i> 
-                我的分享
-            </h1>
-            <p class="lead text-muted mb-4">管理你创建的所有战术板分享</p>
-            
-            <a href="{% url 'create_share' %}" class="btn btn-lg btn-primary shadow-sm">
-                <i class="bi bi-plus-circle"></i> 创建新分享
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="bi bi-person-workspace"></i> 我的内容</h2>
+        <div class="btn-group">
+            <a href="{% url 'create_share' %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> 创建分享
+            </a>
+            <a href="{% url 'create_collection' %}" class="btn btn-outline-primary">
+                <i class="bi bi-folder-plus"></i> 创建合集
             </a>
         </div>
     </div>
 
-    <!-- 统计信息 -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card bg-light border-0">
-                <div class="card-body py-2 text-center">
-                    <small class="text-muted">
-                        <i class="bi bi-collection"></i> 共有 <strong>{{ shares.paginator.count }}</strong> 个分享
-                        {% if shares.has_other_pages %}
-                        | 第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页
-                        {% endif %}
-                    </small>
-                </div>
-            </div>
-        </div>
-    </div>
+    <ul class="nav nav-tabs mb-4" id="myTab" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="shares-tab" data-bs-toggle="tab" data-bs-target="#shares" type="button" role="tab">我的分享</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="collections-tab" data-bs-toggle="tab" data-bs-target="#collections" type="button" role="tab">我的合集</button>
+        </li>
+    </ul>
 
-    <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
-        {% for share in shares %}
-        <div class="col">
-            <div class="card h-100 card-hover shadow-sm">
-                <!-- 预览区域 -->
-                <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none">
-                    <div class="card-img-top position-relative" style="overflow: hidden; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                        <div class="ratio ratio-4x3">
-                            <iframe 
-                                src="/static/viewer_new/index.html#{{ share.strategy_code }}" 
-                                style="border: none; pointer-events: none;"
-                                class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
-                                loading="lazy"
-                                title="战术板预览"
-                                onload="this.closest('.card-img-top').querySelector('.preview-loading').style.display='none'">
-                            </iframe>
-                        </div>
-
-                        {% if share.is_spoiler or share.is_nsfw %}
-                        <div class="spoiler-overlay">
-                            <div class="text-center">
-                                {% if share.is_nsfw %}
-                                <i class="bi bi-exclamation-diamond-fill fs-1 text-danger mb-2"></i>
-                                <h5 class="fw-bold">可能令人不适</h5>
-                                {% else %}
-                                <i class="bi bi-eye-slash-fill fs-1 mb-2"></i>
-                                <h5 class="fw-bold">可能包含剧透</h5>
+    <div class="tab-content" id="myTabContent">
+        <!-- 分享列表 -->
+        <div class="tab-pane fade show active" id="shares" role="tabpanel">
+            <!-- 统计信息 -->
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <div class="card bg-light border-0">
+                        <div class="card-body py-2 text-center">
+                            <small class="text-muted">
+                                <i class="bi bi-collection"></i> 共有 <strong>{{ shares.paginator.count }}</strong> 个分享
+                                {% if shares.has_other_pages %}
+                                | 第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页
                                 {% endif %}
-                                <small class="d-block mt-1">点击查看详情</small>
-                            </div>
+                            </small>
                         </div>
-                        {% endif %}
+                    </div>
+                </div>
+            </div>
 
-                        <div class="preview-loading position-absolute top-50 start-50 translate-middle text-white">
-                            <div class="spinner-border" role="status">
-                                <span class="visually-hidden">加载中...</span>
+            <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
+                {% for share in shares %}
+                <div class="col">
+                    <div class="card h-100 card-hover shadow-sm">
+                        <!-- 预览区域 -->
+                        <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none">
+                            <div class="card-img-top position-relative" style="overflow: hidden; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                <div class="ratio ratio-4x3">
+                                    <iframe 
+                                        src="/static/viewer_new/index.html#{{ share.strategy_code }}" 
+                                        style="border: none; pointer-events: none;"
+                                        class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
+                                        loading="lazy"
+                                        title="战术板预览"
+                                        onload="this.closest('.card-img-top').querySelector('.preview-loading').style.display='none'">
+                                    </iframe>
+                                </div>
+
+                                {% if share.is_spoiler or share.is_nsfw %}
+                                <div class="spoiler-overlay">
+                                    <div class="text-center">
+                                        {% if share.is_nsfw %}
+                                        <i class="bi bi-exclamation-diamond-fill fs-1 text-danger mb-2"></i>
+                                        <h5 class="fw-bold">可能令人不适</h5>
+                                        {% else %}
+                                        <i class="bi bi-eye-slash-fill fs-1 mb-2"></i>
+                                        <h5 class="fw-bold">可能包含剧透</h5>
+                                        {% endif %}
+                                        <small class="d-block mt-1">点击查看详情</small>
+                                    </div>
+                                </div>
+                                {% endif %}
+
+                                <div class="preview-loading position-absolute top-50 start-50 translate-middle text-white">
+                                    <div class="spinner-border" role="status">
+                                        <span class="visually-hidden">加载中...</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 半透明遮罩 -->
+                                <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay" style="background: rgba(0,0,0,0.05); pointer-events: none;"></div>
+                                <!-- 分类和原创标签 -->
+                                <div class="position-absolute top-0 start-0 m-2">
+                                    {% if share.category == 'combat' %}
+                                    <span class="badge bg-danger shadow-sm">战斗</span>
+                                    {% else %}
+                                    <span class="badge bg-success shadow-sm">娱乐</span>
+                                    {% endif %}
+                                    {% if share.is_original %}
+                                    <span class="badge bg-primary shadow-sm ms-1">原创</span>
+                                    {% endif %}
+                                </div>
+                                <!-- 状态和浏览量标签 -->
+                                <div class="position-absolute top-0 end-0 m-2">
+                                    {% if share.status == 'pending' %}
+                                    <span class="badge bg-info text-dark me-1">
+                                        <i class="bi bi-hourglass-split"></i> 待审核
+                                    </span>
+                                    {% elif share.status == 'rejected' %}
+                                    <span class="badge bg-danger me-1">
+                                        <i class="bi bi-x-circle"></i> 审核失败
+                                    </span>
+                                    {% endif %}
+
+                                    {% if share.visibility == 'private' %}
+                                    <span class="badge bg-secondary me-1">
+                                        <i class="bi bi-lock-fill"></i> 私有
+                                    </span>
+                                    {% elif share.visibility == 'unlisted' %}
+                                    <span class="badge bg-warning text-dark me-1">
+                                        <i class="bi bi-link-45deg"></i> 不公开
+                                    </span>
+                                    {% endif %}
+                                    <span class="badge bg-dark bg-opacity-75">
+                                        <i class="bi bi-eye"></i> {{ share.views }}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
+                        </a>
                         
-                        <!-- 半透明遮罩 -->
-                        <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay" style="background: rgba(0,0,0,0.05); pointer-events: none;"></div>
-                        <!-- 分类和原创标签 -->
-                        <div class="position-absolute top-0 start-0 m-2">
-                            {% if share.category == 'combat' %}
-                            <span class="badge bg-danger shadow-sm">战斗</span>
+                        <div class="card-body d-flex flex-column">
+                            <h5 class="card-title text-truncate mb-2" title="{{ share.title }}">
+                                <i class="bi bi-bookmark-fill text-primary"></i> {{ share.title }}
+                            </h5>
+                            <div class="mb-2">
+                                <small class="text-muted">
+                                    <i class="bi bi-calendar3"></i> {{ share.created_at|date:"Y-m-d H:i" }}
+                                    <span class="ms-2">
+                                        <i class="bi bi-clock-history"></i> {{ share.updated_at|date:"m-d H:i" }}
+                                    </span>
+                                </small>
+                            </div>
+                            {% if share.description %}
+                            <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
+                                {{ share.description|striptags|truncatechars:60 }}
+                            </p>
                             {% else %}
-                            <span class="badge bg-success shadow-sm">娱乐</span>
-                            {% endif %}
-                            {% if share.is_original %}
-                            <span class="badge bg-primary shadow-sm ms-1">原创</span>
+                            <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
+                                <em>暂无描述</em>
+                            </p>
                             {% endif %}
                         </div>
-                        <!-- 状态和浏览量标签 -->
-                        <div class="position-absolute top-0 end-0 m-2">
-                            {% if share.status == 'pending' %}
-                            <span class="badge bg-info text-dark me-1">
-                                <i class="bi bi-hourglass-split"></i> 待审核
-                            </span>
-                            {% elif share.status == 'rejected' %}
-                            <span class="badge bg-danger me-1">
-                                <i class="bi bi-x-circle"></i> 审核失败
-                            </span>
-                            {% endif %}
+                        <div class="card-footer bg-transparent border-0 pt-0">
+                            <div class="btn-group w-100 mb-2" role="group">
+                                <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary" title="查看详情">
+                                    <i class="bi bi-eye"></i> 查看
+                                </a>
+                                <a href="{% url 'edit_share' share.share_id %}" class="btn btn-sm btn-outline-success" title="编辑分享">
+                                    <i class="bi bi-pencil"></i> 编辑
+                                </a>
+                                <a href="{% url 'delete_share' share.share_id %}" class="btn btn-sm btn-outline-danger" title="删除分享">
+                                    <i class="bi bi-trash"></i> 删除
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body text-center py-5">
+                            <i class="bi bi-inbox display-1 text-muted mb-3"></i>
+                            <h3 class="text-muted mb-3">还没有分享</h3>
+                            <p class="text-muted mb-4">快来创建你的第一个战术板分享吧！</p>
+                            <a href="{% url 'create_share' %}" class="btn btn-primary btn-lg">
+                                <i class="bi bi-plus-circle"></i> 创建分享
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
 
-                            {% if share.visibility == 'private' %}
-                            <span class="badge bg-secondary me-1">
-                                <i class="bi bi-lock-fill"></i> 私有
-                            </span>
-                            {% elif share.visibility == 'unlisted' %}
-                            <span class="badge bg-warning text-dark me-1">
-                                <i class="bi bi-link-45deg"></i> 不公开
-                            </span>
-                            {% endif %}
-                            <span class="badge bg-dark bg-opacity-75">
-                                <i class="bi bi-eye"></i> {{ share.views }}
-                            </span>
-                        </div>
-                    </div>
-                </a>
-                
-                <div class="card-body d-flex flex-column">
-                    <h5 class="card-title text-truncate mb-2" title="{{ share.title }}">
-                        <i class="bi bi-bookmark-fill text-primary"></i> {{ share.title }}
-                    </h5>
-                    <div class="mb-2">
-                        <small class="text-muted">
-                            <i class="bi bi-calendar3"></i> {{ share.created_at|date:"Y-m-d H:i" }}
-                            <span class="ms-2">
-                                <i class="bi bi-clock-history"></i> {{ share.updated_at|date:"m-d H:i" }}
-                            </span>
-                        </small>
-                    </div>
-                    {% if share.description %}
-                    <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
-                        {{ share.description|striptags|truncatechars:60 }}
-                    </p>
+            <!-- 分页 -->
+            {% if shares.has_other_pages %}
+            <nav class="mt-5" aria-label="分页导航">
+                <ul class="pagination pagination-lg justify-content-center">
+                    {% if shares.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1" aria-label="首页">
+                            <i class="bi bi-chevron-bar-left"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ shares.previous_page_number }}" aria-label="上一页">
+                            <i class="bi bi-chevron-left"></i> 上一页
+                        </a>
+                    </li>
                     {% else %}
-                    <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
-                        <em>暂无描述</em>
-                    </p>
+                    <li class="page-item disabled">
+                        <span class="page-link">
+                            <i class="bi bi-chevron-bar-left"></i>
+                        </span>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">
+                            <i class="bi bi-chevron-left"></i> 上一页
+                        </span>
+                    </li>
                     {% endif %}
-                </div>
-                <div class="card-footer bg-transparent border-0 pt-0">
-                    <div class="btn-group w-100 mb-2" role="group">
-                        <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary" title="查看详情">
-                            <i class="bi bi-eye"></i> 查看
+                    
+                    <li class="page-item active">
+                        <span class="page-link">
+                            第 {{ shares.number }} / {{ shares.paginator.num_pages }} 页
+                        </span>
+                    </li>
+                    
+                    {% if shares.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ shares.next_page_number }}" aria-label="下一页">
+                            下一页 <i class="bi bi-chevron-right"></i>
                         </a>
-                        <a href="{% url 'edit_share' share.share_id %}" class="btn btn-sm btn-outline-success" title="编辑分享">
-                            <i class="bi bi-pencil"></i> 编辑
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ shares.paginator.num_pages }}" aria-label="末页">
+                            <i class="bi bi-chevron-bar-right"></i>
                         </a>
-                        <a href="{% url 'delete_share' share.share_id %}" class="btn btn-sm btn-outline-danger" title="删除分享">
-                            <i class="bi bi-trash"></i> 删除
-                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">
+                            下一页 <i class="bi bi-chevron-right"></i>
+                        </span>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">
+                            <i class="bi bi-chevron-bar-right"></i>
+                        </span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+
+        <!-- 合集列表 -->
+        <div class="tab-pane fade" id="collections" role="tabpanel">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                {% for collection in collections %}
+                <div class="col">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <h5 class="card-title fw-bold mb-0 text-truncate">{{ collection.title }}</h5>
+                                {% if collection.is_public %}
+                                <span class="badge bg-success">公开</span>
+                                {% else %}
+                                <span class="badge bg-secondary">私有</span>
+                                {% endif %}
+                            </div>
+                            <p class="card-text text-muted small mb-3" style="min-height: 40px;">
+                                {{ collection.description|default:"暂无描述"|truncatechars:60 }}
+                            </p>
+                            <div class="d-flex justify-content-between align-items-center text-muted small mb-3">
+                                <span><i class="bi bi-collection"></i> {{ collection.item_count }} 个内容</span>
+                                <span><i class="bi bi-clock"></i> {{ collection.updated_at|date:"m-d" }}</span>
+                            </div>
+                            <div class="btn-group w-100">
+                                <a href="{% url 'collection_detail' collection.id %}" class="btn btn-sm btn-outline-primary">管理内容</a>
+                                <a href="{% url 'edit_collection' collection.id %}" class="btn btn-sm btn-outline-secondary">编辑信息</a>
+                                <a href="{% url 'delete_collection' collection.id %}" class="btn btn-sm btn-outline-danger">删除</a>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
-        {% empty %}
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-inbox display-1 text-muted mb-3"></i>
-                    <h3 class="text-muted mb-3">还没有分享</h3>
-                    <p class="text-muted mb-4">快来创建你的第一个战术板分享吧！</p>
-                    <a href="{% url 'create_share' %}" class="btn btn-primary btn-lg">
-                        <i class="bi bi-plus-circle"></i> 创建分享
-                    </a>
+                {% empty %}
+                <div class="col-12">
+                    <div class="alert alert-info text-center">
+                        您还没有创建任何合集。<a href="{% url 'create_collection' %}" class="alert-link">立即创建</a>
+                    </div>
                 </div>
+                {% endfor %}
             </div>
         </div>
-        {% endfor %}
     </div>
-
-    <!-- 分页 -->
-    {% if shares.has_other_pages %}
-    <nav class="mt-5" aria-label="分页导航">
-        <ul class="pagination pagination-lg justify-content-center">
-            {% if shares.has_previous %}
-            <li class="page-item">
-                <a class="page-link" href="?page=1" aria-label="首页">
-                    <i class="bi bi-chevron-bar-left"></i>
-                </a>
-            </li>
-            <li class="page-item">
-                <a class="page-link" href="?page={{ shares.previous_page_number }}" aria-label="上一页">
-                    <i class="bi bi-chevron-left"></i> 上一页
-                </a>
-            </li>
-            {% else %}
-            <li class="page-item disabled">
-                <span class="page-link">
-                    <i class="bi bi-chevron-bar-left"></i>
-                </span>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">
-                    <i class="bi bi-chevron-left"></i> 上一页
-                </span>
-            </li>
-            {% endif %}
-            
-            <li class="page-item active">
-                <span class="page-link">
-                    第 {{ shares.number }} / {{ shares.paginator.num_pages }} 页
-                </span>
-            </li>
-            
-            {% if shares.has_next %}
-            <li class="page-item">
-                <a class="page-link" href="?page={{ shares.next_page_number }}" aria-label="下一页">
-                    下一页 <i class="bi bi-chevron-right"></i>
-                </a>
-            </li>
-            <li class="page-item">
-                <a class="page-link" href="?page={{ shares.paginator.num_pages }}" aria-label="末页">
-                    <i class="bi bi-chevron-bar-right"></i>
-                </a>
-            </li>
-            {% else %}
-            <li class="page-item disabled">
-                <span class="page-link">
-                    下一页 <i class="bi bi-chevron-right"></i>
-                </span>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">
-                    <i class="bi bi-chevron-bar-right"></i>
-                </span>
-            </li>
-            {% endif %}
-        </ul>
-    </nav>
-    {% endif %}
 </div>
 {% endblock %}

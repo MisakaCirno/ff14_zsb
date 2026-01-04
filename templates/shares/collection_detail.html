@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ collection.title }} - 合集详情{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- 合集头部信息 -->
+    <div class="card border-0 shadow-sm bg-light mb-4">
+        <div class="card-body p-4">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-primary">合集</span>
+                        {% if not collection.is_public %}
+                        <span class="badge bg-secondary"><i class="bi bi-lock-fill"></i> 私有</span>
+                        {% endif %}
+                        <h2 class="fw-bold mb-0">{{ collection.title }}</h2>
+                    </div>
+                    
+                    <div class="d-flex align-items-center text-muted mb-3">
+                        <div class="me-3">
+                            <i class="bi bi-person-circle"></i> 
+                            <a href="{% url 'user_public_profile' collection.author.username %}" class="text-decoration-none text-muted">
+                                {{ collection.author.profile.get_display_name }}
+                            </a>
+                        </div>
+                        <div class="me-3">
+                            <i class="bi bi-collection-fill"></i> {{ items|length }} 个内容
+                        </div>
+                        <div>
+                            <i class="bi bi-clock"></i> 更新于 {{ collection.updated_at|date:"Y-m-d" }}
+                        </div>
+                    </div>
+                    
+                    {% if collection.description %}
+                    <p class="text-muted mb-0">{{ collection.description }}</p>
+                    {% endif %}
+                </div>
+                
+                {% if user == collection.author %}
+                <div class="btn-group">
+                    <a href="{% url 'edit_collection' collection.id %}" class="btn btn-outline-primary">
+                        <i class="bi bi-pencil"></i> 编辑
+                    </a>
+                    <a href="{% url 'delete_collection' collection.id %}" class="btn btn-outline-danger">
+                        <i class="bi bi-trash"></i> 删除
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 合集内容列表 -->
+    <div class="row">
+        <div class="col-12">
+            <h4 class="mb-3"><i class="bi bi-list-ul text-primary"></i> 内容列表</h4>
+            
+            {% if items %}
+            <div class="list-group shadow-sm">
+                {% for item in items %}
+                <div class="list-group-item list-group-item-action p-3 d-flex align-items-center gap-3">
+                    <div class="fw-bold text-muted fs-4" style="width: 40px; text-align: center;">
+                        {{ forloop.counter }}
+                    </div>
+                    
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <h5 class="mb-1">
+                                <a href="{% url 'share_detail' item.share.share_id %}" class="text-decoration-none text-dark stretched-link">
+                                    {{ item.share.title }}
+                                </a>
+                            </h5>
+                            <small class="text-muted">{{ item.added_at|date:"Y-m-d" }}</small>
+                        </div>
+                        <p class="mb-1 text-muted small text-truncate" style="max-width: 800px;">
+                            {{ item.share.description|striptags|default:"暂无描述" }}
+                        </p>
+                        <div class="small">
+                            {% if item.share.category == 'combat' %}
+                            <span class="badge bg-danger bg-opacity-75">战斗</span>
+                            {% else %}
+                            <span class="badge bg-success bg-opacity-75">娱乐</span>
+                            {% endif %}
+                            <span class="text-muted ms-2">
+                                <i class="bi bi-eye"></i> {{ item.share.views }}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    {% if user == collection.author %}
+                    <div class="z-index-2 position-relative">
+                        <form action="{% url 'remove_share_from_collection' collection.id item.share.share_id %}" method="post" onsubmit="return confirm('确定要从合集中移除吗？');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-danger btn-sm" title="移除">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-folder2-open display-1 text-muted mb-3"></i>
+                    <h4 class="text-muted">合集是空的</h4>
+                    {% if user == collection.author %}
+                    <p class="text-muted">去您的分享详情页，点击“添加到合集”按钮来添加内容吧！</p>
+                    <a href="{% url 'my_shares' %}" class="btn btn-primary">
+                        <i class="bi bi-arrow-right"></i> 去我的分享
+                    </a>
+                    {% else %}
+                    <p class="text-muted">作者还没有添加任何内容。</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

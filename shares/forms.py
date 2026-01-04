@@ -1,7 +1,24 @@
 from django import forms
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
-from .models import Share, UserProfile, Report
+from .models import Share, UserProfile, Report, Collection
+
+
+class CollectionForm(forms.ModelForm):
+    """合集创建/编辑表单"""
+    class Meta:
+        model = Collection
+        fields = ['title', 'description', 'is_public']
+        widgets = {
+            'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '输入合集标题'}),
+            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '添加描述（可选）'}),
+            'is_public': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+        labels = {
+            'title': '标题',
+            'description': '描述',
+            'is_public': '公开合集',
+        }
 
 
 class ReportForm(forms.ModelForm):

@@ -6,10 +6,10 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
-from django.db.models import Q, Count, Prefetch
+from django.db.models import Q, Count, Prefetch, Max
 from django.utils import timezone
-from .models import Share, UserProfile, Report, Announcement
-from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm
+from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem
+from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm
 from io import BytesIO
 import base64
 
@@ -133,8 +133,22 @@ def share_detail(request, share_id):
         if len(viewed_list) > 100:
             viewed_list = viewed_list[-100:]
     
+    # 获取该分享所属的合集（仅显示公开的，或者作者自己的）
+    related_collections = Collection.objects.filter(
+        collectionitem__share=share
+    ).filter(
+        Q(is_public=True) | Q(author=request.user if request.user.is_authenticated else None)
+    ).distinct()
+    
+    # 获取用户的合集列表（用于添加到合集功能）
+    user_collections = []
+    if request.user.is_authenticated and share.author == request.user:
+        user_collections = Collection.objects.filter(author=request.user).order_by('-updated_at')
+
     response = render(request, 'shares/detail.html', {
         'share': share,
+        'related_collections': related_collections,
+        'user_collections': user_collections,
     })
     
     # 更新Cookie（30天有效期）
@@ -175,13 +189,30 @@ def create_share(request):
                 share.status = Share.Status.APPROVED
             
             share.save()
+            
+            # 如果选择了合集，则添加到合集
+            collection_id = request.POST.get('collection_id')
+            if collection_id and request.user.is_authenticated:
+                try:
+                    collection = Collection.objects.get(id=collection_id, author=request.user)
+                    max_order = CollectionItem.objects.filter(collection=collection).aggregate(Max('order'))['order__max']
+                    new_order = (max_order or 0) + 1
+                    CollectionItem.objects.create(collection=collection, share=share, order=new_order)
+                except Collection.DoesNotExist:
+                    pass
+
             if share.status == Share.Status.APPROVED:
                 messages.success(request, '分享创建成功！')
             return redirect('share_detail', share_id=share.share_id)
     else:
         form = ShareForm()
     
-    return render(request, 'shares/create.html', {'form': form})
+    # 获取用户的合集列表
+    user_collections = []
+    if request.user.is_authenticated:
+        user_collections = Collection.objects.filter(author=request.user).order_by('-updated_at')
+    
+    return render(request, 'shares/create.html', {'form': form, 'user_collections': user_collections})
 
 
 @login_required
@@ -245,7 +276,14 @@ def my_shares(request):
     paginator = Paginator(shares_list, 12)
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
-    return render(request, 'shares/my_shares.html', {'shares': shares})
+    
+    # 获取我的合集
+    collections = Collection.objects.filter(author=request.user).annotate(item_count=Count('collectionitem')).order_by('-updated_at')
+    
+    return render(request, 'shares/my_shares.html', {
+        'shares': shares,
+        'collections': collections,
+    })
 
 
 def register(request):
@@ -514,10 +552,138 @@ def user_public_profile(request, username):
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
     
+    # 获取用户的公开合集
+    collections = Collection.objects.filter(
+        author=author,
+        is_public=True
+    ).annotate(item_count=Count('collectionitem')).order_by('-updated_at')
+    
     return render(request, 'shares/user_public_profile.html', {
         'author': author,
         'shares': shares,
+        'collections': collections,
     })
+
+
+@login_required
+def create_collection(request):
+    """创建合集"""
+    if request.method == 'POST':
+        form = CollectionForm(request.POST)
+        if form.is_valid():
+            collection = form.save(commit=False)
+            collection.author = request.user
+            collection.save()
+            messages.success(request, '合集创建成功！')
+            return redirect('my_shares')  # 或者跳转到合集详情页
+    else:
+        form = CollectionForm()
+    
+    return render(request, 'shares/create_collection.html', {'form': form})
+
+
+@login_required
+def edit_collection(request, collection_id):
+    """编辑合集"""
+    collection = get_object_or_404(Collection, id=collection_id, author=request.user)
+    
+    if request.method == 'POST':
+        form = CollectionForm(request.POST, instance=collection)
+        if form.is_valid():
+            form.save()
+            messages.success(request, '合集更新成功！')
+            return redirect('collection_detail', collection_id=collection.id)
+    else:
+        form = CollectionForm(instance=collection)
+    
+    return render(request, 'shares/edit_collection.html', {'form': form, 'collection': collection})
+
+
+@login_required
+def delete_collection(request, collection_id):
+    """删除合集"""
+    collection = get_object_or_404(Collection, id=collection_id, author=request.user)
+    
+    if request.method == 'POST':
+        collection.delete()
+        messages.success(request, '合集已删除')
+        return redirect('my_shares')
+    
+    return render(request, 'shares/delete_collection.html', {'collection': collection})
+
+
+def collection_detail(request, collection_id):
+    """合集详情页"""
+    collection = get_object_or_404(Collection, id=collection_id)
+    
+    # 权限检查：如果是私有合集，仅作者可见
+    if not collection.is_public and collection.author != request.user:
+        messages.error(request, '该合集不存在或您没有权限访问')
+        return redirect('index')
+        
+    # 获取合集内的分享（按顺序）
+    collection_items = CollectionItem.objects.filter(collection=collection).select_related('share', 'share__author', 'share__author__profile').order_by('order', 'added_at')
+    
+    # 过滤掉不可见的分享（除非是作者或管理员）
+    visible_items = []
+    for item in collection_items:
+        share = item.share
+        can_view = (share.visibility == Share.Visibility.PUBLIC and share.status == Share.Status.APPROVED) or \
+                   (request.user.is_authenticated and (
+                       share.author == request.user or 
+                       request.user.is_staff or 
+                       request.user.is_superuser
+                   ))
+        if can_view:
+            visible_items.append(item)
+            
+    return render(request, 'shares/collection_detail.html', {
+        'collection': collection,
+        'items': visible_items,
+    })
+
+
+@login_required
+def add_share_to_collection(request, share_id):
+    """将分享添加到合集"""
+    share = get_object_or_404(Share, share_id=share_id)
+    
+    # 只能添加自己的分享到自己的合集
+    if share.author != request.user:
+        messages.error(request, '只能将自己的分享添加到合集')
+        return redirect('share_detail', share_id=share_id)
+        
+    if request.method == 'POST':
+        collection_id = request.POST.get('collection_id')
+        collection = get_object_or_404(Collection, id=collection_id, author=request.user)
+        
+        # 检查是否已存在
+        if CollectionItem.objects.filter(collection=collection, share=share).exists():
+            messages.warning(request, '该分享已在合集中')
+        else:
+            # 获取当前最大排序值
+            max_order = CollectionItem.objects.filter(collection=collection).aggregate(Max('order'))['order__max']
+            new_order = (max_order or 0) + 1
+            
+            CollectionItem.objects.create(collection=collection, share=share, order=new_order)
+            messages.success(request, '已添加到合集')
+            
+        return redirect('share_detail', share_id=share_id)
+        
+    return redirect('share_detail', share_id=share_id)
+
+
+@login_required
+def remove_share_from_collection(request, collection_id, share_id):
+    """从合集移除分享"""
+    collection = get_object_or_404(Collection, id=collection_id, author=request.user)
+    share = get_object_or_404(Share, share_id=share_id)
+    
+    item = get_object_or_404(CollectionItem, collection=collection, share=share)
+    item.delete()
+    
+    messages.success(request, '已从合集移除')
+    return redirect('collection_detail', collection_id=collection_id)
 
 
 

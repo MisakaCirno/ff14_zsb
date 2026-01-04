@@ -187,3 +187,36 @@ class Announcement(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class Collection(models.Model):
+    """合集模型"""
+    title = models.CharField(max_length=200, verbose_name='标题')
+    description = models.TextField(blank=True, verbose_name='描述')
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='collections', verbose_name='作者')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    is_public = models.BooleanField(default=True, verbose_name='是否公开')
+    shares = models.ManyToManyField(Share, through='CollectionItem', related_name='collections', verbose_name='包含的分享')
+
+    class Meta:
+        ordering = ['-updated_at']
+        verbose_name = '合集'
+        verbose_name_plural = '合集'
+
+    def __str__(self):
+        return self.title
+
+
+class CollectionItem(models.Model):
+    """合集项模型（中间表）"""
+    collection = models.ForeignKey(Collection, on_delete=models.CASCADE)
+    share = models.ForeignKey(Share, on_delete=models.CASCADE)
+    order = models.PositiveIntegerField(default=0, verbose_name='排序')
+    added_at = models.DateTimeField(auto_now_add=True, verbose_name='添加时间')
+
+    class Meta:
+        ordering = ['order', 'added_at']
+        verbose_name = '合集项'
+        verbose_name_plural = '合集项'
+        unique_together = ('collection', 'share')

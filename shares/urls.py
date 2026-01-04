@@ -38,4 +38,12 @@ urlpatterns = [
     path('staff/reports/', views.admin_report_list, name='admin_report_list'),
     path('staff/reports/<int:report_id>/<str:action>/', views.admin_resolve_report, name='admin_resolve_report'),
     path('staff/reports/share/<str:share_id>/<str:action>/', views.admin_resolve_share_reports, name='admin_resolve_share_reports'),
+    
+    # 合集相关
+    path('collections/create/', views.create_collection, name='create_collection'),
+    path('collections/<int:collection_id>/', views.collection_detail, name='collection_detail'),
+    path('collections/<int:collection_id>/edit/', views.edit_collection, name='edit_collection'),
+    path('collections/<int:collection_id>/delete/', views.delete_collection, name='delete_collection'),
+    path('share/<str:share_id>/add-to-collection/', views.add_share_to_collection, name='add_share_to_collection'),
+    path('collections/<int:collection_id>/remove-share/<str:share_id>/', views.remove_share_from_collection, name='remove_share_from_collection'),
 ]
