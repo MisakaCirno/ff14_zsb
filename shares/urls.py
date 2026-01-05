@@ -46,4 +46,8 @@ urlpatterns = [
     path('collections/<int:collection_id>/delete/', views.delete_collection, name='delete_collection'),
     path('share/<str:share_id>/add-to-collection/', views.add_share_to_collection, name='add_share_to_collection'),
     path('collections/<int:collection_id>/remove-share/<str:share_id>/', views.remove_share_from_collection, name='remove_share_from_collection'),
+    
+    # API
+    path('api/share/<str:share_id>/code/', views.get_share_code, name='get_share_code'),
+    path('api/collection/<int:collection_id>/codes/', views.get_collection_codes, name='get_collection_codes'),
 ]

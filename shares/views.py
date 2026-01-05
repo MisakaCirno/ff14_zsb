@@ -692,5 +692,68 @@ def remove_share_from_collection(request, collection_id, share_id):
     return redirect('collection_detail', collection_id=collection_id)
 
 
+def get_share_code(request, share_id):
+    """API: 获取单个分享的分享码"""
+    try:
+        share = Share.objects.get(share_id=share_id)
+    except Share.DoesNotExist:
+        return JsonResponse({'error': 'Share not found'}, status=404)
+    
+    # 权限检查：如果是私有分享，只有作者可见
+    if share.visibility == Share.Visibility.PRIVATE:
+        if request.user != share.author:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+            
+    # 状态检查：如果未通过审核，只有作者和管理员可见
+    if share.status != Share.Status.APPROVED:
+        if request.user != share.author and not is_admin(request.user):
+            return JsonResponse({'error': 'Share not available'}, status=404)
+            
+    data = [{
+        "title": share.title,
+        "code": share.strategy_code
+    }]
+    return JsonResponse(data, safe=False)
+
+
+def get_collection_codes(request, collection_id):
+    """API: 获取合集内所有分享的分享码"""
+    try:
+        collection = Collection.objects.get(id=collection_id)
+    except Collection.DoesNotExist:
+        return JsonResponse({'error': 'Collection not found'}, status=404)
+    
+    # 权限检查：如果不公开，只有作者可见
+    if not collection.is_public:
+        if request.user != collection.author:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    shares = []
+    collection_items = CollectionItem.objects.filter(collection=collection).select_related('share').order_by('order', 'added_at')
+    
+    for item in collection_items:
+        share = item.share
+        
+        # 检查每个分享的可见性
+        is_visible = False
+        if share.visibility in [Share.Visibility.PUBLIC, Share.Visibility.UNLISTED]:
+            if share.status == Share.Status.APPROVED:
+                is_visible = True
+            elif request.user == share.author or is_admin(request.user):
+                is_visible = True
+        elif share.visibility == Share.Visibility.PRIVATE:
+            if request.user == share.author:
+                is_visible = True
+                
+        if is_visible:
+            shares.append({
+                "title": share.title,
+                "code": share.strategy_code
+            })
+            
+    return JsonResponse(shares, safe=False)
+
+
+
 
 

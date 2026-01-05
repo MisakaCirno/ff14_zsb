@@ -5,26 +5,47 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Strategy Board Viewer</title>
-    <link href="static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
     <style>
+        /* Dark Theme & Border */
+        :root {
+            --bg-dark: #212529;
+            --bg-darker: #1a1d20;
+            --border-color: #495057;
+            --text-color: #e9ecef;
+            --hover-color: #343a40;
+            --active-color: #0d6efd;
+        }
+
+        html {
+            background-color: transparent;
+        }
+
         html,
         body {
             height: 100%;
             margin: 0;
             padding: 0;
             overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: rgba(0, 0, 0, 0);
+            color: var(--text-color);
+            border: 2px solid var(--border-color); /* Edge border */
         }
 
         #app {
             display: flex;
-            height: 100vh;
-            width: 100vw;
+            height: 100%;
+            width: 100%;
         }
 
         #left-pane {
             flex: 1;
             height: 100%;
-            background-color: #f0f0f0;
+            background-color: rgba(0, 0, 0, 0.5);
             position: relative;
         }
 
@@ -53,17 +74,17 @@
             height: 100%;
             display: flex;
             flex-direction: column;
-            border-left: 1px solid #dee2e6;
-            background-color: #fff;
+            border-left: 1px solid var(--border-color);
+            background-color: var(--bg-dark);
             flex-shrink: 0;
         }
 
         #toolbar {
             padding: 10px;
-            border-bottom: 1px solid #dee2e6;
+            border-bottom: 1px solid var(--border-color);
             display: flex;
             justify-content: space-around;
-            background-color: #f8f9fa;
+            background-color: var(--bg-darker);
         }
 
         #toolbar button {
@@ -75,6 +96,13 @@
             justify-content: center;
             font-weight: bold;
             font-size: 1.2rem;
+            color: var(--text-color);
+            border-color: var(--border-color);
+        }
+        
+        #toolbar button:hover {
+            background-color: var(--hover-color);
+            color: white;
         }
 
         #list-container {
@@ -85,21 +113,37 @@
             list-style: none;
         }
 
+        /* Custom Scrollbar for dark theme */
+        #list-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        #list-container::-webkit-scrollbar-track {
+            background: var(--bg-dark); 
+        }
+        #list-container::-webkit-scrollbar-thumb {
+            background: var(--border-color); 
+            border-radius: 4px;
+        }
+        #list-container::-webkit-scrollbar-thumb:hover {
+            background: #6c757d; 
+        }
+
         .list-item {
             padding: 10px 15px;
-            border-bottom: 1px solid #f0f0f0;
+            border-bottom: 1px solid var(--border-color);
             cursor: pointer;
             transition: background-color 0.2s;
             font-family: monospace;
             text-align: right;
+            color: var(--text-color);
         }
 
         .list-item:hover {
-            background-color: #e9ecef;
+            background-color: var(--hover-color);
         }
 
         .list-item.active {
-            background-color: #0d6efd;
+            background-color: var(--active-color);
             color: white;
         }
 
@@ -111,7 +155,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
+            background-color: rgba(0, 0, 0, 0.7);
             z-index: 1050;
             justify-content: center;
             align-items: center;
@@ -122,12 +166,31 @@
         }
 
         .modal-box {
-            background: white;
+            background: var(--bg-dark);
             padding: 20px;
             border-radius: 8px;
             width: 90%;
             max-width: 500px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .form-control {
+            background-color: var(--bg-darker);
+            border-color: var(--border-color);
+            color: var(--text-color);
+        }
+        
+        .form-control:focus {
+            background-color: var(--bg-darker);
+            color: var(--text-color);
+            border-color: var(--active-color);
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        
+        .form-control::placeholder {
+            color: #6c757d;
         }
     </style>
 </head>
@@ -140,11 +203,12 @@
         </div>
         <div id="right-pane">
             <div id="toolbar">
-                <button class="btn btn-outline-primary" onclick="openAddModal()" title="添加">+</button>
-                <button class="btn btn-outline-danger" onclick="deleteItem()" title="删除">-</button>
-                <button class="btn btn-outline-secondary" onclick="moveItem(-1)" title="上移">↑</button>
-                <button class="btn btn-outline-secondary" onclick="moveItem(1)" title="下移">↓</button>
-                <button class="btn btn-outline-danger" onclick="clearList()" title="清空">x</button>
+                <button class="btn btn-outline-primary" onclick="openAddModal()" data-bs-toggle="tooltip" data-bs-placement="bottom" title="添加新项目 (Add)">+</button>
+                <button class="btn btn-outline-danger" onclick="deleteItem()" data-bs-toggle="tooltip" data-bs-placement="bottom" title="删除当前项 (Delete)">-</button>
+                <button class="btn btn-outline-secondary" onclick="moveItem(-1)" data-bs-toggle="tooltip" data-bs-placement="bottom" title="上移 (Move Up)">↑</button>
+                <button class="btn btn-outline-secondary" onclick="moveItem(1)" data-bs-toggle="tooltip" data-bs-placement="bottom" title="下移 (Move Down)">↓</button>
+                <button class="btn btn-outline-secondary" onclick="openEditModal()" data-bs-toggle="tooltip" data-bs-placement="bottom" title="编辑 (Edit)">E</button>
+                <button class="btn btn-outline-danger" onclick="clearList()" data-bs-toggle="tooltip" data-bs-placement="bottom" title="清空列表 (Clear)">C</button>
             </div>
             <ul id="list-container">
                 <!-- Items will be injected here -->
@@ -155,10 +219,10 @@
     <!-- Add Modal -->
     <div id="addModal" class="modal-overlay">
         <div class="modal-box">
-            <h5 class="mb-3">添加数据</h5>
+            <h5 class="mb-3" id="modalTitle">添加数据</h5>
             <div class="mb-3">
                 <input id="inputTitle" class="form-control mb-2" type="text" placeholder="标题">
-                <textarea id="inputData" class="form-control" rows="6" placeholder="在此输入数据字符串..."></textarea>
+                <textarea id="inputData" class="form-control" rows="6" placeholder="在此输入 [stgy:...] 代码，或分享/合集链接...（支持多行内容，每行一个项目。）"></textarea>
             </div>
             <div class="d-flex justify-content-end gap-2">
                 <button class="btn btn-secondary" onclick="closeAddModal()">取消</button>
@@ -167,7 +231,39 @@
         </div>
     </div>
 
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-box">
+            <h5 class="mb-3">确认清空</h5>
+            <p>确定要清空列表吗？此操作无法撤销。</p>
+            <div class="d-flex justify-content-end gap-2">
+                <button class="btn btn-secondary" onclick="closeConfirmModal()">取消</button>
+                <button class="btn btn-danger" onclick="executeClearList()">清空</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Modal -->
+    <div id="alertModal" class="modal-overlay">
+        <div class="modal-box">
+            <h5 class="mb-3">提示</h5>
+            <p id="alertMessage" style="white-space: pre-wrap;"></p>
+            <div class="d-flex justify-content-end gap-2">
+                <button class="btn btn-primary" onclick="closeAlertModal()">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Initialize Bootstrap Tooltips
+        document.addEventListener('DOMContentLoaded', function () {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl)
+            })
+        });
+
         const BASE_URL = "/static/viewer_new/index.html#";
         // Initial data from the original file
         const initialHash = "[stgy:a-aB7kRpCUwm3PyeNbj84lAp7FdW-7xxwEaxKNTQNXswBAlUtSUOyjcAfrbQPhYzPG7nnbD1oIXN6aLi7NE18M4kM5lntfVsjq1WlsE2SEQLth4kzW-R0F2Y3uYnp3KqN-TU0ZO6CIveGpIuHp4eekV5XSrbx38dSXwCnyVQMhP+TGxUib2IzeKnoU5MYjO5uxYL8JFyXOEzimbCya+9FEDyPSXoKgR2zcN5tq7Kw7x3SbqK4PNElaYxzOq4WbjCdvpOZHO+qcQiZAUT-j]";
@@ -179,8 +275,14 @@
         const listContainer = document.getElementById('list-container');
         const previewContainer = document.getElementById('preview-container');
         const addModal = document.getElementById('addModal');
+        const confirmModal = document.getElementById('confirmModal');
+        const alertModal = document.getElementById('alertModal');
         const inputTitle = document.getElementById('inputTitle');
         const inputData = document.getElementById('inputData');
+        const alertMessage = document.getElementById('alertMessage');
+        const modalTitle = document.getElementById('modalTitle');
+
+        let isEditing = false;
 
         function renderList() {
             listContainer.innerHTML = '';
@@ -236,8 +338,21 @@
 
         // Toolbar Actions
         function openAddModal() {
+            isEditing = false;
+            modalTitle.textContent = '添加数据';
             inputTitle.value = '';
             inputData.value = '';
+            addModal.classList.add('show');
+            inputTitle.focus();
+        }
+
+        function openEditModal() {
+            if (currentIndex === -1 || !items[currentIndex]) return;
+            isEditing = true;
+            modalTitle.textContent = '编辑数据';
+            const item = items[currentIndex];
+            inputTitle.value = item.title;
+            inputData.value = item.hash;
             addModal.classList.add('show');
             inputTitle.focus();
         }
@@ -246,19 +361,126 @@
             addModal.classList.remove('show');
         }
 
-        function confirmAdd() {
-            const title = inputTitle.value.trim();
+        async function confirmAdd() {
+            const baseTitle = inputTitle.value.trim();
             const text = inputData.value.trim();
-            if (text) {
-                items.push({
-                    id: nextId++,
-                    title: title || `Item ${items.length + 1}`,
-                    hash: text
-                });
-                currentIndex = items.length - 1;
+            
+            if (!text) {
+                closeAddModal();
+                return;
+            }
+
+            const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+            let globalCounter = 1;
+            let errors = [];
+            const isMultiLine = lines.length > 1;
+            let newItems = [];
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                try {
+                    // 1. 直接输入分享码
+                    if (line.startsWith('[stgy:')) {
+                        let itemTitle = baseTitle;
+                        if (baseTitle && isMultiLine) {
+                            itemTitle = `${baseTitle} ${globalCounter++}`;
+                        }
+                        newItems.push(createItem(itemTitle, line));
+                        continue;
+                    }
+
+                    // 2. 尝试解析 URL
+                    const shareMatch = line.match(/\/s\/([a-zA-Z0-9]+)/);
+                    const collectionMatch = line.match(/\/collections\/(\d+)/);
+
+                    if (shareMatch) {
+                        const shareId = shareMatch[1];
+                        const response = await fetch(`/api/share/${shareId}/code/`);
+                        if (!response.ok) throw new Error(`Network error for ${shareId}`);
+                        const data = await response.json();
+                        
+                        if (data.error) throw new Error(data.error);
+                        
+                        if (data.length > 0) {
+                            let itemTitle = baseTitle;
+                            if (baseTitle) {
+                                if (isMultiLine) {
+                                    itemTitle = `${baseTitle} ${globalCounter++}`;
+                                }
+                            } else {
+                                itemTitle = data[0].title;
+                            }
+                            newItems.push(createItem(itemTitle, data[0].code));
+                        }
+                    } else if (collectionMatch) {
+                        const collectionId = collectionMatch[1];
+                        const response = await fetch(`/api/collection/${collectionId}/codes/`);
+                        if (!response.ok) throw new Error(`Network error for collection ${collectionId}`);
+                        const data = await response.json();
+                        
+                        if (data.error) throw new Error(data.error);
+                        
+                        if (Array.isArray(data)) {
+                            data.forEach((item) => {
+                                let itemTitle;
+                                if (baseTitle) {
+                                    itemTitle = `${baseTitle} ${globalCounter++}`;
+                                } else {
+                                    itemTitle = item.title;
+                                }
+                                newItems.push(createItem(itemTitle, item.code));
+                            });
+                        }
+                    } else {
+                        throw new Error('无法识别的格式');
+                    }
+                } catch (error) {
+                    console.error(`Error processing line ${i + 1}:`, error);
+                    errors.push(`第 ${i + 1} 行: ${error.message || error}`);
+                }
+            }
+
+            if (errors.length > 0) {
+                showAlert(`部分添加失败:\n${errors.join('\n')}`);
+            }
+
+            if (newItems.length > 0) {
+                if (isEditing) {
+                    // 替换当前项
+                    items.splice(currentIndex, 1, ...newItems);
+                    // 保持 currentIndex 不变（指向第一个新项）
+                } else {
+                    // 添加到末尾
+                    items.push(...newItems);
+                    currentIndex = items.length - 1;
+                }
                 renderList();
             }
+            
             closeAddModal();
+        }
+
+        function showAlert(msg) {
+            alertMessage.textContent = msg;
+            alertModal.classList.add('show');
+        }
+
+        function closeAlertModal() {
+            alertModal.classList.remove('show');
+        }
+
+        function createItem(title, code) {
+            return {
+                id: nextId++,
+                title: title || `Item ${items.length + 1}`,
+                hash: code
+            };
+        }
+
+        function addItem(title, code) {
+            items.push(createItem(title, code));
+            currentIndex = items.length - 1;
+            renderList();
         }
 
         function deleteItem() {
@@ -287,21 +509,28 @@
         }
 
         function clearList() {
-            if (confirm('确定要清空列表吗？')) {
-                items = [];
-                currentIndex = -1;
-                // Manually clear to ensure proper cleanup and avoid potential hangs
-                listContainer.innerHTML = '';
-                const iframes = Array.from(previewContainer.children);
-                iframes.forEach(iframe => {
-                    iframe.src = 'about:blank';
-                    try {
-                        iframe.contentWindow.document.write('');
-                        iframe.contentWindow.close();
-                    } catch(e) { /* ignore */ }
-                    iframe.remove();
-                });
-            }
+            confirmModal.classList.add('show');
+        }
+
+        function closeConfirmModal() {
+            confirmModal.classList.remove('show');
+        }
+
+        function executeClearList() {
+            items = [];
+            currentIndex = -1;
+            // Manually clear to ensure proper cleanup and avoid potential hangs
+            listContainer.innerHTML = '';
+            const iframes = Array.from(previewContainer.children);
+            iframes.forEach(iframe => {
+                iframe.src = 'about:blank';
+                try {
+                    iframe.contentWindow.document.write('');
+                    iframe.contentWindow.close();
+                } catch(e) { /* ignore */ }
+                iframe.remove();
+            });
+            closeConfirmModal();
         }
 
         // Initialize
