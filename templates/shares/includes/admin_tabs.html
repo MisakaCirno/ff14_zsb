@@ -1,0 +1,42 @@
+<!-- 管理员导航标签 -->
+<ul class="nav nav-tabs mb-4">
+    <!-- 左侧：列表页面 -->
+    <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name == 'admin_review_list' %}active{% endif %}" href="{% url 'admin_review_list' %}">
+            <i class="bi bi-list-check"></i> 审核列表
+            {% if pending_reviews_count > 0 %}
+            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="transform: translate(-10px, 5px) !important;">
+                <span class="visually-hidden">New alerts</span>
+            </span>
+            {% endif %}
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name == 'admin_report_list' %}active{% endif %}" href="{% url 'admin_report_list' %}">
+            <i class="bi bi-flag"></i> 举报处理
+            {% if pending_reports_count > 0 %}
+            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="transform: translate(-10px, 5px) !important;">
+                <span class="visually-hidden">New alerts</span>
+            </span>
+            {% endif %}
+        </a>
+    </li>
+
+    <!-- 右侧：日志页面 -->
+    <li class="nav-item ms-auto">
+        <a class="nav-link {% if request.resolver_match.url_name == 'admin_review_logs' %}active{% endif %}" href="{% url 'admin_review_logs' %}">
+            <i class="bi bi-journal-check"></i> 审核日志
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if request.resolver_match.url_name == 'admin_report_logs' %}active{% endif %}" href="{% url 'admin_report_logs' %}">
+            <i class="bi bi-journal-x"></i> 举报日志
+        </a>
+    </li>
+</ul>
+
+<style>
+    .nav-tabs .nav-link {
+        position: relative;
+    }
+</style>

@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+
+{% block title %}审核日志{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12 text-center">
+            <h1 class="display-4 mb-3">
+                <i class="bi bi-shield-check text-primary"></i> 
+                审核管理
+            </h1>
+            <p class="lead text-muted mb-4">内容审核与管理中心</p>
+        </div>
+    </div>
+
+    {% include 'shares/includes/admin_tabs.html' %}
+
+    <!-- 日志列表 -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white border-bottom py-3">
+            <h5 class="mb-0 text-muted"><i class="bi bi-clock-history"></i> 审核操作记录</h5>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col" style="width: 15%;">时间</th>
+                        <th scope="col" style="width: 15%;">操作人</th>
+                        <th scope="col" style="width: 15%;">动作</th>
+                        <th scope="col" style="width: 55%;">关联分享与详情</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td class="text-secondary small">{{ log.created_at|date:"Y-m-d H:i:s" }}</td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-person-fill text-muted me-2"></i>
+                                <span>{{ log.user.username }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if log.action == 'approve' %}
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success">审核通过</span>
+                            {% elif log.action == 'reject' %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">审核拒绝</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ log.get_action_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="small text-muted">
+                            <div>
+                                <a href="{% url 'share_detail' log.share.share_id %}" target="_blank" class="fw-bold text-decoration-none">
+                                    {{ log.share.title }}
+                                </a>
+                            </div>
+                            {% if log.details %}
+                            <div class="mt-1">{{ log.details }}</div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                            暂无审核记录
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if logs.has_other_pages %}
+        <div class="card-footer bg-white border-top-0 py-3">
+            <nav aria-label="日志分页">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if logs.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ logs.previous_page_number }}">上一页</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">上一页</span>
+                    </li>
+                    {% endif %}
+
+                    {% for i in logs.paginator.page_range %}
+                        {% if logs.number == i %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ i }}</span>
+                        </li>
+                        {% else %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ i }}">{{ i }}</a>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if logs.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ logs.next_page_number }}">下一页</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link">下一页</span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

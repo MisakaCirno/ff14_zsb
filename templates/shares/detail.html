@@ -59,42 +59,89 @@
             <!-- 详情区域 -->
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-file-text"></i> 详细信息</h5>
+                    <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active" id="detail-tab" data-bs-toggle="tab" data-bs-target="#detail-pane" type="button" role="tab" aria-controls="detail-pane" aria-selected="true">
+                                <i class="bi bi-file-text"></i> 详细信息
+                            </button>
+                        </li>
+                        {% if user.is_staff or user.is_superuser %}
+                        <li class="nav-item">
+                            <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs-pane" type="button" role="tab" aria-controls="logs-pane" aria-selected="false">
+                                <i class="bi bi-journal-text"></i> 操作日志
+                            </button>
+                        </li>
+                        {% endif %}
+                    </ul>
                 </div>
                 <div class="card-body">
-                    {% if share.description %}
-                    <div class="mb-4">
-                        <h6 class="fw-bold">描述</h6>
-                        <div class="description-content">
-                            {{ share.description|safe }}
+                    <div class="tab-content">
+                        <!-- 详情标签页 -->
+                        <div class="tab-pane fade show active" id="detail-pane" role="tabpanel" aria-labelledby="detail-tab">
+                            {% if share.description %}
+                            <div class="mb-4">
+                                <h6 class="fw-bold">描述</h6>
+                                <div class="description-content">
+                                    {{ share.description|safe }}
+                                </div>
+                            </div>
+                            {% endif %}
+        
+                            <div class="mb-4">
+                                <h6 class="fw-bold">战术板代码</h6>
+                                <div class="input-group">
+                                    <input type="text" class="form-control strategy-code" id="strategyCode" value="{{ share.strategy_code }}" readonly>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyCode(this)">
+                                        <i class="bi bi-clipboard"></i> 复制
+                                    </button>
+                                </div>
+                            </div>
+        
+                            <div>
+                                <h6 class="fw-bold">分享链接</h6>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="shareUrl" readonly>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="copyUrl(this)">
+                                        <i class="bi bi-link-45deg"></i> 复制链接
+                                    </button>
+                                    <button class="btn btn-outline-primary" onclick="generateShareImage()" id="generateBtn">
+                                        <i class="bi bi-image"></i> 生成分享图
+                                    </button>
+                                </div>
+                                <div class="spinner-border spinner-border-sm d-none mt-2" role="status" id="loadingSpinner">
+                                    <span class="visually-hidden">生成中...</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    {% endif %}
 
-                    <div class="mb-4">
-                        <h6 class="fw-bold">战术板代码</h6>
-                        <div class="input-group">
-                            <input type="text" class="form-control strategy-code" id="strategyCode" value="{{ share.strategy_code }}" readonly>
-                            <button class="btn btn-outline-secondary" type="button" onclick="copyCode(this)">
-                                <i class="bi bi-clipboard"></i> 复制
-                            </button>
+                        <!-- 日志标签页 (管理员) -->
+                        {% if user.is_staff or user.is_superuser %}
+                        <div class="tab-pane fade" id="logs-pane" role="tabpanel" aria-labelledby="logs-tab">
+                            <div class="list-group list-group-flush border rounded">
+                                {% if share_logs %}
+                                    {% for log in share_logs %}
+                                    <div class="list-group-item">
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <div>
+                                                <span class="fw-bold text-dark">{{ log.user.username }}</span>
+                                                <span class="badge bg-secondary ms-2">{{ log.get_action_display }}</span>
+                                            </div>
+                                            <small class="text-muted">{{ log.created_at|date:"Y-m-d H:i" }}</small>
+                                        </div>
+                                        {% if log.details %}
+                                        <p class="mb-0 small text-muted text-break mt-1 ps-2 border-start border-3">{{ log.details }}</p>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="list-group-item text-center text-muted py-5">
+                                        <i class="bi bi-journal-x fs-4 d-block mb-2"></i>
+                                        暂无操作日志
+                                    </div>
+                                {% endif %}
+                            </div>
                         </div>
-                    </div>
-
-                    <div>
-                        <h6 class="fw-bold">分享链接</h6>
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="shareUrl" readonly>
-                            <button class="btn btn-outline-secondary" type="button" onclick="copyUrl(this)">
-                                <i class="bi bi-link-45deg"></i> 复制链接
-                            </button>
-                            <button class="btn btn-outline-primary" onclick="generateShareImage()" id="generateBtn">
-                                <i class="bi bi-image"></i> 生成分享图
-                            </button>
-                        </div>
-                        <div class="spinner-border spinner-border-sm d-none mt-2" role="status" id="loadingSpinner">
-                            <span class="visually-hidden">生成中...</span>
-                        </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>

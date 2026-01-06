@@ -220,3 +220,33 @@ class CollectionItem(models.Model):
         verbose_name = '合集项'
         verbose_name_plural = '合集项'
         unique_together = ('collection', 'share')
+
+
+class ShareLog(models.Model):
+    """分享操作日志模型"""
+    share = models.ForeignKey(Share, on_delete=models.CASCADE, related_name='logs', verbose_name='关联分享')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='share_logs', verbose_name='操作人')
+    
+    class ActionType(models.TextChoices):
+        CREATE = 'create', '创建分享'
+        EDIT = 'edit', '编辑分享'
+        REVIEW_APPROVE = 'approve', '审核通过'
+        REVIEW_REJECT = 'reject', '审核拒绝'
+        ADD_TO_COLLECTION = 'add_collection', '加入合集'
+        REMOVE_FROM_COLLECTION = 'remove_collection', '移出合集'
+        REPORT_HANDLE = 'report_handle', '处理举报'
+        DELETE = 'delete', '删除分享' 
+        OTHER = 'other', '其他操作'
+
+    action = models.CharField(max_length=20, choices=ActionType.choices, verbose_name='操作类型')
+    details = models.TextField(blank=True, verbose_name='操作详情')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='操作时间')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = '操作日志'
+        verbose_name_plural = '操作日志'
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_action_display()} - {self.share.title}"
+

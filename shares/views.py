@@ -8,7 +8,7 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count, Prefetch, Max
 from django.utils import timezone
-from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem
+from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm
 from io import BytesIO
 import base64
@@ -16,6 +16,27 @@ import base64
 
 def is_admin(user):
     return user.is_authenticated and (user.is_staff or user.is_superuser)
+
+
+def log_share_action(user, share, action_type, details=''):
+    """记录分享操作日志"""
+    if not user.is_authenticated:
+        return
+        
+    # 确保 share 是实例而不是 None (针对创建分享前的情况处理，需在创建后调用)
+    if not share:
+        return
+
+    try:
+        ShareLog.objects.create(
+            user=user,
+            share=share,
+            action=action_type,
+            details=details
+        )
+    except Exception as e:
+        print(f"Logging failed: {e}")
+
 
 
 def index(request):
@@ -140,6 +161,12 @@ def share_detail(request, share_id):
         Q(is_public=True) | Q(author=request.user if request.user.is_authenticated else None)
     ).distinct()
     
+    # 管理员查看详情时，预加载日志
+    if is_admin(request.user):
+        share_logs = share.logs.select_related('user').order_by('-created_at')
+    else:
+        share_logs = None
+
     # 获取用户的合集列表（用于添加到合集功能）
     user_collections = []
     if request.user.is_authenticated and share.author == request.user:
@@ -149,17 +176,16 @@ def share_detail(request, share_id):
         'share': share,
         'related_collections': related_collections,
         'user_collections': user_collections,
+        'share_logs': share_logs,
     })
-    
-    # 更新Cookie（30天有效期）
-    if share_id not in viewed_shares.split(','):
-        response.set_cookie(
-            'viewed_shares',
-            ','.join(viewed_list),
-            max_age=30*24*60*60,  # 30天
-            httponly=True,  # 防止JavaScript访问
-            samesite='Lax'  # CSRF保护
-        )
+
+    response.set_cookie(
+        'viewed_shares',
+        ','.join(viewed_list),
+        max_age=30*24*60*60,  # 30天
+        httponly=True,  # 防止JavaScript访问
+        samesite='Lax'  # CSRF保护
+    )
     
     return response
 
@@ -190,6 +216,10 @@ def create_share(request):
             
             share.save()
             
+            # 记录创建日志
+            if request.user.is_authenticated:
+                log_share_action(request.user, share, ShareLog.ActionType.CREATE, '用户创建分享')
+
             # 如果选择了合集，则添加到合集
             collection_id = request.POST.get('collection_id')
             if collection_id and request.user.is_authenticated:
@@ -238,6 +268,23 @@ def edit_share(request, share_id):
                 new_share.status = Share.Status.APPROVED
                 
             new_share.save()
+            
+            # 记录编辑日志
+            changes = []
+            if 'title' in form.changed_data:
+                changes.append('标题')
+            if 'strategy_code' in form.changed_data:
+                changes.append('战术板代码')
+            if 'description' in form.changed_data:
+                changes.append('描述')
+            if 'category' in form.changed_data:
+                changes.append('分类')
+            if 'visibility' in form.changed_data:
+                changes.append('可见性')
+                
+            log_details = f"用户编辑内容: {', '.join(changes)}" if changes else "用户编辑分享"
+            log_share_action(request.user, new_share, ShareLog.ActionType.EDIT, log_details)
+
             if new_share.status == Share.Status.APPROVED:
                 messages.success(request, '分享更新成功！')
             return redirect('share_detail', share_id=share.share_id)
@@ -418,11 +465,16 @@ def page_not_found(request, exception):
 @user_passes_test(is_admin)
 def admin_review_list(request):
     """管理员审核列表"""
-    pending_shares = Share.objects.filter(status=Share.Status.PENDING).order_by('-created_at')
+    pending_shares = Share.objects.filter(status=Share.Status.PENDING).prefetch_related(
+        Prefetch('logs', queryset=ShareLog.objects.select_related('user').order_by('-created_at'), to_attr='share_logs')
+    ).order_by('-created_at')
     paginator = Paginator(pending_shares, 20)
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
-    return render(request, 'shares/admin_review_list.html', {'shares': shares})
+    
+    context = {'shares': shares}
+    context.update(get_admin_counts())
+    return render(request, 'shares/admin_review_list.html', context)
 
 
 @user_passes_test(is_admin)
@@ -431,6 +483,7 @@ def admin_approve_share(request, share_id):
     share = get_object_or_404(Share, share_id=share_id)
     share.status = Share.Status.APPROVED
     share.save()
+    log_share_action(request.user, share, ShareLog.ActionType.REVIEW_APPROVE, '管理通过审核')
     messages.success(request, f'分享 "{share.title}" 已通过审核')
     return redirect('admin_review_list')
 
@@ -442,6 +495,7 @@ def admin_reject_share(request, share_id):
     share.status = Share.Status.REJECTED
     share.visibility = Share.Visibility.PRIVATE
     share.save()
+    log_share_action(request.user, share, ShareLog.ActionType.REVIEW_REJECT, '管理员拒绝审核并设为私有')
     messages.warning(request, f'分享 "{share.title}" 已被拒绝并设为私有')
     return redirect('admin_review_list')
 
@@ -475,14 +529,17 @@ def admin_report_list(request):
     ).filter(
         pending_count__gt=0
     ).prefetch_related(
-        Prefetch('reports', queryset=Report.objects.filter(status=Report.Status.PENDING).select_related('reporter'), to_attr='pending_reports')
+        Prefetch('reports', queryset=Report.objects.filter(status=Report.Status.PENDING).select_related('reporter'), to_attr='pending_reports'),
+        Prefetch('logs', queryset=ShareLog.objects.select_related('user').order_by('-created_at'), to_attr='share_logs')
     ).order_by('-pending_count', '-updated_at')
     
     paginator = Paginator(reported_shares, 10)
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
     
-    return render(request, 'shares/admin_report_list.html', {'shares': shares})
+    context = {'shares': shares}
+    context.update(get_admin_counts())
+    return render(request, 'shares/admin_report_list.html', context)
 
 
 @user_passes_test(is_admin)
@@ -496,10 +553,12 @@ def admin_resolve_report(request, report_id, action):
         share = report.share
         share.visibility = Share.Visibility.PRIVATE
         share.save()
+        log_share_action(request.user, share, ShareLog.ActionType.REPORT_HANDLE, f'认可举报 ID:{report_id}，设为私有')
         messages.success(request, f'举报已认可，分享 "{share.title}" 已被设为私有')
     elif action == 'dismiss':
         # 驳回举报
         report.status = Report.Status.DISMISSED
+        log_share_action(request.user, report.share, ShareLog.ActionType.REPORT_HANDLE, f'驳回举报 ID:{report_id}')
         messages.info(request, '举报已驳回')
     else:
         messages.error(request, '无效的操作')
@@ -527,14 +586,67 @@ def admin_resolve_share_reports(request, share_id, action):
         share.visibility = Share.Visibility.PRIVATE
         share.save()
         pending_reports.update(status=Report.Status.RESOLVED, resolved_at=timezone.now(), resolved_by=request.user)
+        log_share_action(request.user, share, ShareLog.ActionType.REPORT_HANDLE, '批量认可所有举报，设为私有')
         messages.success(request, f'已认可举报，分享 "{share.title}" 已设为私有，相关举报已标记为处理。')
-        
+
     elif action == 'dismiss':
         # 驳回举报：所有待处理举报设为已驳回
         pending_reports.update(status=Report.Status.DISMISSED, resolved_at=timezone.now(), resolved_by=request.user)
-        messages.info(request, f'已驳回分享 "{share.title}" 的所有举报。')
-        
+        log_share_action(request.user, share, ShareLog.ActionType.REPORT_HANDLE, '批量驳回所有举报')
+        messages.info(request, '举报已全部驳回')
+    
     return redirect('admin_report_list')
+
+
+def get_admin_counts():
+    """获取管理员待办事项计数"""
+    return {
+        'pending_reviews_count': Share.objects.filter(status=Share.Status.PENDING).count(),
+        'pending_reports_count': Share.objects.annotate(
+            pending_count=Count('reports', filter=Q(reports__status=Report.Status.PENDING))
+        ).filter(pending_count__gt=0).count()
+    }
+
+
+@user_passes_test(is_admin)
+def admin_review_logs(request):
+    """审核日志列表"""
+    log_types = [
+        ShareLog.ActionType.REVIEW_APPROVE,
+        ShareLog.ActionType.REVIEW_REJECT,
+    ]
+    
+    logs_list = ShareLog.objects.filter(
+        action__in=log_types
+    ).select_related('user', 'share').order_by('-created_at')
+    
+    paginator = Paginator(logs_list, 20)
+    page_number = request.GET.get('page')
+    logs = paginator.get_page(page_number)
+    
+    context = {'logs': logs}
+    context.update(get_admin_counts())
+    return render(request, 'shares/admin_review_logs.html', context)
+
+
+@user_passes_test(is_admin)
+def admin_report_logs(request):
+    """举报日志列表"""
+    log_types = [
+        ShareLog.ActionType.REPORT_HANDLE,
+    ]
+    
+    logs_list = ShareLog.objects.filter(
+        action__in=log_types
+    ).select_related('user', 'share').order_by('-created_at')
+    
+    paginator = Paginator(logs_list, 20)
+    page_number = request.GET.get('page')
+    logs = paginator.get_page(page_number)
+    
+    context = {'logs': logs}
+    context.update(get_admin_counts())
+    return render(request, 'shares/admin_report_logs.html', context)
 
 
 def user_public_profile(request, username):
@@ -672,9 +784,7 @@ def add_share_to_collection(request, share_id):
             new_order = (max_order or 0) + 1
             
             CollectionItem.objects.create(collection=collection, share=share, order=new_order)
-            messages.success(request, '已添加到合集')
-            
-        return redirect('share_detail', share_id=share_id)
+            log_share_action(request.user, share, ShareLog.ActionType.ADD_TO_COLLECTION, f'加入合集: {collection.title}')
         
     return redirect('share_detail', share_id=share_id)
 
@@ -688,9 +798,9 @@ def remove_share_from_collection(request, collection_id, share_id):
     item = get_object_or_404(CollectionItem, collection=collection, share=share)
     item.delete()
     
-    messages.success(request, '已从合集移除')
-    return redirect('collection_detail', collection_id=collection_id)
-
+    log_share_action(request.user, share, ShareLog.ActionType.REMOVE_FROM_COLLECTION, f'移出合集: {collection.title}')
+    messages.success(request, '分享已从合集中移除')
+    return redirect('collection_detail', collection_id=collection.id)
 
 def get_share_code(request, share_id):
     """API: 获取单个分享的分享码"""

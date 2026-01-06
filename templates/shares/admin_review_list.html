@@ -8,11 +8,13 @@
         <div class="col-12 text-center">
             <h1 class="display-4 mb-3">
                 <i class="bi bi-shield-check text-primary"></i> 
-                审核列表
+                后台管理
             </h1>
-            <p class="lead text-muted mb-4">管理待审核的公开分享</p>
+            <p class="lead text-muted mb-4">内容审核与管理中心</p>
         </div>
     </div>
+
+    {% include 'shares/includes/admin_tabs.html' %}
 
     <!-- 统计信息 -->
     <div class="row mb-4">
@@ -114,6 +116,35 @@
                         <em>暂无描述</em>
                     </p>
                     {% endif %}
+
+                    <!-- 操作日志 -->
+                    <div class="border-top pt-2 mt-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <small class="fw-bold text-muted"><i class="bi bi-clock-history"></i> 历史记录</small>
+                        </div>
+                        <div class="bg-light rounded p-2" style="max-height: 80px; overflow-y: auto; font-size: 0.8em;">
+                            <ul class="list-unstyled mb-0">
+                                {% for log in share.share_logs %}
+                                <li class="mb-1 border-bottom border-light pb-1">
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-truncate" style="max-width: 120px;" title="{{ log.user.username }}">
+                                            <strong>{{ log.user.username }}</strong>
+                                        </span>
+                                        <span class="text-nowrap">{{ log.created_at|date:"m-d H:i" }}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="badge bg-secondary" style="font-size: 0.85em; transform: scale(0.9); transform-origin: left center;">{{ log.get_action_display }}</span>
+                                    </div>
+                                    {% if log.details %}
+                                    <div class="text-muted text-truncate" title="{{ log.details }}">{{ log.details }}</div>
+                                    {% endif %}
+                                </li>
+                                {% empty %}
+                                <li class="text-center text-muted">暂无记录</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer bg-transparent border-0 pt-0">
                     <div class="d-grid gap-2">

@@ -157,12 +157,18 @@
                     </a>
                     {% if user.is_authenticated %}
                     <div class="dropdown me-2">
-                        <button class="btn btn-outline-light dropdown-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                        <button class="btn btn-outline-light dropdown-toggle position-relative" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle"></i> 
                             {% if user.profile.nickname %}
                                 {{ user.profile.nickname }}
                             {% else %}
                                 {{ user.username }}
+                            {% endif %}
+                            
+                            {% if has_admin_actions %}
+                            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle">
+                                <span class="visually-hidden">New alerts</span>
+                            </span>
                             {% endif %}
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
@@ -182,11 +188,17 @@
                             <li><a class="dropdown-item" href="/admin/shares/announcement/add/" target="_blank">
                                 <i class="bi bi-megaphone"></i> 发布动态
                             </a></li>
-                            <li><a class="dropdown-item" href="{% url 'admin_review_list' %}">
-                                <i class="bi bi-shield-check"></i> 审核列表
+                            <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'admin_review_list' %}">
+                                <span><i class="bi bi-shield-check"></i> 审核列表</span>
+                                {% if global_pending_reviews_count > 0 %}
+                                <span class="badge bg-danger rounded-pill">{{ global_pending_reviews_count }}</span>
+                                {% endif %}
                             </a></li>
-                            <li><a class="dropdown-item" href="{% url 'admin_report_list' %}">
-                                <i class="bi bi-shield-exclamation"></i> 举报处理
+                            <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'admin_report_list' %}">
+                                <span><i class="bi bi-shield-exclamation"></i> 举报处理</span>
+                                {% if global_pending_reports_count > 0 %}
+                                <span class="badge bg-danger rounded-pill">{{ global_pending_reports_count }}</span>
+                                {% endif %}
                             </a></li>
                             {% endif %}
 
