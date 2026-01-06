@@ -114,18 +114,18 @@
                             <i class="bi bi-megaphone"></i> 站点动态
                         </a>
                     </li>
+                    {% if user.is_authenticated %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'my_shares' %}">
+                            <i class="bi bi-person-circle"></i> 我的内容
+                        </a>
+                    </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% static 'overlay/stgy.html' %}" target="_blank">
                             <i class="bi bi-file-text"></i> 小抄儿
                         </a>
                     </li>
-                    {% if user.is_authenticated %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'my_shares' %}">
-                            <i class="bi bi-person-circle"></i> 我的分享
-                        </a>
-                    </li>
-                    {% endif %}
                 </ul>
 
                 <ul class="navbar-nav me-2">

@@ -6,7 +6,7 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
-from django.db.models import Q, Count, Prefetch, Max
+from django.db.models import Q, Count, Prefetch, Max, Exists, OuterRef
 from django.utils import timezone
 from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm
@@ -60,6 +60,31 @@ def index(request):
     if hide_nsfw:
         shares_list = shares_list.filter(is_nsfw=False)
 
+    # 排序
+    sort_by = request.GET.get('sort', 'latest')
+    
+    # 注解点赞和收藏数量
+    shares_list = shares_list.annotate(
+        likes_count=Count('likes'),
+        favorites_count=Count('favorites')
+    )
+    
+    # 如果用户已登录，检查点赞状态
+    if request.user.is_authenticated:
+        shares_list = shares_list.annotate(
+            is_liked=Exists(Share.likes.through.objects.filter(share_id=OuterRef('pk'), user_id=request.user.id)),
+            is_favorited=Exists(Share.favorites.through.objects.filter(share_id=OuterRef('pk'), user_id=request.user.id))
+        )
+
+    if sort_by == 'likes':
+        shares_list = shares_list.order_by('-likes_count', '-created_at')
+    elif sort_by == 'views':
+        shares_list = shares_list.order_by('-views', '-created_at')
+    elif sort_by == 'favorites':
+        shares_list = shares_list.order_by('-favorites_count', '-created_at')
+    else: # latest
+        shares_list = shares_list.order_by('-created_at')
+
     paginator = Paginator(shares_list, 12)  # 每页12个
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
@@ -70,6 +95,7 @@ def index(request):
     context = {
         'shares': shares,
         'current_category': category,
+        'sort_by': sort_by,
         'hide_spoiler': hide_spoiler,
         'hide_nsfw': hide_nsfw,
         'latest_announcement': latest_announcement,
@@ -172,11 +198,19 @@ def share_detail(request, share_id):
     if request.user.is_authenticated and share.author == request.user:
         user_collections = Collection.objects.filter(author=request.user).order_by('-updated_at')
 
+    is_liked = False
+    is_favorited = False
+    if request.user.is_authenticated:
+        is_liked = share.likes.filter(id=request.user.id).exists()
+        is_favorited = share.favorites.filter(id=request.user.id).exists()
+
     response = render(request, 'shares/detail.html', {
         'share': share,
         'related_collections': related_collections,
         'user_collections': user_collections,
         'share_logs': share_logs,
+        'is_liked': is_liked,
+        'is_favorited': is_favorited,
     })
 
     response.set_cookie(
@@ -319,7 +353,31 @@ def delete_share(request, share_id):
 @login_required
 def my_shares(request):
     """我的分享列表"""
-    shares_list = Share.objects.filter(author=request.user)
+    tab = request.GET.get('tab', 'my_shares')
+    
+    if tab == 'likes':
+        shares_list = request.user.liked_shares.all().annotate(
+            likes_count=Count('likes'), favorites_count=Count('favorites')
+        ).order_by('-created_at')
+    elif tab == 'favorites':
+        shares_list = request.user.favorited_shares.all().annotate(
+            likes_count=Count('likes'), favorites_count=Count('favorites')
+        ).order_by('-created_at')
+    else:
+        shares_list = Share.objects.filter(author=request.user).annotate(
+            likes_count=Count('likes'), favorites_count=Count('favorites')
+        )
+        if request.GET.get('order') == 'desc': # Optional preservation of existing ordering if any, though model default is desc
+             shares_list = shares_list.order_by('created_at')
+        else:
+             shares_list = shares_list.order_by('-created_at')
+
+    # Add is_liked and is_favorited annotations for all tabs
+    shares_list = shares_list.annotate(
+        is_liked=Exists(Share.likes.through.objects.filter(share_id=OuterRef('pk'), user_id=request.user.id)),
+        is_favorited=Exists(Share.favorites.through.objects.filter(share_id=OuterRef('pk'), user_id=request.user.id))
+    )
+
     paginator = Paginator(shares_list, 12)
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
@@ -330,6 +388,7 @@ def my_shares(request):
     return render(request, 'shares/my_shares.html', {
         'shares': shares,
         'collections': collections,
+        'current_tab': tab,
     })
 
 
@@ -824,6 +883,48 @@ def get_share_code(request, share_id):
         "code": share.strategy_code
     }]
     return JsonResponse(data, safe=False)
+
+
+@login_required
+def toggle_like(request, share_id):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=405)
+        
+    share = get_object_or_404(Share, share_id=share_id)
+    
+    if share.likes.filter(id=request.user.id).exists():
+        share.likes.remove(request.user)
+        is_liked = False
+    else:
+        share.likes.add(request.user)
+        is_liked = True
+        
+    return JsonResponse({
+        'status': 'success', 
+        'is_liked': is_liked,
+        'likes_count': share.likes.count()
+    })
+
+
+@login_required
+def toggle_favorite(request, share_id):
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=405)
+        
+    share = get_object_or_404(Share, share_id=share_id)
+    
+    if share.favorites.filter(id=request.user.id).exists():
+        share.favorites.remove(request.user)
+        is_favorited = False
+    else:
+        share.favorites.add(request.user)
+        is_favorited = True
+        
+    return JsonResponse({
+        'status': 'success', 
+        'is_favorited': is_favorited,
+        'favorites_count': share.favorites.count()
+    })
 
 
 def get_collection_codes(request, collection_id):

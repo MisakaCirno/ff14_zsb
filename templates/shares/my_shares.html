@@ -17,17 +17,23 @@
     </div>
 
     <ul class="nav nav-tabs mb-4" id="myTab" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="shares-tab" data-bs-toggle="tab" data-bs-target="#shares" type="button" role="tab">我的分享</button>
+        <li class="nav-item">
+            <a class="nav-link {% if current_tab == 'my_shares' %}active{% endif %}" href="?tab=my_shares">我的分享</a>
         </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="collections-tab" data-bs-toggle="tab" data-bs-target="#collections" type="button" role="tab">我的合集</button>
+        <li class="nav-item">
+             <a class="nav-link {% if current_tab == 'collections' %}active{% endif %}" href="?tab=collections">我的合集</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if current_tab == 'likes' %}active{% endif %}" href="?tab=likes">我的点赞</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if current_tab == 'favorites' %}active{% endif %}" href="?tab=favorites">我的收藏</a>
         </li>
     </ul>
 
     <div class="tab-content" id="myTabContent">
         <!-- 分享列表 -->
-        <div class="tab-pane fade show active" id="shares" role="tabpanel">
+        <div class="tab-pane fade {% if current_tab != 'collections' %}show active{% endif %}" id="shares" role="tabpanel">
             <!-- 统计信息 -->
             <div class="row mb-4">
                 <div class="col-md-12">
@@ -129,11 +135,14 @@
                                 <i class="bi bi-bookmark-fill text-primary"></i> {{ share.title }}
                             </h5>
                             <div class="mb-2">
-                                <small class="text-muted">
-                                    <i class="bi bi-calendar3"></i> {{ share.created_at|date:"Y-m-d H:i" }}
-                                    <span class="ms-2">
-                                        <i class="bi bi-clock-history"></i> {{ share.updated_at|date:"m-d H:i" }}
-                                    </span>
+                                <small class="text-muted d-flex justify-content-between">
+                                    <span><i class="bi bi-calendar3"></i> {{ share.created_at|date:"Y-m-d H:i" }}</span>
+                                    {% if current_tab == 'my_shares' %}
+                                    <div>
+                                        <span class="me-2" title="点赞"><i class="bi bi-heart-fill text-danger small"></i> {{ share.likes_count }}</span>
+                                        <span title="收藏"><i class="bi bi-star-fill text-warning small"></i> {{ share.favorites_count }}</span>
+                                    </div>
+                                    {% endif %}
                                 </small>
                             </div>
                             {% if share.description %}
@@ -147,6 +156,7 @@
                             {% endif %}
                         </div>
                         <div class="card-footer bg-transparent border-0 pt-0">
+                            {% if current_tab == 'my_shares' %}
                             <div class="btn-group w-100 mb-2" role="group">
                                 <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary" title="查看详情">
                                     <i class="bi bi-eye"></i> 查看
@@ -158,6 +168,33 @@
                                     <i class="bi bi-trash"></i> 删除
                                 </a>
                             </div>
+                            {% else %}
+                            <div class="d-flex justify-content-between gap-2">
+                                <div class="btn-group w-50 shadow-sm" role="group">
+                                    <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift w-50" title="查看详情">
+                                        <i class="bi bi-arrow-right-circle"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-primary hover-lift w-50" onclick="copyStrategyCode(this, '{{ share.strategy_code|escapejs }}')" title="复制分享码">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </div>
+
+                                <div class="btn-group w-50 shadow-sm" role="group">
+                                    <button type="button" class="btn btn-sm {% if share.is_liked %}btn-danger{% else %}btn-outline-danger{% endif %} hover-lift w-50" 
+                                            id="btn-like-{{ share.share_id }}" 
+                                            onclick="toggleIndexLike('{{ share.share_id }}')"
+                                            title="{% if share.is_liked %}取消点赞{% else %}点赞{% endif %}">
+                                        <i class="bi {% if share.is_liked %}bi-heart-fill{% else %}bi-heart{% endif %}"></i> <span id="likes-count-{{ share.share_id }}">{{ share.likes_count }}</span>
+                                    </button>
+                                    <button type="button" class="btn btn-sm {% if share.is_favorited %}btn-warning{% else %}btn-outline-secondary{% endif %} hover-lift w-50" 
+                                            id="btn-favorite-{{ share.share_id }}" 
+                                            onclick="toggleIndexFavorite('{{ share.share_id }}')"
+                                            title="{% if share.is_favorited %}取消收藏{% else %}收藏{% endif %}">
+                                        <i class="bi {% if share.is_favorited %}bi-star-fill{% else %}bi-star{% endif %}"></i> <span id="favorites-count-{{ share.share_id }}">{{ share.favorites_count }}</span>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -240,7 +277,7 @@
         </div>
 
         <!-- 合集列表 -->
-        <div class="tab-pane fade" id="collections" role="tabpanel">
+        <div class="tab-pane fade {% if current_tab == 'collections' %}show active{% endif %}" id="collections" role="tabpanel">
             <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
                 {% for collection in collections %}
                 <div class="col">
@@ -280,4 +317,147 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleIndexLike(shareId) {
+        // Prevent bubbling
+        event.preventDefault();
+        event.stopPropagation();
+
+        const btn = document.getElementById('btn-like-' + shareId);
+        const icon = btn.querySelector('i');
+        const countSpan = document.getElementById('likes-count-' + shareId);
+        
+        btn.disabled = true;
+
+        fetch('/share/' + shareId + '/like/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                if (data.is_liked) {
+                    btn.classList.remove('btn-outline-danger');
+                    btn.classList.add('btn-danger');
+                    icon.classList.remove('bi-heart');
+                    icon.classList.add('bi-heart-fill');
+                    btn.title = '取消点赞';
+                } else {
+                    btn.classList.remove('btn-danger');
+                    btn.classList.add('btn-outline-danger');
+                    icon.classList.remove('bi-heart-fill');
+                    icon.classList.add('bi-heart');
+                    btn.title = '点赞';
+                }
+                countSpan.textContent = data.likes_count;
+            } else {
+                if (typeof showMessage === 'function') {
+                    showMessage(data.message || '操作失败', 'danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            if (typeof showMessage === 'function') {
+                showMessage('网络请求失败', 'danger');
+            }
+        })
+        .finally(() => {
+            btn.disabled = false;
+        });
+    }
+
+    function toggleIndexFavorite(shareId) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const btn = document.getElementById('btn-favorite-' + shareId);
+        const icon = btn.querySelector('i');
+        const countSpan = document.getElementById('favorites-count-' + shareId);
+        
+        btn.disabled = true;
+
+        fetch('/share/' + shareId + '/favorite/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                if (data.is_favorited) {
+                    btn.classList.remove('btn-outline-secondary');
+                    btn.classList.add('btn-warning');
+                    icon.classList.remove('bi-star');
+                    icon.classList.add('bi-star-fill');
+                    btn.title = '取消收藏';
+                } else {
+                    btn.classList.remove('btn-warning');
+                    btn.classList.add('btn-outline-secondary');
+                    icon.classList.remove('bi-star-fill');
+                    icon.classList.add('bi-star');
+                    btn.title = '收藏';
+                }
+                countSpan.textContent = data.favorites_count;
+            } else {
+                if (typeof showMessage === 'function') {
+                    showMessage(data.message || '操作失败', 'danger');
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            if (typeof showMessage === 'function') {
+                showMessage('网络请求失败', 'danger');
+            }
+        })
+        .finally(() => {
+            btn.disabled = false;
+        });
+    }
+
+    function copyStrategyCode(btn, code) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const originalHtml = btn.innerHTML;
+        
+        const onSuccess = () => {
+            btn.innerHTML = '<i class="bi bi-check"></i>';
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-success');
+            
+            if (typeof showMessage === 'function') {
+                showMessage('战术板代码已复制', 'success');
+            }
+
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-primary');
+            }, 2000);
+        };
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(onSuccess).catch(err => {
+                console.error('Failed to copy: ', err);
+                if (typeof fallbackCopyTextToClipboard === 'function') {
+                    fallbackCopyTextToClipboard(code, onSuccess);
+                }
+            });
+        } else {
+             if (typeof fallbackCopyTextToClipboard === 'function') {
+                fallbackCopyTextToClipboard(code, onSuccess);
+            }
+        }
+    }
+</script>
 {% endblock %}

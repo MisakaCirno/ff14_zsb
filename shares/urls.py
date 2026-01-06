@@ -48,6 +48,8 @@ urlpatterns = [
     path('collections/<int:collection_id>/edit/', views.edit_collection, name='edit_collection'),
     path('collections/<int:collection_id>/delete/', views.delete_collection, name='delete_collection'),
     path('share/<str:share_id>/add-to-collection/', views.add_share_to_collection, name='add_share_to_collection'),
+    path('share/<str:share_id>/like/', views.toggle_like, name='toggle_like'),
+    path('share/<str:share_id>/favorite/', views.toggle_favorite, name='toggle_favorite'),
     path('collections/<int:collection_id>/remove-share/<str:share_id>/', views.remove_share_from_collection, name='remove_share_from_collection'),
     
     # API

@@ -90,6 +90,8 @@ class Share(models.Model):
     is_original = models.BooleanField(default=False, verbose_name='原创')
 
     views = models.IntegerField(default=0, verbose_name='浏览量')
+    likes = models.ManyToManyField(User, related_name='liked_shares', blank=True, verbose_name='点赞用户')
+    favorites = models.ManyToManyField(User, related_name='favorited_shares', blank=True, verbose_name='收藏用户')
 
     class Meta:
         ordering = ['-created_at']

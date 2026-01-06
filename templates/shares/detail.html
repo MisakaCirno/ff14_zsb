@@ -16,8 +16,27 @@
         <div class="col-lg-8">
             <!-- 预览区域 -->
             <div class="card mb-4">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-eye"></i> 战术板预览</h5>
+                    <div>
+                        {% if user.is_authenticated %}
+                            <button class="btn btn-sm {% if is_liked %}btn-danger{% else %}btn-outline-danger{% endif %} me-2" id="btn-like" onclick="toggleLike()" title="{% if is_liked %}取消点赞{% else %}点赞{% endif %}">
+                                <i class="bi {% if is_liked %}bi-heart-fill{% else %}bi-heart{% endif %}"></i> 
+                                <span id="likes-count" class="ms-1">{{ share.likes.count }}</span>
+                            </button>
+                            <button class="btn btn-sm {% if is_favorited %}btn-warning{% else %}btn-outline-secondary{% endif %}" id="btn-favorite" onclick="toggleFavorite()" title="{% if is_favorited %}取消收藏{% else %}收藏{% endif %}">
+                                <i class="bi {% if is_favorited %}bi-star-fill{% else %}bi-star{% endif %}"></i> 
+                                <span id="favorites-count" class="ms-1">{{ share.favorites.count }}</span>
+                            </button>
+                        {% else %}
+                            <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-sm btn-outline-danger me-2" title="登录后点赞">
+                                <i class="bi bi-heart"></i> <span class="ms-1">{{ share.likes.count }}</span>
+                            </a>
+                            <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-sm btn-outline-secondary" title="登录后收藏">
+                                <i class="bi bi-star"></i> <span class="ms-1">{{ share.favorites.count }}</span>
+                            </a>
+                        {% endif %}
+                    </div>
                 </div>
                 <div class="card-body p-0 position-relative">
                     {% if share.is_nsfw %}
@@ -840,6 +859,92 @@ function downloadShareImage() {
         console.error('下载失败:', error);
         showMessage('下载失败，请右键点击图片另存为', 'danger');
     }
+}
+
+function toggleLike() {
+    const btn = document.getElementById('btn-like');
+    const icon = btn.querySelector('i');
+    const statsCount = document.getElementById('likes-count');
+    
+    // Disable button to prevent double click
+    btn.disabled = true;
+    
+    fetch('{% url "toggle_like" share.share_id %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            if (data.is_liked) {
+                btn.classList.remove('btn-outline-danger');
+                btn.classList.add('btn-danger');
+                icon.classList.remove('bi-heart');
+                icon.classList.add('bi-heart-fill');
+            } else {
+                btn.classList.remove('btn-danger');
+                btn.classList.add('btn-outline-danger');
+                icon.classList.remove('bi-heart-fill');
+                icon.classList.add('bi-heart');
+            }
+            if (statsCount) statsCount.textContent = data.likes_count;
+        } else {
+            showMessage(data.message || '操作失败', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showMessage('网络请求失败', 'danger');
+    })
+    .finally(() => {
+        btn.disabled = false;
+    });
+}
+
+function toggleFavorite() {
+    const btn = document.getElementById('btn-favorite');
+    const icon = btn.querySelector('i');
+    const statsCount = document.getElementById('favorites-count');
+    
+    // Disable button to prevent double click
+    btn.disabled = true;
+    
+    fetch('{% url "toggle_favorite" share.share_id %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            if (data.is_favorited) {
+                btn.classList.remove('btn-outline-secondary');
+                btn.classList.add('btn-warning');
+                icon.classList.remove('bi-star');
+                icon.classList.add('bi-star-fill');
+            } else {
+                btn.classList.remove('btn-warning');
+                btn.classList.add('btn-outline-secondary');
+                icon.classList.remove('bi-star-fill');
+                icon.classList.add('bi-star');
+            }
+            if (statsCount) statsCount.textContent = data.favorites_count;
+        } else {
+            showMessage(data.message || '操作失败', 'danger');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showMessage('网络请求失败', 'danger');
+    })
+    .finally(() => {
+        btn.disabled = false;
+    });
 }
 </script>
 
