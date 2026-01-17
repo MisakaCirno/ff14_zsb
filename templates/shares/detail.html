@@ -66,11 +66,11 @@
                     {% endif %}
 
                     <div class="ratio" style="--bs-aspect-ratio: 75%;">
-                        <iframe src="/static/viewer_new/index.html#{{ share.strategy_code }}" 
-                                style="border: none;"
-                                id="previewIframe"
-                                class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}">
-                        </iframe>
+                        <img src="/n/board/{{ share.strategy_code }}" 
+                             style="object-fit: cover;"
+                             id="previewImage"
+                             class="w-100 h-100 {% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
+                             alt="战术板预览">
                     </div>
                 </div>
             </div>
@@ -453,9 +453,9 @@ function revealContent(overlayId) {
             });
             
             if (!hasVisibleOverlay) {
-                const iframe = document.getElementById('previewIframe');
-                if (iframe) {
-                    iframe.classList.remove('blur-content');
+                const img = document.getElementById('previewImage');
+                if (img) {
+                    img.classList.remove('blur-content');
                 }
             }
         }, 300);
@@ -532,79 +532,54 @@ async function generateShareImage() {
     btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 生成中...';
     spinner.classList.remove('d-none');
     
-    let offscreenIframe = null;
     let qrContainer = null;
 
     try {
-        // 1. 创建离屏 iframe 用于固定比例渲染
-        // 使用固定尺寸确保不同设备生成图片一致 (4:3 比例)
         const targetWidth = 960;
         const targetHeight = 720;
         
-        offscreenIframe = document.createElement('iframe');
-        offscreenIframe.style.position = 'fixed';
-        offscreenIframe.style.left = '-10000px';
-        offscreenIframe.style.top = '0';
-        offscreenIframe.style.width = targetWidth + 'px';
-        offscreenIframe.style.height = targetHeight + 'px';
-        offscreenIframe.style.border = 'none';
-        offscreenIframe.style.visibility = 'hidden'; // 避免闪烁，但保持渲染
-        
-        // 获取当前战术板代码
+        // 1. 加载预览图
         const strategyCode = document.getElementById('strategyCode').value;
-        offscreenIframe.src = '/static/viewer_new/index.html#' + strategyCode;
+        const imageUrl = '/n/board/' + strategyCode;
         
-        document.body.appendChild(offscreenIframe);
+        const previewImg = new Image();
+        previewImg.crossOrigin = "Anonymous";
+        previewImg.src = imageUrl;
         
-        // 2. 等待 iframe 加载
         await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('加载超时')), 15000);
-            
-            offscreenIframe.onload = () => {
-                clearTimeout(timeout);
-                resolve();
-            };
+             previewImg.onload = resolve;
+             previewImg.onerror = () => reject(new Error("图片加载失败"));
+             // 防止永久挂起
+             setTimeout(() => reject(new Error("图片加载超时")), 10000);
         });
+
+        // 2. 创建合成画布
+        const finalCanvas = document.getElementById('shareCanvas');
+        const ctx = finalCanvas.getContext('2d');
+        finalCanvas.width = targetWidth;
+        finalCanvas.height = targetHeight;
         
-        // 注入样式确保铺满
-        try {
-            const iframeDoc = offscreenIframe.contentDocument || offscreenIframe.contentWindow.document;
-            const style = iframeDoc.createElement('style');
-            style.textContent = 'body, html { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }';
-            iframeDoc.head.appendChild(style);
-        } catch (e) {
-            console.warn('无法注入样式到 iframe:', e);
-        }
+        // 3. 绘制预览图 (保持比例填充)
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
         
-        // 3. 等待内部渲染 (给予额外时间让 JS 执行和布局稳定)
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        // 计算居中裁剪
+        const scale = Math.max(targetWidth / previewImg.width, targetHeight / previewImg.height);
+        const xOffset = (targetWidth - previewImg.width * scale) / 2;
+        const yOffset = (targetHeight - previewImg.height * scale) / 2;
         
-        // 4. 使用 html2canvas 截图
-        const iframeDoc = offscreenIframe.contentDocument || offscreenIframe.contentWindow.document;
-        const canvas = await html2canvas(iframeDoc.body, {
-            backgroundColor: '#ffffff',
-            scale: 2, // 提高清晰度
-            useCORS: true,
-            allowTaint: true,
-            logging: false,
-            width: targetWidth,
-            height: targetHeight,
-            windowWidth: targetWidth,
-            windowHeight: targetHeight,
-            x: 0,
-            y: 0
-        });
+        ctx.drawImage(previewImg, xOffset, yOffset, previewImg.width * scale, previewImg.height * scale);
         
         // 创建二维码容器
         qrContainer = document.createElement('div');
-        // 不要使用 display: none，这会导致在某些情况下（如移动端模拟）二维码无法正确渲染
         qrContainer.style.position = 'absolute';
         qrContainer.style.left = '-9999px';
         qrContainer.style.top = '-9999px';
         qrContainer.style.visibility = 'hidden';
         document.body.appendChild(qrContainer);
         
-        // 生成二维码
+        // ...existing code...
+        // 生成二维码 (保持原有逻辑)
         const cleanUrl = window.location.origin + window.location.pathname;
         const qrCode = new QRCode(qrContainer, {
             text: cleanUrl,
@@ -617,8 +592,9 @@ async function generateShareImage() {
         
         // 等待二维码生成
         await new Promise(resolve => setTimeout(resolve, 200));
-        
-        // 优先尝试获取 canvas 元素（更可靠）
+
+        // ...existing code...
+        // 获取二维码图片逻辑 (保持不变)
         const qrCanvas = qrContainer.querySelector('canvas');
         let qrImage = null;
         
@@ -631,36 +607,23 @@ async function generateShareImage() {
                 await new Promise((resolve, reject) => {
                     qrImage.onload = resolve;
                     qrImage.onerror = reject;
-                    // 设置超时
                     setTimeout(resolve, 1000);
                 });
             }
         }
-        
+
         if (!qrImage) {
             throw new Error('二维码生成失败');
         }
-        
-        // 创建最终的合成画布
-        const finalCanvas = document.getElementById('shareCanvas');
-        const ctx = finalCanvas.getContext('2d');
-        
-        // 设置画布大小 - 使用目标尺寸 (960x720) 以减小文件体积
-        finalCanvas.width = targetWidth;
-        finalCanvas.height = targetHeight;
-        
-        // 绘制截图作为背景 (缩放到目标尺寸，保持高质量)
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(canvas, 0, 0, targetWidth, targetHeight);
-        
+
+        // ...existing code...
+        // 后续绘制二维码和文字的逻辑保持不变，因为 ctx/canvas 变量名一致
         // 二维码参数 - 适配 960x720 的尺寸
         const qrSize = 120;
         const padding = 15;
         const borderRadius = 6;
         
-        // 智能位置选择：计算左下角和右下角的图像复杂度（熵值）
-        // 选择"较空"（复杂度低）的角落放置二维码，减少遮挡
+        // 智能位置选择
         const checkSize = qrSize + padding * 2;
         const leftScore = calculateRegionComplexity(ctx, 0, finalCanvas.height - checkSize, checkSize, checkSize);
         const rightScore = calculateRegionComplexity(ctx, finalCanvas.width - checkSize, finalCanvas.height - checkSize, checkSize, checkSize);
@@ -768,7 +731,7 @@ async function generateShareImage() {
         
     } catch (error) {
         console.error('生成分享图失败:', error);
-        showMessage('生成分享图失败：' + error.message + ' 请确保预览已加载完成后再试', 'danger');
+        showMessage('生成分享图失败：' + error.message, 'danger');
     } finally {
         // 恢复按钮状态
         btn.disabled = false;
@@ -776,9 +739,6 @@ async function generateShareImage() {
         spinner.classList.add('d-none');
         
         // 清理临时元素
-        if (offscreenIframe) {
-            document.body.removeChild(offscreenIframe);
-        }
         if (qrContainer) {
             document.body.removeChild(qrContainer);
         }

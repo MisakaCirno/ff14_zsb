@@ -58,14 +58,13 @@
                         <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none">
                             <div class="card-img-top position-relative" style="overflow: hidden; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                                 <div class="ratio ratio-4x3">
-                                    <iframe 
-                                        src="/static/viewer_new/index.html#{{ share.strategy_code }}" 
-                                        style="border: none; pointer-events: none;"
+                                    <img 
+                                        src="/n/board/{{ share.strategy_code }}" 
+                                        style="object-fit: cover; width: 100%; height: 100%;"
                                         class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
                                         loading="lazy"
-                                        title="战术板预览"
+                                        alt="战术板预览"
                                         onload="this.closest('.card-img-top').querySelector('.preview-loading').style.display='none'">
-                                    </iframe>
                                 </div>
 
                                 {% if share.is_spoiler or share.is_nsfw %}
