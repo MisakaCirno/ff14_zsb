@@ -65,8 +65,8 @@ def index(request):
     
     # 注解点赞和收藏数量
     shares_list = shares_list.annotate(
-        likes_count=Count('likes'),
-        favorites_count=Count('favorites')
+        likes_count=Count('likes', distinct=True),
+        favorites_count=Count('favorites', distinct=True)
     )
     
     # 如果用户已登录，检查点赞状态
@@ -357,15 +357,15 @@ def my_shares(request):
     
     if tab == 'likes':
         shares_list = request.user.liked_shares.all().annotate(
-            likes_count=Count('likes'), favorites_count=Count('favorites')
+            likes_count=Count('likes', distinct=True), favorites_count=Count('favorites', distinct=True)
         ).order_by('-created_at')
     elif tab == 'favorites':
         shares_list = request.user.favorited_shares.all().annotate(
-            likes_count=Count('likes'), favorites_count=Count('favorites')
+            likes_count=Count('likes', distinct=True), favorites_count=Count('favorites', distinct=True)
         ).order_by('-created_at')
     else:
         shares_list = Share.objects.filter(author=request.user).annotate(
-            likes_count=Count('likes'), favorites_count=Count('favorites')
+            likes_count=Count('likes', distinct=True), favorites_count=Count('favorites', distinct=True)
         )
         if request.GET.get('order') == 'desc': # Optional preservation of existing ordering if any, though model default is desc
              shares_list = shares_list.order_by('created_at')
