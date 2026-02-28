@@ -6,7 +6,7 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
-from django.db.models import Q, Count, Prefetch, Max, Exists, OuterRef
+from django.db.models import Q, Count, Prefetch, Max, Exists, OuterRef, F
 from django.utils import timezone
 from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm
@@ -174,8 +174,8 @@ def share_detail(request, share_id):
     
     # 如果该分享未被当前访客浏览过，则增加浏览量
     if share_id not in viewed_list:
-        share.views += 1
-        share.save(update_fields=['views'])
+        Share.objects.filter(share_id=share_id).update(views=F('views') + 1)
+        share.refresh_from_db()
         # 将该分享ID添加到已浏览列表
         viewed_list.append(share_id)
         # 限制Cookie大小，最多保留最近100个浏览记录
@@ -899,8 +899,8 @@ def record_copy(request, share_id):
     copied_list = copied_shares.split(',') if copied_shares else []
     
     if share_id not in copied_list:
-        share.copies += 1
-        share.save(update_fields=['copies'])
+        Share.objects.filter(share_id=share_id).update(copies=F('copies') + 1)
+        share.refresh_from_db()
         copied_list.append(share_id)
         if len(copied_list) > 100:
             copied_list = copied_list[-100:]

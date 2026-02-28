@@ -466,47 +466,66 @@ function revealContent(overlayId) {
 }
 
 function copyCode(btn) {
-    const codeInput = document.getElementById('strategyCode');
-    codeInput.select();
-    document.execCommand('copy');
-    showMessage('代码已复制到剪贴板！', 'success');
-    
-    // 记录复制次数
-    fetch('/share/{{ share.share_id }}/copy/', {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-            'Content-Type': 'application/json'
-        }
-    }).then(response => response.json()).then(data => {
-        if (data.status === 'success') {
-            const countEl = document.getElementById('copies-count');
-            if (countEl) countEl.textContent = data.copies_count;
-        }
-    }).catch(() => {});
+    const code = document.getElementById('strategyCode').value;
 
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="bi bi-check"></i> 已复制';
-    btn.classList.replace('btn-outline-secondary', 'btn-success');
-    setTimeout(() => {
-        btn.innerHTML = originalHtml;
-        btn.classList.replace('btn-success', 'btn-outline-secondary');
-    }, 2000);
+    const onSuccess = () => {
+        showMessage('代码已复制到剪贴板！', 'success');
+        
+        // 记录复制次数
+        fetch('/share/{{ share.share_id }}/copy/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        }).then(response => response.json()).then(data => {
+            if (data.status === 'success') {
+                const countEl = document.getElementById('copies-count');
+                if (countEl) countEl.textContent = data.copies_count;
+            }
+        }).catch(() => {});
+
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check"></i> 已复制';
+        btn.classList.replace('btn-outline-secondary', 'btn-success');
+        setTimeout(() => {
+            btn.innerHTML = originalHtml;
+            btn.classList.replace('btn-success', 'btn-outline-secondary');
+        }, 2000);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(onSuccess).catch(err => {
+            console.error('Failed to copy: ', err);
+            fallbackCopyTextToClipboard(code, onSuccess);
+        });
+    } else {
+        fallbackCopyTextToClipboard(code, onSuccess);
+    }
 }
 
 function copyUrl(btn) {
-    const urlInput = document.getElementById('shareUrl');
-    urlInput.select();
-    document.execCommand('copy');
-    showMessage('链接已复制到剪贴板！', 'success');
-    
-    const originalHtml = btn.innerHTML;
-    btn.innerHTML = '<i class="bi bi-check"></i> 已复制';
-    btn.classList.replace('btn-outline-secondary', 'btn-success');
-    setTimeout(() => {
-        btn.innerHTML = originalHtml;
-        btn.classList.replace('btn-success', 'btn-outline-secondary');
-    }, 2000);
+    const url = document.getElementById('shareUrl').value;
+
+    const onSuccess = () => {
+        showMessage('链接已复制到剪贴板！', 'success');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check"></i> 已复制';
+        btn.classList.replace('btn-outline-secondary', 'btn-success');
+        setTimeout(() => {
+            btn.innerHTML = originalHtml;
+            btn.classList.replace('btn-success', 'btn-outline-secondary');
+        }, 2000);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(onSuccess).catch(err => {
+            console.error('Failed to copy: ', err);
+            fallbackCopyTextToClipboard(url, onSuccess);
+        });
+    } else {
+        fallbackCopyTextToClipboard(url, onSuccess);
+    }
 }
 
 function calculateRegionComplexity(ctx, x, y, width, height) {
