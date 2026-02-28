@@ -208,7 +208,10 @@
                     <div class="mb-3 text-muted small">
                         <div class="d-flex justify-content-between mb-1">
                             <span><i class="bi bi-calendar3"></i> {{ share.created_at|date:"Y-m-d" }}</span>
-                            <span><i class="bi bi-eye"></i> {{ share.views }} 浏览</span>
+                            <span>
+                                <i class="bi bi-eye"></i> {{ share.views }} 浏览
+                                <span class="ms-2"><i class="bi bi-clipboard"></i> <span id="copies-count">{{ share.copies }}</span> 复制</span>
+                            </span>
                         </div>
                         {% if share.visibility != 'public' %}
                         <div class="d-flex justify-content-between">
@@ -468,6 +471,20 @@ function copyCode(btn) {
     document.execCommand('copy');
     showMessage('代码已复制到剪贴板！', 'success');
     
+    // 记录复制次数
+    fetch('/share/{{ share.share_id }}/copy/', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    }).then(response => response.json()).then(data => {
+        if (data.status === 'success') {
+            const countEl = document.getElementById('copies-count');
+            if (countEl) countEl.textContent = data.copies_count;
+        }
+    }).catch(() => {});
+
     const originalHtml = btn.innerHTML;
     btn.innerHTML = '<i class="bi bi-check"></i> 已复制';
     btn.classList.replace('btn-outline-secondary', 'btn-success');

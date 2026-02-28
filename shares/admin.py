@@ -14,10 +14,10 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 @admin.register(Share)
 class ShareAdmin(admin.ModelAdmin):
-    list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'views', 'created_at']
+    list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'views', 'copies', 'created_at']
     list_filter = ['visibility', 'created_at', 'author']
     search_fields = ['title', 'share_id', 'description', 'author__username', 'author__profile__nickname']
-    readonly_fields = ['share_id', 'created_at', 'updated_at', 'views']
+    readonly_fields = ['share_id', 'created_at', 'updated_at', 'views', 'copies']
     date_hierarchy = 'created_at'
     list_per_page = 20
     
@@ -29,7 +29,7 @@ class ShareAdmin(admin.ModelAdmin):
             'fields': ('strategy_code', 'description')
         }),
         ('统计信息', {
-            'fields': ('views', 'created_at', 'updated_at'),
+            'fields': ('views', 'copies', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )

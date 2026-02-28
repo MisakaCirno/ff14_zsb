@@ -103,13 +103,14 @@
                             <!-- 排序选项 -->
                             <div class="dropdown">
                                 <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="sortDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                    {% if sort_by == 'latest' %}最新发布{% elif sort_by == 'likes' %}最多点赞{% elif sort_by == 'views' %}最多查看{% elif sort_by == 'favorites' %}最多收藏{% else %}排序{% endif %}
+                                    {% if sort_by == 'latest' %}最新发布{% elif sort_by == 'likes' %}最多点赞{% elif sort_by == 'views' %}最多查看{% elif sort_by == 'favorites' %}最多收藏{% elif sort_by == 'copies' %}最多复制{% else %}排序{% endif %}
                                 </button>
                                 <ul class="dropdown-menu" aria-labelledby="sortDropdown">
                                     <li><a class="dropdown-item {% if sort_by == 'latest' %}active{% endif %}" href="?sort=latest{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最新发布</a></li>
                                     <li><a class="dropdown-item {% if sort_by == 'likes' %}active{% endif %}" href="?sort=likes{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最多点赞</a></li>
                                     <li><a class="dropdown-item {% if sort_by == 'views' %}active{% endif %}" href="?sort=views{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最多查看</a></li>
                                     <li><a class="dropdown-item {% if sort_by == 'favorites' %}active{% endif %}" href="?sort=favorites{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最多收藏</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'copies' %}active{% endif %}" href="?sort=copies{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最多复制</a></li>
                                 </ul>
                             </div>
                         </div>
@@ -172,10 +173,13 @@
                                 <span class="badge bg-primary shadow-sm ms-1">原创</span>
                                 {% endif %}
                             </div>
-                            <!-- 浏览量标签 -->
+                            <!-- 浏览量和复制量标签 -->
                             <div class="position-absolute top-0 end-0 m-2" style="z-index: 25;">
                                 <span class="badge bg-dark bg-opacity-75">
                                     <i class="bi bi-eye"></i> {{ share.views }}
+                                </span>
+                                <span class="badge bg-dark bg-opacity-75">
+                                    <i class="bi bi-clipboard"></i> {{ share.copies }}
                                 </span>
                             </div>
                         </div>
@@ -216,7 +220,7 @@
                                 <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift w-50" title="查看详情">
                                     <i class="bi bi-arrow-right-circle"></i>
                                 </a>
-                                <button type="button" class="btn btn-sm btn-outline-primary hover-lift w-50" onclick="copyStrategyCode(this, '{{ share.strategy_code|escapejs }}')" title="复制分享码">
+                                <button type="button" class="btn btn-sm btn-outline-primary hover-lift w-50" onclick="copyStrategyCode(this, '{{ share.strategy_code|escapejs }}', '{{ share.share_id }}')" title="复制分享码">
                                     <i class="bi bi-clipboard"></i>
                                 </button>
                             </div>
@@ -530,7 +534,7 @@
         });
     }
 
-    function copyStrategyCode(btn, code) {
+    function copyStrategyCode(btn, code, shareId) {
         event.preventDefault();
         event.stopPropagation();
 
@@ -543,6 +547,17 @@
             
             if (typeof showMessage === 'function') {
                 showMessage('战术板代码已复制', 'success');
+            }
+
+            // 记录复制次数
+            if (shareId) {
+                fetch('/share/' + shareId + '/copy/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(() => {});
             }
 
             setTimeout(() => {

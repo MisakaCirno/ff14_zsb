@@ -82,6 +82,8 @@ def index(request):
         shares_list = shares_list.order_by('-views', '-created_at')
     elif sort_by == 'favorites':
         shares_list = shares_list.order_by('-favorites_count', '-created_at')
+    elif sort_by == 'copies':
+        shares_list = shares_list.order_by('-copies', '-created_at')
     else: # latest
         shares_list = shares_list.order_by('-created_at')
 
@@ -883,6 +885,40 @@ def get_share_code(request, share_id):
         "code": share.strategy_code
     }]
     return JsonResponse(data, safe=False)
+
+
+def record_copy(request, share_id):
+    """记录分享被复制的次数，使用Cookie防止重复计数"""
+    if request.method != 'POST':
+        return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=405)
+    
+    share = get_object_or_404(Share, share_id=share_id)
+    
+    # 使用Cookie防止重复计数
+    copied_shares = request.COOKIES.get('copied_shares', '')
+    copied_list = copied_shares.split(',') if copied_shares else []
+    
+    if share_id not in copied_list:
+        share.copies += 1
+        share.save(update_fields=['copies'])
+        copied_list.append(share_id)
+        if len(copied_list) > 100:
+            copied_list = copied_list[-100:]
+    
+    response = JsonResponse({
+        'status': 'success',
+        'copies_count': share.copies
+    })
+    
+    # 设置Cookie，有效期30天
+    response.set_cookie(
+        'copied_shares',
+        ','.join(copied_list),
+        max_age=30 * 24 * 60 * 60,
+        httponly=True,
+        samesite='Lax'
+    )
+    return response
 
 
 @login_required
