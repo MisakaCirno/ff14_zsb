@@ -8,9 +8,19 @@ import random
 
 class UserProfile(models.Model):
     """用户资料扩展模型"""
+    class HomeFeedMode(models.TextChoices):
+        PAGINATED = 'paginated', '分页浏览'
+        INFINITE = 'infinite', '无限滚动'
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', verbose_name='用户')
     nickname = models.CharField(max_length=50, blank=True, verbose_name='昵称')
     bio = models.TextField(blank=True, verbose_name='个人简介')
+    home_feed_mode = models.CharField(
+        max_length=20,
+        choices=HomeFeedMode.choices,
+        default=HomeFeedMode.PAGINATED,
+        verbose_name='主页浏览模式'
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 

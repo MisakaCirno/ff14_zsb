@@ -44,8 +44,10 @@
                 <div class="card-body py-2 text-center">
                     <small class="text-muted d-block mb-1">
                         <i class="bi bi-collection"></i> 共有 <strong>{{ shares.paginator.count }}</strong> 个分享
-                        {% if shares.has_other_pages %}
+                        {% if shares.has_other_pages and feed_mode == 'paginated' %}
                         | 第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页
+                        {% elif shares.has_other_pages %}
+                        | 无限滚动浏览
                         {% endif %}
                     </small>
                     <small class="text-muted" style="font-size: 0.75rem;">
@@ -64,15 +66,15 @@
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                         <!-- 分类切换 -->
                         <div class="btn-group" role="group">
-                            <a href="?category={% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}" 
+                            <a href="?category={% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}&feed={{ feed_mode }}"
                                class="btn btn-outline-primary {% if not current_category %}active{% endif %}">
                                 全部
                             </a>
-                            <a href="?category=entertainment{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}" 
+                            <a href="?category=entertainment{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}&feed={{ feed_mode }}"
                                class="btn btn-outline-success {% if current_category == 'entertainment' %}active{% endif %}">
                                 娱乐
                             </a>
-                            <a href="?category=combat{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}" 
+                            <a href="?category=combat{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}&feed={{ feed_mode }}"
                                class="btn btn-outline-danger {% if current_category == 'combat' %}active{% endif %}">
                                 战斗
                             </a>
@@ -87,6 +89,7 @@
                                 {% if sort_by %}
                                 <input type="hidden" name="sort" value="{{ sort_by }}">
                                 {% endif %}
+                                <input type="hidden" name="feed" value="{{ feed_mode }}">
                                 
                                 <div class="form-check form-switch mb-0">
                                     <input class="form-check-input" type="checkbox" id="hideSpoiler" name="hide_spoiler" 
@@ -106,12 +109,21 @@
                                     {% if sort_by == 'latest' %}最新发布{% elif sort_by == 'likes' %}最多点赞{% elif sort_by == 'views' %}最多查看{% elif sort_by == 'favorites' %}最多收藏{% elif sort_by == 'copies' %}最多复制{% else %}排序{% endif %}
                                 </button>
                                 <ul class="dropdown-menu" aria-labelledby="sortDropdown">
-                                    <li><a class="dropdown-item {% if sort_by == 'latest' %}active{% endif %}" href="?sort=latest{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最新发布</a></li>
-                                    <li><a class="dropdown-item {% if sort_by == 'likes' %}active{% endif %}" href="?sort=likes{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最多点赞</a></li>
-                                    <li><a class="dropdown-item {% if sort_by == 'views' %}active{% endif %}" href="?sort=views{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最多查看</a></li>
-                                    <li><a class="dropdown-item {% if sort_by == 'favorites' %}active{% endif %}" href="?sort=favorites{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最多收藏</a></li>
-                                    <li><a class="dropdown-item {% if sort_by == 'copies' %}active{% endif %}" href="?sort=copies{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">最多复制</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'latest' %}active{% endif %}" href="?sort=latest{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最新发布</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'likes' %}active{% endif %}" href="?sort=likes{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最多点赞</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'views' %}active{% endif %}" href="?sort=views{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最多查看</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'favorites' %}active{% endif %}" href="?sort=favorites{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最多收藏</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'copies' %}active{% endif %}" href="?sort=copies{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最多复制</a></li>
                                 </ul>
+                            </div>
+
+                            <div class="btn-group" role="group" aria-label="主页浏览模式">
+                                <a href="?{{ paginated_query }}" class="btn btn-outline-secondary {% if feed_mode == 'paginated' %}active{% endif %}" title="使用分页浏览">
+                                    <i class="bi bi-layout-three-columns"></i> 分页
+                                </a>
+                                <a href="?{{ infinite_query }}" class="btn btn-outline-secondary {% if feed_mode == 'infinite' %}active{% endif %}" title="向下滚动自动加载">
+                                    <i class="bi bi-arrow-down-circle"></i> 无限滚动
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -122,7 +134,7 @@
 
     <!-- 瀑布流布局 -->
     <div id="app">
-        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
+        <div id="share-grid" class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
             {% for share in shares %}
             <div class="col">
                 <div class="card h-100 card-hover shadow-sm">
@@ -275,7 +287,7 @@
         </div>
 
         <!-- 分页 -->
-        {% if shares.has_other_pages %}
+        {% if shares.has_other_pages and feed_mode == 'paginated' %}
         <nav class="mt-5" aria-label="分页导航">
             <ul class="pagination pagination-lg justify-content-center">
                 {% if shares.has_previous %}
@@ -343,6 +355,20 @@
             </ul>
         </nav>
         {% endif %}
+
+        {% if feed_mode == 'infinite' %}
+        <div id="infinite-scroll-status" class="text-center text-muted py-4" data-has-next="{% if shares.has_next %}true{% else %}false{% endif %}" data-next-page="{% if shares.has_next %}{{ shares.next_page_number }}{% endif %}">
+            {% if shares.has_next %}
+            <div class="spinner-border spinner-border-sm me-2 d-none" id="infinite-scroll-spinner" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <span id="infinite-scroll-text">继续向下滚动加载更多</span>
+            {% elif shares.paginator.count > 0 %}
+            <span>已经到底了</span>
+            {% endif %}
+        </div>
+        <div id="infinite-scroll-sentinel" style="height: 1px;"></div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
@@ -359,6 +385,8 @@
                 banner.style.display = 'block';
             }
         }
+
+        initInfiniteScroll();
     });
 
     function dismissAnnouncement() {
@@ -429,6 +457,84 @@
         if (announcementId) {
             localStorage.setItem('dismissed_announcement_id', announcementId);
         }
+    }
+
+    function initInfiniteScroll() {
+        if ('{{ feed_mode|default:"paginated" }}' !== 'infinite') return;
+
+        const grid = document.getElementById('share-grid');
+        const status = document.getElementById('infinite-scroll-status');
+        const sentinel = document.getElementById('infinite-scroll-sentinel');
+        const spinner = document.getElementById('infinite-scroll-spinner');
+        const statusText = document.getElementById('infinite-scroll-text');
+
+        if (!grid || !status || !sentinel) return;
+
+        let hasNext = status.dataset.hasNext === 'true';
+        let nextPage = status.dataset.nextPage ? parseInt(status.dataset.nextPage, 10) : null;
+        let isLoading = false;
+
+        if (!hasNext || !nextPage) return;
+
+        const setLoading = (loading) => {
+            isLoading = loading;
+            if (spinner) spinner.classList.toggle('d-none', !loading);
+            if (statusText) statusText.textContent = loading ? '正在加载更多...' : (hasNext ? '继续向下滚动加载更多' : '已经到底了');
+        };
+
+        const loadNextPage = () => {
+            if (isLoading || !hasNext || !nextPage) return;
+
+            setLoading(true);
+
+            const params = new URLSearchParams(window.location.search);
+            params.set('page', String(nextPage));
+            params.set('partial', 'shares');
+            params.set('feed', 'infinite');
+
+            fetch(`${window.location.pathname}?${params.toString()}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('加载失败');
+                return response.json();
+            })
+            .then(data => {
+                if (data.html && data.html.trim()) {
+                    grid.insertAdjacentHTML('beforeend', data.html);
+                }
+
+                hasNext = Boolean(data.has_next);
+                nextPage = data.next_page;
+                status.dataset.hasNext = hasNext ? 'true' : 'false';
+                status.dataset.nextPage = nextPage || '';
+
+                if (!hasNext) {
+                    if (statusText) statusText.textContent = '已经到底了';
+                    observer.disconnect();
+                }
+            })
+            .catch(error => {
+                console.error(error);
+                if (statusText) statusText.textContent = '加载失败，稍后再试';
+            })
+            .finally(() => {
+                isLoading = false;
+                if (spinner) spinner.classList.add('d-none');
+            });
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some(entry => entry.isIntersecting)) {
+                loadNextPage();
+            }
+        }, {
+            rootMargin: '600px 0px'
+        });
+
+        observer.observe(sentinel);
     }
 
     function toggleIndexLike(shareId) {

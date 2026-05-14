@@ -8,10 +8,17 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count, Prefetch, Max, Exists, OuterRef, F
 from django.utils import timezone
+from django.template.loader import render_to_string
 from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm
 from io import BytesIO
 import base64
+
+
+HOME_FEED_MODES = {
+    UserProfile.HomeFeedMode.PAGINATED,
+    UserProfile.HomeFeedMode.INFINITE,
+}
 
 
 def is_admin(user):
@@ -38,6 +45,64 @@ def log_share_action(user, share, action_type, details=''):
         print(f"Logging failed: {e}")
 
 
+def annotate_share_cards(shares_list, user):
+    """为首页卡片补齐统计和当前用户状态。"""
+    shares_list = shares_list.select_related('author', 'author__profile').annotate(
+        likes_count=Count('likes', distinct=True),
+        favorites_count=Count('favorites', distinct=True)
+    )
+
+    if user.is_authenticated:
+        shares_list = shares_list.annotate(
+            is_liked=Exists(Share.likes.through.objects.filter(share_id=OuterRef('pk'), user_id=user.id)),
+            is_favorited=Exists(Share.favorites.through.objects.filter(share_id=OuterRef('pk'), user_id=user.id))
+        )
+
+    return shares_list
+
+
+def get_home_feed_mode(request):
+    """读取并保存主页浏览模式，登录用户存资料，未登录用户存 session。"""
+    requested_mode = request.GET.get('feed')
+    if requested_mode in HOME_FEED_MODES:
+        if request.user.is_authenticated:
+            profile, _ = UserProfile.objects.get_or_create(user=request.user)
+            if profile.home_feed_mode != requested_mode:
+                profile.home_feed_mode = requested_mode
+                profile.save(update_fields=['home_feed_mode', 'updated_at'])
+        else:
+            request.session['home_feed_mode'] = requested_mode
+        return requested_mode
+
+    if request.user.is_authenticated:
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        return profile.home_feed_mode
+
+    return request.session.get('home_feed_mode', UserProfile.HomeFeedMode.PAGINATED)
+
+
+def build_query_string(request, **updates):
+    params = request.GET.copy()
+    for key, value in updates.items():
+        if value is None:
+            params.pop(key, None)
+        else:
+            params[key] = value
+    return params.urlencode()
+
+
+def render_share_cards_response(request, shares):
+    html = render_to_string(
+        'shares/includes/share_cards.html',
+        {'shares': shares},
+        request=request
+    )
+    return JsonResponse({
+        'html': html,
+        'has_next': shares.has_next(),
+        'next_page': shares.next_page_number() if shares.has_next() else None,
+    })
+
 
 def index(request):
     """主页 - 显示所有公开且已通过审核的分享"""
@@ -63,18 +128,7 @@ def index(request):
     # 排序
     sort_by = request.GET.get('sort', 'latest')
     
-    # 注解点赞和收藏数量
-    shares_list = shares_list.annotate(
-        likes_count=Count('likes', distinct=True),
-        favorites_count=Count('favorites', distinct=True)
-    )
-    
-    # 如果用户已登录，检查点赞状态
-    if request.user.is_authenticated:
-        shares_list = shares_list.annotate(
-            is_liked=Exists(Share.likes.through.objects.filter(share_id=OuterRef('pk'), user_id=request.user.id)),
-            is_favorited=Exists(Share.favorites.through.objects.filter(share_id=OuterRef('pk'), user_id=request.user.id))
-        )
+    shares_list = annotate_share_cards(shares_list, request.user)
 
     if sort_by == 'likes':
         shares_list = shares_list.order_by('-likes_count', '-created_at')
@@ -90,6 +144,11 @@ def index(request):
     paginator = Paginator(shares_list, 12)  # 每页12个
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
+
+    if request.GET.get('partial') == 'shares':
+        return render_share_cards_response(request, shares)
+
+    feed_mode = get_home_feed_mode(request)
     
     # 获取最新站点动态
     latest_announcement = Announcement.objects.filter(is_active=True).order_by('-created_at').first()
@@ -101,6 +160,9 @@ def index(request):
         'hide_spoiler': hide_spoiler,
         'hide_nsfw': hide_nsfw,
         'latest_announcement': latest_announcement,
+        'feed_mode': feed_mode,
+        'paginated_query': build_query_string(request, feed=UserProfile.HomeFeedMode.PAGINATED, page=None, partial=None),
+        'infinite_query': build_query_string(request, feed=UserProfile.HomeFeedMode.INFINITE, page=None, partial=None),
     }
     return render(request, 'shares/index.html', context)
 
@@ -502,14 +564,25 @@ def search(request):
         Q(author__profile__nickname__icontains=query) |
         Q(author__username__icontains=query)
     ).distinct()
+
+    shares_list = annotate_share_cards(shares_list, request.user).order_by('-created_at')
     
     paginator = Paginator(shares_list, 12)
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
+
+    if request.GET.get('partial') == 'shares':
+        return render_share_cards_response(request, shares)
+
+    feed_mode = get_home_feed_mode(request)
     
     return render(request, 'shares/index.html', {
         'shares': shares,
-        'search_query': query
+        'search_query': query,
+        'sort_by': 'latest',
+        'feed_mode': feed_mode,
+        'paginated_query': build_query_string(request, feed=UserProfile.HomeFeedMode.PAGINATED, page=None, partial=None),
+        'infinite_query': build_query_string(request, feed=UserProfile.HomeFeedMode.INFINITE, page=None, partial=None),
     })
 
 

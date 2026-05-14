@@ -65,14 +65,16 @@ class UserProfileForm(forms.ModelForm):
     """用户资料编辑表单"""
     class Meta:
         model = UserProfile
-        fields = ['nickname', 'bio']
+        fields = ['nickname', 'bio', 'home_feed_mode']
         widgets = {
             'nickname': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '设置你的昵称'}),
             'bio': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '介绍一下自己（可选）'}),
+            'home_feed_mode': forms.Select(attrs={'class': 'form-select'}),
         }
         labels = {
             'nickname': '昵称',
             'bio': '个人简介',
+            'home_feed_mode': '主页浏览模式',
         }
 
 
