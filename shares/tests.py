@@ -17,13 +17,13 @@ class HomeFeedModeTests(TestCase):
                 status=Share.Status.APPROVED,
             )
 
-    def test_default_home_uses_paginated_mode(self):
+    def test_default_home_uses_waterfall_mode(self):
         response = self.client.get(reverse('index'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['feed_mode'], UserProfile.HomeFeedMode.PAGINATED)
-        self.assertContains(response, '分页')
-        self.assertNotContains(response, 'id="infinite-scroll-sentinel"')
+        self.assertEqual(response.context['feed_mode'], UserProfile.HomeFeedMode.INFINITE)
+        self.assertContains(response, '瀑布')
+        self.assertContains(response, 'id="infinite-scroll-sentinel"')
 
     def test_authenticated_feed_mode_choice_is_saved(self):
         self.client.login(username='alice', password='password123')
@@ -47,4 +47,5 @@ class HomeFeedModeTests(TestCase):
         self.assertIn('html', data)
         self.assertFalse(data['has_next'])
         self.assertIsNone(data['next_page'])
-        self.assertIn('分享 0', data['html'])
+        self.assertIn('card h-100', data['html'])
+        self.assertIn('分享', data['html'])

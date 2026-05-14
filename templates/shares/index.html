@@ -47,7 +47,7 @@
                         {% if shares.has_other_pages and feed_mode == 'paginated' %}
                         | 第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页
                         {% elif shares.has_other_pages %}
-                        | 无限滚动浏览
+                        | 瀑布浏览
                         {% endif %}
                     </small>
                     <small class="text-muted" style="font-size: 0.75rem;">
@@ -121,8 +121,8 @@
                                 <a href="?{{ paginated_query }}" class="btn btn-outline-secondary {% if feed_mode == 'paginated' %}active{% endif %}" title="使用分页浏览">
                                     <i class="bi bi-layout-three-columns"></i> 分页
                                 </a>
-                                <a href="?{{ infinite_query }}" class="btn btn-outline-secondary {% if feed_mode == 'infinite' %}active{% endif %}" title="向下滚动自动加载">
-                                    <i class="bi bi-arrow-down-circle"></i> 无限滚动
+                                <a href="?{{ infinite_query }}" class="btn btn-outline-secondary {% if feed_mode == 'infinite' %}active{% endif %}" title="瀑布式自动加载">
+                                    <i class="bi bi-arrow-down-circle"></i> 瀑布
                                 </a>
                             </div>
                         </div>
@@ -460,7 +460,7 @@
     }
 
     function initInfiniteScroll() {
-        if ('{{ feed_mode|default:"paginated" }}' !== 'infinite') return;
+        if ('{{ feed_mode|default:"infinite" }}' !== 'infinite') return;
 
         const grid = document.getElementById('share-grid');
         const status = document.getElementById('infinite-scroll-status');

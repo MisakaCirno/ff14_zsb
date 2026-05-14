@@ -78,7 +78,7 @@ def get_home_feed_mode(request):
         profile, _ = UserProfile.objects.get_or_create(user=request.user)
         return profile.home_feed_mode
 
-    return request.session.get('home_feed_mode', UserProfile.HomeFeedMode.PAGINATED)
+    return request.session.get('home_feed_mode', UserProfile.HomeFeedMode.INFINITE)
 
 
 def build_query_string(request, **updates):
