@@ -46,16 +46,54 @@
                                 </a>
                             </div>
                             <div class="btn-group">
-                                <a href="{% url 'admin_resolve_share_reports' share.share_id 'resolve' %}" 
-                                   class="btn btn-danger btn-sm"
-                                   onclick="return confirm('确定要认可所有举报吗？该分享将被设为私有。')">
+                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#resolveAllReportsModal{{ share.share_id }}">
                                     <i class="bi bi-check-circle"></i> 认可所有举报 (下架分享)
-                                </a>
-                                <a href="{% url 'admin_resolve_share_reports' share.share_id 'dismiss' %}" 
-                                   class="btn btn-secondary btn-sm"
-                                   onclick="return confirm('确定要驳回所有举报吗？')">
+                                </button>
+                                <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#dismissAllReportsModal{{ share.share_id }}">
                                     <i class="bi bi-x-circle"></i> 驳回所有举报
-                                </a>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="modal fade" id="resolveAllReportsModal{{ share.share_id }}" tabindex="-1" aria-labelledby="resolveAllReportsModalLabel{{ share.share_id }}" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <form method="post" action="{% url 'admin_resolve_share_reports' share.share_id 'resolve' %}" class="modal-content">
+                                    {% csrf_token %}
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="resolveAllReportsModalLabel{{ share.share_id }}">认可所有举报</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p class="text-muted small mb-2">分享：{{ share.title }}</p>
+                                        <label class="form-label" for="resolveAllReason{{ share.share_id }}">处理说明</label>
+                                        <textarea id="resolveAllReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="请填写下架依据，举报人和分享作者会收到站内信。"></textarea>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                                        <button type="submit" class="btn btn-danger">确认认可并通知用户</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <div class="modal fade" id="dismissAllReportsModal{{ share.share_id }}" tabindex="-1" aria-labelledby="dismissAllReportsModalLabel{{ share.share_id }}" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <form method="post" action="{% url 'admin_resolve_share_reports' share.share_id 'dismiss' %}" class="modal-content">
+                                    {% csrf_token %}
+                                    <div class="modal-header">
+                                        <h5 class="modal-title" id="dismissAllReportsModalLabel{{ share.share_id }}">驳回所有举报</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <p class="text-muted small mb-2">分享：{{ share.title }}</p>
+                                        <label class="form-label" for="dismissAllReason{{ share.share_id }}">处理说明</label>
+                                        <textarea id="dismissAllReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="请填写驳回依据，举报人会收到站内信。"></textarea>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                                        <button type="submit" class="btn btn-secondary">确认驳回并通知用户</button>
+                                    </div>
+                                </form>
                             </div>
                         </div>
 
@@ -97,11 +135,30 @@
                                 <p class="mb-1 mt-2">{{ report.reason }}</p>
                                 <div class="mt-2 text-end">
                                     <small class="text-muted me-2">单条操作:</small>
-                                    <a href="{% url 'admin_resolve_report' report.id 'dismiss' %}" 
-                                       class="text-secondary text-decoration-none small"
-                                       onclick="return confirm('确定要驳回此条举报吗？')">
+                                    <button type="button" class="btn btn-link text-secondary text-decoration-none small p-0" data-bs-toggle="modal" data-bs-target="#dismissReportModal{{ report.id }}">
                                         [驳回]
-                                    </a>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="modal fade" id="dismissReportModal{{ report.id }}" tabindex="-1" aria-labelledby="dismissReportModalLabel{{ report.id }}" aria-hidden="true">
+                                <div class="modal-dialog">
+                                    <form method="post" action="{% url 'admin_resolve_report' report.id 'dismiss' %}" class="modal-content">
+                                        {% csrf_token %}
+                                        <div class="modal-header">
+                                            <h5 class="modal-title" id="dismissReportModalLabel{{ report.id }}">驳回举报</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <p class="text-muted small mb-2">举报人：{{ report.reporter.username }}</p>
+                                            <div class="border rounded p-2 bg-light small mb-3">{{ report.reason }}</div>
+                                            <label class="form-label" for="dismissReportReason{{ report.id }}">处理说明</label>
+                                            <textarea id="dismissReportReason{{ report.id }}" name="reason" class="form-control" rows="4" required placeholder="请填写驳回依据，举报人会收到站内信。"></textarea>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                                            <button type="submit" class="btn btn-secondary">确认驳回并通知用户</button>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
                             {% endfor %}

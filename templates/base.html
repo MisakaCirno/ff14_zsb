@@ -168,7 +168,7 @@
                                 {{ user.username }}
                             {% endif %}
                             
-                            {% if has_admin_actions %}
+                            {% if has_admin_actions or has_user_notifications %}
                             <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle">
                                 <span class="visually-hidden">New alerts</span>
                             </span>
@@ -183,6 +183,12 @@
                             </a></li>
                             <li><a class="dropdown-item" href="{% url 'my_shares' %}">
                                 <i class="bi bi-collection"></i> 我的分享
+                            </a></li>
+                            <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'site_message_list' %}">
+                                <span><i class="bi bi-envelope"></i> 站内信</span>
+                                {% if global_unread_site_messages_count > 0 %}
+                                <span class="badge bg-danger rounded-pill">{{ global_unread_site_messages_count }}</span>
+                                {% endif %}
                             </a></li>
                             
                             {% if user.is_staff or user.is_superuser %}

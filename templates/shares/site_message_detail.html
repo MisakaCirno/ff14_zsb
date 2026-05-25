@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ site_message.title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="mb-3">
+                <a href="{% url 'site_message_list' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left"></i> 返回站内信
+                </a>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3">
+                    <div class="d-flex justify-content-between align-items-start gap-3">
+                        <div>
+                            <h1 class="h4 mb-2">{{ site_message.title }}</h1>
+                            <div class="text-muted small">
+                                {{ site_message.created_at|date:"Y-m-d H:i" }}
+                                {% if site_message.sender %}
+                                · {{ site_message.sender.username }}
+                                {% endif %}
+                            </div>
+                        </div>
+                        <span class="badge bg-secondary">{{ site_message.get_message_type_display }}</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="lh-lg">{{ site_message.content|linebreaks }}</div>
+
+                    {% if site_message.related_share %}
+                    <div class="border-top mt-4 pt-3">
+                        <a href="{% url 'share_detail' site_message.related_share.share_id %}" class="btn btn-primary btn-sm">
+                            <i class="bi bi-box-arrow-up-right"></i> 查看相关分享
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

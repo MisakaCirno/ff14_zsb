@@ -9,8 +9,9 @@ from django.http import JsonResponse, HttpResponse
 from django.db.models import Q, Count, Prefetch, Max, Exists, OuterRef, F
 from django.utils import timezone
 from django.template.loader import render_to_string
-from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog
-from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm
+from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog, SiteMessage
+from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm, AdminReviewRejectForm, ReportResolutionForm
+from .services.messages import send_site_message
 from io import BytesIO
 import base64
 
@@ -364,7 +365,10 @@ def edit_share(request, share_id):
             else:
                 # 如果改为非公开，则自动通过
                 new_share.status = Share.Status.APPROVED
-                
+
+            new_share.review_feedback = ''
+            new_share.reviewed_at = None
+            new_share.reviewed_by = None
             new_share.save()
             
             # 记录编辑日志
@@ -529,6 +533,56 @@ def password_change(request):
     return render(request, 'shares/password_change.html', {'form': form})
 
 
+@login_required
+def site_message_list(request):
+    """站内信列表"""
+    messages_list = SiteMessage.objects.filter(
+        recipient=request.user,
+        archived_at__isnull=True,
+    ).select_related('sender', 'related_share', 'related_report')
+
+    paginator = Paginator(messages_list, 20)
+    page_number = request.GET.get('page')
+    site_messages = paginator.get_page(page_number)
+
+    return render(request, 'shares/site_message_list.html', {
+        'site_messages': site_messages,
+    })
+
+
+@login_required
+def site_message_detail(request, message_id):
+    """站内信详情"""
+    site_message = get_object_or_404(
+        SiteMessage.objects.select_related('sender', 'related_share', 'related_report'),
+        id=message_id,
+        recipient=request.user,
+    )
+
+    if site_message.read_at is None:
+        site_message.read_at = timezone.now()
+        site_message.save(update_fields=['read_at'])
+
+    return render(request, 'shares/site_message_detail.html', {
+        'site_message': site_message,
+    })
+
+
+@login_required
+def mark_all_site_messages_read(request):
+    """标记全部站内信为已读"""
+    if request.method != 'POST':
+        return redirect('site_message_list')
+
+    updated = SiteMessage.objects.filter(
+        recipient=request.user,
+        read_at__isnull=True,
+        archived_at__isnull=True,
+    ).update(read_at=timezone.now())
+    messages.success(request, f'已将 {updated} 条站内信标记为已读')
+    return redirect('site_message_list')
+
+
 def search(request):
     """搜索分享"""
     query = request.GET.get('q', '').strip()
@@ -606,7 +660,7 @@ def admin_review_list(request):
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
     
-    context = {'shares': shares}
+    context = {'shares': shares, 'reject_form': AdminReviewRejectForm()}
     context.update(get_admin_counts())
     return render(request, 'shares/admin_review_list.html', context)
 
@@ -616,7 +670,10 @@ def admin_approve_share(request, share_id):
     """管理员通过审核"""
     share = get_object_or_404(Share, share_id=share_id)
     share.status = Share.Status.APPROVED
-    share.save()
+    share.review_feedback = ''
+    share.reviewed_at = timezone.now()
+    share.reviewed_by = request.user
+    share.save(update_fields=['status', 'review_feedback', 'reviewed_at', 'reviewed_by', 'updated_at'])
     log_share_action(request.user, share, ShareLog.ActionType.REVIEW_APPROVE, '管理通过审核')
     messages.success(request, f'分享 "{share.title}" 已通过审核')
     return redirect('admin_review_list')
@@ -626,10 +683,33 @@ def admin_approve_share(request, share_id):
 def admin_reject_share(request, share_id):
     """管理员拒绝审核"""
     share = get_object_or_404(Share, share_id=share_id)
+    if request.method != 'POST':
+        messages.error(request, '请填写拒绝原因后再提交审核结果')
+        return redirect('admin_review_list')
+
+    form = AdminReviewRejectForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, '拒绝原因不能为空')
+        return redirect('admin_review_list')
+
+    reason = form.cleaned_data['reason'].strip()
     share.status = Share.Status.REJECTED
     share.visibility = Share.Visibility.PRIVATE
-    share.save()
-    log_share_action(request.user, share, ShareLog.ActionType.REVIEW_REJECT, '管理员拒绝审核并设为私有')
+    share.review_feedback = reason
+    share.reviewed_at = timezone.now()
+    share.reviewed_by = request.user
+    share.save(update_fields=['status', 'visibility', 'review_feedback', 'reviewed_at', 'reviewed_by', 'updated_at'])
+    log_share_action(request.user, share, ShareLog.ActionType.REVIEW_REJECT, f'管理员拒绝审核并设为私有。原因：{reason}')
+    if share.author:
+        send_site_message(
+            recipient=share.author,
+            sender=request.user,
+            message_type=SiteMessage.MessageType.SHARE_REJECTED,
+            title=f'分享「{share.title}」审核未通过',
+            content=f'你的分享「{share.title}」审核未通过。\n\n原因：{reason}\n\n你可以修改后重新提交审核。',
+            related_share=share,
+            metadata={'action_url': share.get_absolute_url()},
+        )
     messages.warning(request, f'分享 "{share.title}" 已被拒绝并设为私有')
     return redirect('admin_review_list')
 
@@ -671,7 +751,7 @@ def admin_report_list(request):
     page_number = request.GET.get('page')
     shares = paginator.get_page(page_number)
     
-    context = {'shares': shares}
+    context = {'shares': shares, 'resolution_form': ReportResolutionForm()}
     context.update(get_admin_counts())
     return render(request, 'shares/admin_report_list.html', context)
 
@@ -680,19 +760,60 @@ def admin_report_list(request):
 def admin_resolve_report(request, report_id, action):
     """管理员处理单条举报"""
     report = get_object_or_404(Report, id=report_id)
-    
+    if request.method != 'POST':
+        messages.error(request, '请填写处理说明后再处理举报')
+        return redirect('admin_report_list')
+
+    form = ReportResolutionForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, '处理说明不能为空')
+        return redirect('admin_report_list')
+
+    reason = form.cleaned_data['reason'].strip()
+
     if action == 'resolve':
         # 认可举报：将分享设为私有，标记举报为已处理
         report.status = Report.Status.RESOLVED
         share = report.share
         share.visibility = Share.Visibility.PRIVATE
         share.save()
-        log_share_action(request.user, share, ShareLog.ActionType.REPORT_HANDLE, f'认可举报 ID:{report_id}，设为私有')
+        log_share_action(request.user, share, ShareLog.ActionType.REPORT_HANDLE, f'认可举报 ID:{report_id}，设为私有。说明：{reason}')
+        send_site_message(
+            recipient=report.reporter,
+            sender=request.user,
+            message_type=SiteMessage.MessageType.REPORT_RESOLVED,
+            title=f'你对「{share.title}」的举报已处理',
+            content=f'你对分享「{share.title}」的举报已处理，感谢反馈。\n\n处理说明：{reason}',
+            related_share=share,
+            related_report=report,
+            metadata={'action_url': share.get_absolute_url()},
+        )
+        if share.author:
+            send_site_message(
+                recipient=share.author,
+                sender=request.user,
+                message_type=SiteMessage.MessageType.SHARE_TAKEDOWN,
+                title=f'分享「{share.title}」已被设为私有',
+                content=f'你的分享「{share.title}」因举报处理被设为私有。\n\n处理说明：{reason}',
+                related_share=share,
+                related_report=report,
+                metadata={'action_url': share.get_absolute_url()},
+            )
         messages.success(request, f'举报已认可，分享 "{share.title}" 已被设为私有')
     elif action == 'dismiss':
         # 驳回举报
         report.status = Report.Status.DISMISSED
-        log_share_action(request.user, report.share, ShareLog.ActionType.REPORT_HANDLE, f'驳回举报 ID:{report_id}')
+        log_share_action(request.user, report.share, ShareLog.ActionType.REPORT_HANDLE, f'驳回举报 ID:{report_id}。说明：{reason}')
+        send_site_message(
+            recipient=report.reporter,
+            sender=request.user,
+            message_type=SiteMessage.MessageType.REPORT_DISMISSED,
+            title=f'你对「{report.share.title}」的举报未被采纳',
+            content=f'你对分享「{report.share.title}」的举报未被采纳。\n\n处理说明：{reason}',
+            related_share=report.share,
+            related_report=report,
+            metadata={'action_url': report.share.get_absolute_url()},
+        )
         messages.info(request, '举报已驳回')
     else:
         messages.error(request, '无效的操作')
@@ -700,7 +821,8 @@ def admin_resolve_report(request, report_id, action):
         
     report.resolved_at = timezone.now()
     report.resolved_by = request.user
-    report.save()
+    report.resolution_reason = reason
+    report.save(update_fields=['status', 'resolved_at', 'resolved_by', 'resolution_reason'])
     
     return redirect('admin_report_list')
 
@@ -709,25 +831,71 @@ def admin_resolve_report(request, report_id, action):
 def admin_resolve_share_reports(request, share_id, action):
     """批量处理某分享的所有待处理举报"""
     share = get_object_or_404(Share, share_id=share_id)
-    pending_reports = share.reports.filter(status=Report.Status.PENDING)
+    pending_reports = share.reports.filter(status=Report.Status.PENDING).select_related('reporter')
     
     if not pending_reports.exists():
         messages.warning(request, '该分享没有待处理的举报')
         return redirect('admin_report_list')
 
+    if request.method != 'POST':
+        messages.error(request, '请填写处理说明后再处理举报')
+        return redirect('admin_report_list')
+
+    form = ReportResolutionForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, '处理说明不能为空')
+        return redirect('admin_report_list')
+
+    reason = form.cleaned_data['reason'].strip()
+    reports = list(pending_reports)
+
     if action == 'resolve':
         # 认可举报：分享设为私有，所有待处理举报设为已解决
         share.visibility = Share.Visibility.PRIVATE
         share.save()
-        pending_reports.update(status=Report.Status.RESOLVED, resolved_at=timezone.now(), resolved_by=request.user)
-        log_share_action(request.user, share, ShareLog.ActionType.REPORT_HANDLE, '批量认可所有举报，设为私有')
+        pending_reports.update(status=Report.Status.RESOLVED, resolved_at=timezone.now(), resolved_by=request.user, resolution_reason=reason)
+        log_share_action(request.user, share, ShareLog.ActionType.REPORT_HANDLE, f'批量认可所有举报，设为私有。说明：{reason}')
+        for report in reports:
+            send_site_message(
+                recipient=report.reporter,
+                sender=request.user,
+                message_type=SiteMessage.MessageType.REPORT_RESOLVED,
+                title=f'你对「{share.title}」的举报已处理',
+                content=f'你对分享「{share.title}」的举报已处理，感谢反馈。\n\n处理说明：{reason}',
+                related_share=share,
+                related_report=report,
+                metadata={'action_url': share.get_absolute_url()},
+            )
+        if share.author:
+            send_site_message(
+                recipient=share.author,
+                sender=request.user,
+                message_type=SiteMessage.MessageType.SHARE_TAKEDOWN,
+                title=f'分享「{share.title}」已被设为私有',
+                content=f'你的分享「{share.title}」因举报处理被设为私有。\n\n处理说明：{reason}',
+                related_share=share,
+                metadata={'action_url': share.get_absolute_url()},
+            )
         messages.success(request, f'已认可举报，分享 "{share.title}" 已设为私有，相关举报已标记为处理。')
 
     elif action == 'dismiss':
         # 驳回举报：所有待处理举报设为已驳回
-        pending_reports.update(status=Report.Status.DISMISSED, resolved_at=timezone.now(), resolved_by=request.user)
-        log_share_action(request.user, share, ShareLog.ActionType.REPORT_HANDLE, '批量驳回所有举报')
+        pending_reports.update(status=Report.Status.DISMISSED, resolved_at=timezone.now(), resolved_by=request.user, resolution_reason=reason)
+        log_share_action(request.user, share, ShareLog.ActionType.REPORT_HANDLE, f'批量驳回所有举报。说明：{reason}')
+        for report in reports:
+            send_site_message(
+                recipient=report.reporter,
+                sender=request.user,
+                message_type=SiteMessage.MessageType.REPORT_DISMISSED,
+                title=f'你对「{share.title}」的举报未被采纳',
+                content=f'你对分享「{share.title}」的举报未被采纳。\n\n处理说明：{reason}',
+                related_share=share,
+                related_report=report,
+                metadata={'action_url': share.get_absolute_url()},
+            )
         messages.info(request, '举报已全部驳回')
+    else:
+        messages.error(request, '无效的操作')
     
     return redirect('admin_report_list')
 

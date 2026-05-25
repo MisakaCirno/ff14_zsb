@@ -22,6 +22,9 @@ urlpatterns = [
     path('u/<str:username>/', views.user_public_profile, name='user_public_profile'),
     path('profile/edit/', views.profile_edit, name='profile_edit'),
     path('profile/password/', views.password_change, name='password_change'),
+    path('messages/', views.site_message_list, name='site_message_list'),
+    path('messages/mark-all-read/', views.mark_all_site_messages_read, name='mark_all_site_messages_read'),
+    path('messages/<int:message_id>/', views.site_message_detail, name='site_message_detail'),
     
     # 其他
     path('about/', views.about, name='about'),

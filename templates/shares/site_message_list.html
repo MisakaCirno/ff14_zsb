@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+
+{% block title %}站内信{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="h3 mb-1"><i class="bi bi-envelope text-primary"></i> 站内信</h1>
+                <p class="text-muted mb-0">审核与举报处理结果会在这里保留。</p>
+            </div>
+            {% if global_unread_site_messages_count > 0 %}
+            <form method="post" action="{% url 'mark_all_site_messages_read' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-check2-all"></i> 全部已读
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="list-group list-group-flush">
+            {% for message in site_messages %}
+            <a href="{% url 'site_message_detail' message.id %}" class="list-group-item list-group-item-action py-3 {% if not message.is_read %}bg-light{% endif %}">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            {% if not message.is_read %}
+                            <span class="badge bg-primary">未读</span>
+                            {% endif %}
+                            <strong>{{ message.title }}</strong>
+                        </div>
+                        <div class="text-muted small text-truncate">{{ message.content|linebreaksbr|striptags }}</div>
+                    </div>
+                    <small class="text-muted text-nowrap">{{ message.created_at|date:"Y-m-d H:i" }}</small>
+                </div>
+            </a>
+            {% empty %}
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                暂无站内信
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if site_messages.has_other_pages %}
+    <nav class="mt-4" aria-label="站内信分页">
+        <ul class="pagination justify-content-center">
+            {% if site_messages.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ site_messages.previous_page_number }}">上一页</a></li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">上一页</span></li>
+            {% endif %}
+
+            <li class="page-item active"><span class="page-link">{{ site_messages.number }} / {{ site_messages.paginator.num_pages }}</span></li>
+
+            {% if site_messages.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ site_messages.next_page_number }}">下一页</a></li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">下一页</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

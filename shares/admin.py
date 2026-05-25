@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
-from .models import Share, UserProfile, Announcement
+from .models import Share, UserProfile, Announcement, Report, SiteMessage
 
 
 @admin.register(Announcement)
@@ -14,8 +14,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 @admin.register(Share)
 class ShareAdmin(admin.ModelAdmin):
-    list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'views', 'copies', 'created_at']
-    list_filter = ['visibility', 'created_at', 'author']
+    list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'status', 'views', 'copies', 'created_at']
+    list_filter = ['visibility', 'status', 'created_at', 'author']
     search_fields = ['title', 'share_id', 'description', 'author__username', 'author__profile__nickname']
     readonly_fields = ['share_id', 'created_at', 'updated_at', 'views', 'copies']
     date_hierarchy = 'created_at'
@@ -23,7 +23,10 @@ class ShareAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('基本信息', {
-            'fields': ('title', 'author', 'share_id', 'visibility')
+            'fields': ('title', 'author', 'share_id', 'visibility', 'status')
+        }),
+        ('审核信息', {
+            'fields': ('review_feedback', 'reviewed_at', 'reviewed_by')
         }),
         ('内容', {
             'fields': ('strategy_code', 'description')
@@ -108,3 +111,19 @@ class UserProfileAdmin(admin.ModelAdmin):
         """显示分享数量"""
         return obj.user.shares.count()
     get_share_count.short_description = '分享数量'
+
+
+@admin.register(Report)
+class ReportAdmin(admin.ModelAdmin):
+    list_display = ['share', 'reporter', 'status', 'created_at', 'resolved_at', 'resolved_by']
+    list_filter = ['status', 'created_at', 'resolved_at']
+    search_fields = ['share__title', 'share__share_id', 'reporter__username', 'reason', 'resolution_reason']
+    readonly_fields = ['created_at', 'resolved_at']
+
+
+@admin.register(SiteMessage)
+class SiteMessageAdmin(admin.ModelAdmin):
+    list_display = ['title', 'recipient', 'message_type', 'created_at', 'read_at']
+    list_filter = ['message_type', 'created_at', 'read_at']
+    search_fields = ['title', 'content', 'recipient__username', 'sender__username']
+    readonly_fields = ['created_at', 'read_at']

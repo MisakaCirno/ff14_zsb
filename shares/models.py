@@ -94,6 +94,9 @@ class Share(models.Model):
         default=Status.APPROVED,
         verbose_name='审核状态'
     )
+    review_feedback = models.TextField(blank=True, verbose_name='最近一次审核反馈')
+    reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='审核时间')
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_shares', verbose_name='审核人')
     
     is_spoiler = models.BooleanField(default=False, verbose_name='可能包含剧透')
     is_nsfw = models.BooleanField(default=False, verbose_name='可能令人不适')
@@ -175,6 +178,7 @@ class Report(models.Model):
     
     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name='处理时间')
     resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_reports', verbose_name='处理人')
+    resolution_reason = models.TextField(blank=True, verbose_name='处理说明')
 
     class Meta:
         ordering = ['-created_at']
@@ -183,6 +187,42 @@ class Report(models.Model):
 
     def __str__(self):
         return f"举报: {self.share.title} - {self.get_status_display()}"
+
+
+class SiteMessage(models.Model):
+    """站内信模型"""
+    class MessageType(models.TextChoices):
+        SHARE_REJECTED = 'share_rejected', '分享审核未通过'
+        REPORT_DISMISSED = 'report_dismissed', '举报未采纳'
+        REPORT_RESOLVED = 'report_resolved', '举报已处理'
+        SHARE_TAKEDOWN = 'share_takedown', '分享被下架'
+
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='site_messages', verbose_name='收件人')
+    sender = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_site_messages', verbose_name='发件人')
+    message_type = models.CharField(max_length=30, choices=MessageType.choices, verbose_name='消息类型')
+    title = models.CharField(max_length=200, verbose_name='标题')
+    content = models.TextField(verbose_name='内容')
+    related_share = models.ForeignKey(Share, on_delete=models.SET_NULL, null=True, blank=True, related_name='site_messages', verbose_name='关联分享')
+    related_report = models.ForeignKey(Report, on_delete=models.SET_NULL, null=True, blank=True, related_name='site_messages', verbose_name='关联举报')
+    metadata = models.JSONField(default=dict, blank=True, verbose_name='扩展数据')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    read_at = models.DateTimeField(null=True, blank=True, verbose_name='阅读时间')
+    archived_at = models.DateTimeField(null=True, blank=True, verbose_name='归档时间')
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', 'read_at', '-created_at']),
+        ]
+        verbose_name = '站内信'
+        verbose_name_plural = '站内信'
+
+    def __str__(self):
+        return f"{self.recipient.username} - {self.title}"
+
+    @property
+    def is_read(self):
+        return self.read_at is not None
 
 
 class Announcement(models.Model):

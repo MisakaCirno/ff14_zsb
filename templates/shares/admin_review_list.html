@@ -153,11 +153,31 @@
                             <a href="{% url 'admin_approve_share' share.share_id %}" class="btn btn-sm btn-success">
                                 <i class="bi bi-check-circle"></i> 通过
                             </a>
-                            <a href="{% url 'admin_reject_share' share.share_id %}" class="btn btn-sm btn-danger">
+                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal{{ share.share_id }}">
                                 <i class="bi bi-x-circle"></i> 拒绝
-                            </a>
+                            </button>
                         </div>
                     </div>
+                </div>
+            </div>
+            <div class="modal fade" id="rejectModal{{ share.share_id }}" tabindex="-1" aria-labelledby="rejectModalLabel{{ share.share_id }}" aria-hidden="true">
+                <div class="modal-dialog">
+                    <form method="post" action="{% url 'admin_reject_share' share.share_id %}" class="modal-content">
+                        {% csrf_token %}
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="rejectModalLabel{{ share.share_id }}">拒绝审核</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted small mb-2">分享：{{ share.title }}</p>
+                            <label class="form-label" for="rejectReason{{ share.share_id }}">拒绝原因</label>
+                            <textarea id="rejectReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="请说明审核未通过的原因，用户会在站内信中看到这段说明。"></textarea>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                            <button type="submit" class="btn btn-danger">确认拒绝并通知用户</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

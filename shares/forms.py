@@ -34,6 +34,32 @@ class ReportForm(forms.ModelForm):
         }
 
 
+class AdminReviewRejectForm(forms.Form):
+    """管理员拒绝审核时填写反馈。"""
+    reason = forms.CharField(
+        label='拒绝原因',
+        min_length=2,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': '请说明审核未通过的原因，用户会在站内信中看到这段说明。',
+        }),
+    )
+
+
+class ReportResolutionForm(forms.Form):
+    """管理员处理举报时填写说明。"""
+    reason = forms.CharField(
+        label='处理说明',
+        min_length=2,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': '请填写处理依据，相关用户会在站内信中看到这段说明。',
+        }),
+    )
+
+
 class ShareForm(forms.ModelForm):
     """分享创建/编辑表单"""
     class Meta:

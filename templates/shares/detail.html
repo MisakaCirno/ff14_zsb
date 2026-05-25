@@ -11,6 +11,12 @@
         <strong>待审核：</strong> 此分享正在等待管理员审核。在审核通过前，它不会出现在公开列表中，但您可以通过链接分享给他人。
     </div>
     {% endif %}
+    {% if share.status == 'rejected' and share.review_feedback and user == share.author %}
+    <div class="alert alert-danger mb-4" role="alert">
+        <i class="bi bi-x-circle-fill me-2"></i>
+        <strong>审核反馈：</strong> {{ share.review_feedback }}
+    </div>
+    {% endif %}
 
     <div class="row">
         <div class="col-lg-8">
