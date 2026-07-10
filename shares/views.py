@@ -5,7 +5,7 @@ from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.http import JsonResponse, HttpResponse
+from django.http import Http404, JsonResponse, HttpResponse
 from django.db.models import Q, Count, Prefetch, Max, Exists, OuterRef, F
 from django.utils import timezone
 from django.template.loader import render_to_string
@@ -13,6 +13,13 @@ from .models import Share, UserProfile, Report, Announcement, Collection, Collec
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm, AdminReviewRejectForm, ReportResolutionForm
 from .services.messages import send_site_message
 from .rate_limits import consume_rate_limit, get_client_ip, request_identity
+from .policies import (
+    can_view_collection,
+    can_view_share,
+    is_moderator as is_admin,
+    public_share_queryset,
+    share_api_denial_status,
+)
 from .validation import SEARCH_QUERY_MAX_LENGTH
 from io import BytesIO
 import base64
@@ -22,10 +29,6 @@ HOME_FEED_MODES = {
     UserProfile.HomeFeedMode.PAGINATED,
     UserProfile.HomeFeedMode.INFINITE,
 }
-
-
-def is_admin(user):
-    return user.is_authenticated and (user.is_staff or user.is_superuser)
 
 
 def log_share_action(user, share, action_type, details=''):
@@ -109,10 +112,7 @@ def render_share_cards_response(request, shares):
 
 def index(request):
     """主页 - 显示所有公开且已通过审核的分享"""
-    shares_list = Share.objects.filter(
-        visibility=Share.Visibility.PUBLIC,
-        status=Share.Status.APPROVED
-    )
+    shares_list = public_share_queryset()
 
     # 筛选分类
     category = request.GET.get('category')
@@ -202,35 +202,9 @@ def share_detail(request, share_id):
     except Share.DoesNotExist:
         return render(request, '404.html', status=404)
     
-    # 检查权限
-    # 私有分享仅作者和管理员可见
-    if share.visibility == Share.Visibility.PRIVATE:
-        has_permission = request.user.is_authenticated and (
-            share.author == request.user or 
-            request.user.is_staff or 
-            request.user.is_superuser
-        )
-        if not has_permission:
-            messages.error(request, '该分享不存在或您没有权限访问')
-            return redirect('index')
-    
-    # 审核状态检查
-    # 如果是待审核或已拒绝，仅作者和管理员可见，或者通过链接访问（待审核状态下）
-    # 用户需求：待审核的相当于链接可见
-    if share.status != Share.Status.APPROVED:
-        # 如果是公开分享但未通过审核
-        if share.visibility == Share.Visibility.PUBLIC:
-            # 待审核状态：所有人可通过链接访问（类似于 Unlisted）
-            # 已拒绝状态：仅作者和管理员可见
-            if share.status == Share.Status.REJECTED:
-                has_permission = request.user.is_authenticated and (
-                    share.author == request.user or 
-                    request.user.is_staff or 
-                    request.user.is_superuser
-                )
-                if not has_permission:
-                    messages.error(request, '该分享违反规定已被拒绝，无法访问')
-                    return redirect('index')
+    if not can_view_share(request.user, share):
+        messages.error(request, '该分享不存在或您没有权限访问')
+        return redirect('index')
     
     # 精准浏览量统计：使用Cookie防止重复计数
     # Cookie名称：viewed_shares，存储已浏览的分享ID列表
@@ -252,9 +226,12 @@ def share_detail(request, share_id):
     # 获取该分享所属的合集（仅显示公开的，或者作者自己的）
     related_collections = Collection.objects.filter(
         collectionitem__share=share
-    ).filter(
-        Q(is_public=True) | Q(author=request.user if request.user.is_authenticated else None)
     ).distinct()
+    related_collections = [
+        collection
+        for collection in related_collections
+        if can_view_collection(request.user, collection)
+    ]
     
     # 管理员查看详情时，预加载日志
     if is_admin(request.user):
@@ -623,26 +600,13 @@ def search(request):
     # 优先匹配 share_id (不再限制长度，兼容不同版本的ID格式)
     try:
         share = Share.objects.get(share_id=query)
-        # 检查权限：
-        # 1. 公开或不公开(Unlisted) -> 允许访问
-        # 2. 私有(Private) -> 作者或管理员允许访问
-        can_view = (share.visibility != Share.Visibility.PRIVATE) or \
-                   (request.user.is_authenticated and (
-                       share.author == request.user or 
-                       request.user.is_staff or 
-                       request.user.is_superuser
-                   ))
-                   
-        if can_view:
+        if can_view_share(request.user, share):
             return redirect('share_detail', share_id=share.share_id)
     except Share.DoesNotExist:
         pass
 
     # 普通搜索 - 仅显示公开且已通过审核的分享
-    shares_list = Share.objects.filter(
-        visibility=Share.Visibility.PUBLIC,
-        status=Share.Status.APPROVED
-    ).filter(
+    shares_list = public_share_queryset().filter(
         Q(title__icontains=query) |
         Q(description__icontains=query) |
         Q(author__profile__nickname__icontains=query) |
@@ -748,6 +712,8 @@ def admin_reject_share(request, share_id):
 def report_share(request, share_id):
     """举报分享"""
     share = get_object_or_404(Share, share_id=share_id)
+    if not can_view_share(request.user, share):
+        raise Http404('Share not found')
     
     if request.method == 'POST':
         form = ReportForm(request.POST)
@@ -995,11 +961,7 @@ def user_public_profile(request, username):
     author = get_object_or_404(User, username=username)
     
     # 获取该用户发布的所有公开且已通过审核的分享
-    shares_list = Share.objects.filter(
-        author=author,
-        visibility=Share.Visibility.PUBLIC,
-        status=Share.Status.APPROVED
-    ).order_by('-created_at')
+    shares_list = public_share_queryset(Share.objects.filter(author=author)).order_by('-created_at')
     
     paginator = Paginator(shares_list, 12)
     page_number = request.GET.get('page')
@@ -1075,26 +1037,17 @@ def collection_detail(request, collection_id):
     """合集详情页"""
     collection = get_object_or_404(Collection, id=collection_id)
     
-    # 权限检查：如果是私有合集，仅作者可见
-    if not collection.is_public and collection.author != request.user:
+    if not can_view_collection(request.user, collection):
         messages.error(request, '该合集不存在或您没有权限访问')
         return redirect('index')
         
     # 获取合集内的分享（按顺序）
     collection_items = CollectionItem.objects.filter(collection=collection).select_related('share', 'share__author', 'share__author__profile').order_by('order', 'added_at')
     
-    # 过滤掉不可见的分享（除非是作者或管理员）
-    visible_items = []
-    for item in collection_items:
-        share = item.share
-        can_view = (share.visibility == Share.Visibility.PUBLIC and share.status == Share.Status.APPROVED) or \
-                   (request.user.is_authenticated and (
-                       share.author == request.user or 
-                       request.user.is_staff or 
-                       request.user.is_superuser
-                   ))
-        if can_view:
-            visible_items.append(item)
+    visible_items = [
+        item for item in collection_items
+        if can_view_share(request.user, item.share)
+    ]
             
     return render(request, 'shares/collection_detail.html', {
         'collection': collection,
@@ -1150,15 +1103,10 @@ def get_share_code(request, share_id):
     except Share.DoesNotExist:
         return JsonResponse({'error': 'Share not found'}, status=404)
     
-    # 权限检查：如果是私有分享，只有作者可见
-    if share.visibility == Share.Visibility.PRIVATE:
-        if request.user != share.author:
-            return JsonResponse({'error': 'Permission denied'}, status=403)
-            
-    # 状态检查：如果未通过审核，只有作者和管理员可见
-    if share.status != Share.Status.APPROVED:
-        if request.user != share.author and not is_admin(request.user):
-            return JsonResponse({'error': 'Share not available'}, status=404)
+    if not can_view_share(request.user, share):
+        status = share_api_denial_status(share)
+        error = 'Permission denied' if status == 403 else 'Share not available'
+        return JsonResponse({'error': error}, status=status)
             
     data = [{
         "title": share.title,
@@ -1173,6 +1121,8 @@ def record_copy(request, share_id):
         return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=405)
     
     share = get_object_or_404(Share, share_id=share_id)
+    if not can_view_share(request.user, share):
+        return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
     
     # 使用Cookie防止重复计数
     copied_shares = request.COOKIES.get('copied_shares', '')
@@ -1209,6 +1159,8 @@ def toggle_like(request, share_id):
         return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=405)
         
     share = get_object_or_404(Share, share_id=share_id)
+    if not can_view_share(request.user, share):
+        return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
     
     if share.likes.filter(id=request.user.id).exists():
         share.likes.remove(request.user)
@@ -1230,6 +1182,8 @@ def toggle_favorite(request, share_id):
         return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=405)
         
     share = get_object_or_404(Share, share_id=share_id)
+    if not can_view_share(request.user, share):
+        return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
     
     if share.favorites.filter(id=request.user.id).exists():
         share.favorites.remove(request.user)
@@ -1252,10 +1206,8 @@ def get_collection_codes(request, collection_id):
     except Collection.DoesNotExist:
         return JsonResponse({'error': 'Collection not found'}, status=404)
     
-    # 权限检查：如果不公开，只有作者可见
-    if not collection.is_public:
-        if request.user != collection.author:
-            return JsonResponse({'error': 'Permission denied'}, status=403)
+    if not can_view_collection(request.user, collection):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     shares = []
     collection_items = CollectionItem.objects.filter(collection=collection).select_related('share').order_by('order', 'added_at')
@@ -1263,18 +1215,7 @@ def get_collection_codes(request, collection_id):
     for item in collection_items:
         share = item.share
         
-        # 检查每个分享的可见性
-        is_visible = False
-        if share.visibility in [Share.Visibility.PUBLIC, Share.Visibility.UNLISTED]:
-            if share.status == Share.Status.APPROVED:
-                is_visible = True
-            elif request.user == share.author or is_admin(request.user):
-                is_visible = True
-        elif share.visibility == Share.Visibility.PRIVATE:
-            if request.user == share.author:
-                is_visible = True
-                
-        if is_visible:
+        if can_view_share(request.user, share):
             shares.append({
                 "title": share.title,
                 "code": share.strategy_code
