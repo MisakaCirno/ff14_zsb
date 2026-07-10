@@ -265,8 +265,20 @@
         function updateHistoryDropdown() {
             const container = document.getElementById('historyList');
             if (!container) return;
-            
-            const history = JSON.parse(localStorage.getItem('visitHistory') || '[]');
+
+            let history = [];
+            try {
+                const storedHistory = JSON.parse(localStorage.getItem('visitHistory') || '[]');
+                if (Array.isArray(storedHistory)) {
+                    history = storedHistory.filter(item => (
+                        item
+                        && typeof item.id === 'string'
+                        && item.id.trim().length > 0
+                    ));
+                }
+            } catch (error) {
+                console.warn('Ignoring invalid visit history data.', error);
+            }
             
             // Find the header and divider
             const header = container.querySelector('.dropdown-header').parentNode;
@@ -282,21 +294,41 @@
             
             if (history.length === 0) {
                 const li = document.createElement('li');
-                li.innerHTML = '<span class="dropdown-item-text text-muted small text-center">暂无访问记录</span>';
+                const emptyState = document.createElement('span');
+                emptyState.className = 'dropdown-item-text text-muted small text-center';
+                emptyState.textContent = '暂无访问记录';
+                li.appendChild(emptyState);
                 container.insertBefore(li, divider);
             } else {
                 history.forEach(item => {
                     const li = document.createElement('li');
-                    // Format date as MM-DD
+                    const link = document.createElement('a');
+                    const content = document.createElement('div');
+                    const title = document.createElement('span');
+                    const dateLabel = document.createElement('small');
+                    const itemTitle = typeof item.title === 'string' && item.title
+                        ? item.title
+                        : '未命名分享';
+
+                    link.className = 'dropdown-item text-truncate';
+                    link.href = `/s/${encodeURIComponent(item.id)}/`;
+                    link.title = itemTitle;
+
+                    content.className = 'd-flex justify-content-between align-items-center';
+                    title.className = 'text-truncate me-2';
+                    title.style.maxWidth = '160px';
+                    title.textContent = itemTitle;
+
                     const date = new Date(item.timestamp);
-                    const dateStr = (date.getMonth() + 1) + '-' + date.getDate();
-                    
-                    li.innerHTML = `<a class="dropdown-item text-truncate" href="/s/${item.id}/" title="${item.title}">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-truncate me-2" style="max-width: 160px;">${item.title}</span>
-                            <small class="text-muted" style="font-size: 0.75rem;">${dateStr}</small>
-                        </div>
-                    </a>`;
+                    dateLabel.className = 'text-muted';
+                    dateLabel.style.fontSize = '0.75rem';
+                    dateLabel.textContent = Number.isNaN(date.getTime())
+                        ? ''
+                        : `${date.getMonth() + 1}-${date.getDate()}`;
+
+                    content.append(title, dateLabel);
+                    link.appendChild(content);
+                    li.appendChild(link);
                     container.insertBefore(li, divider);
                 });
             }
@@ -313,12 +345,20 @@
         function showMessage(message, type = 'success') {
             const container = document.getElementById('message-container');
             const alertDiv = document.createElement('div');
-            alertDiv.className = `alert alert-${type} alert-dismissible fade show shadow`;
+            const messageText = document.createElement('span');
+            const closeButton = document.createElement('button');
+            const allowedTypes = new Set(['danger', 'info', 'primary', 'success', 'warning']);
+            const safeType = allowedTypes.has(type) ? type : 'info';
+
+            alertDiv.className = `alert alert-${safeType} alert-dismissible fade show shadow`;
             alertDiv.role = 'alert';
-            alertDiv.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
+            messageText.style.whiteSpace = 'pre-line';
+            messageText.textContent = String(message ?? '');
+            closeButton.type = 'button';
+            closeButton.className = 'btn-close';
+            closeButton.dataset.bsDismiss = 'alert';
+            closeButton.setAttribute('aria-label', '关闭');
+            alertDiv.append(messageText, closeButton);
             container.appendChild(alertDiv);
             
             // Auto dismiss after 3 seconds

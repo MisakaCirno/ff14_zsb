@@ -956,12 +956,13 @@ function toggleFavorite() {
         document.getElementById('shareUrl').value = window.location.origin + window.location.pathname;
 
         // Save visit history
-        const shareId = "{{ share.share_id }}";
+        const shareId = "{{ share.share_id|escapejs }}";
         const shareTitle = "{{ share.title|escapejs }}";
         const timestamp = new Date().getTime();
         
         try {
-            let history = JSON.parse(localStorage.getItem('visitHistory') || '[]');
+            const storedHistory = JSON.parse(localStorage.getItem('visitHistory') || '[]');
+            let history = Array.isArray(storedHistory) ? storedHistory : [];
             
             // Remove existing entry for this share if exists
             history = history.filter(item => item.id !== shareId);

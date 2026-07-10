@@ -1,4 +1,5 @@
-from django.test import TestCase
+from django.template.loader import get_template
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from .content_sanitizer import sanitize_rich_text
@@ -52,6 +53,22 @@ class RichTextSanitizerTests(TestCase):
 
         cleaned = sanitize_rich_text('<p><strong>安全</strong></p>')
         self.assertEqual(sanitize_rich_text(cleaned), cleaned)
+
+
+class ClientRenderingSafetyTests(SimpleTestCase):
+    def test_base_template_does_not_interpolate_history_or_messages_as_html(self):
+        source = get_template('base.html').template.source
+
+        self.assertNotIn('li.innerHTML', source)
+        self.assertNotIn('alertDiv.innerHTML', source)
+        self.assertIn('title.textContent = itemTitle', source)
+        self.assertIn('encodeURIComponent(item.id)', source)
+        self.assertIn("messageText.textContent = String(message ?? '')", source)
+
+    def test_share_id_is_escaped_before_embedding_in_history_script(self):
+        source = get_template('shares/detail.html').template.source
+
+        self.assertIn('{{ share.share_id|escapejs }}', source)
 
 
 class RichTextPersistenceTests(TestCase):
