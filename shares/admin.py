@@ -1,11 +1,14 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
+
+from .admin_forms import AnnouncementAdminForm, ShareAdminForm
 from .models import Share, UserProfile, Announcement, Report, SiteMessage
 
 
 @admin.register(Announcement)
 class AnnouncementAdmin(admin.ModelAdmin):
+    form = AnnouncementAdminForm
     list_display = ['title', 'is_active', 'created_at', 'updated_at']
     list_filter = ['is_active', 'created_at']
     search_fields = ['title', 'content']
@@ -14,6 +17,7 @@ class AnnouncementAdmin(admin.ModelAdmin):
 
 @admin.register(Share)
 class ShareAdmin(admin.ModelAdmin):
+    form = ShareAdminForm
     list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'status', 'views', 'copies', 'created_at']
     list_filter = ['visibility', 'status', 'created_at', 'author']
     search_fields = ['title', 'share_id', 'description', 'author__username', 'author__profile__nickname']

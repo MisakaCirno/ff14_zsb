@@ -2,7 +2,6 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from ckeditor.fields import RichTextField
 import random
 
 from .content_sanitizer import sanitize_rich_text
@@ -233,7 +232,7 @@ class SiteMessage(models.Model):
 class Announcement(models.Model):
     """站点动态模型"""
     title = models.CharField(max_length=200, verbose_name='标题')
-    content = RichTextField(verbose_name='内容')
+    content = models.TextField(verbose_name='内容')
     is_active = models.BooleanField(default=True, verbose_name='是否激活')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')

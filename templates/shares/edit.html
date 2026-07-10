@@ -197,16 +197,13 @@
         
         // Initialize editor content if textarea has value
         if (descriptionInput.value) {
-            quill.root.innerHTML = descriptionInput.value;
+            quill.clipboard.dangerouslyPasteHTML(descriptionInput.value);
         }
 
         form.onsubmit = function() {
-            // Populate hidden form on submit
-            if (quill.getText().trim().length === 0 && quill.root.innerHTML === '<p><br></p>') {
-                descriptionInput.value = '';
-            } else {
-                descriptionInput.value = quill.root.innerHTML;
-            }
+            descriptionInput.value = quill.getText().trim().length === 0
+                ? ''
+                : quill.getSemanticHTML();
         };
     });
 </script>

@@ -1,0 +1,13 @@
+.quill-editor-source[hidden] + .quill-admin-editor {
+    display: block;
+}
+
+.quill-admin-editor {
+    background: var(--body-bg, #fff);
+    color: var(--body-fg, #333);
+    min-height: 18rem;
+}
+
+.quill-admin-editor .ql-editor {
+    min-height: 18rem;
+}

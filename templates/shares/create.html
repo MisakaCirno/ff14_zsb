@@ -235,7 +235,7 @@
         
         // Initialize editor content if textarea has value (e.g. validation error)
         if (descriptionInput.value) {
-            quill.root.innerHTML = descriptionInput.value;
+            quill.clipboard.dangerouslyPasteHTML(descriptionInput.value);
         }
 
         form.onsubmit = function(e) {
@@ -248,14 +248,9 @@
                 return false;
             }
 
-            // Populate hidden form on submit
-            // Only update if editor is not empty (to avoid <p><br></p> for empty fields if that matters, 
-            // but Quill handles empty well usually. However, we want to send empty string if it's just empty p)
-            if (quill.getText().trim().length === 0 && quill.root.innerHTML === '<p><br></p>') {
-                descriptionInput.value = '';
-            } else {
-                descriptionInput.value = quill.root.innerHTML;
-            }
+            descriptionInput.value = quill.getText().trim().length === 0
+                ? ''
+                : quill.getSemanticHTML();
         };
     });
 </script>
