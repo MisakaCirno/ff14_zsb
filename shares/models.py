@@ -47,16 +47,16 @@ class UserProfile(models.Model):
 
 
 @receiver(post_save, sender=User)
-def create_user_profile(sender, instance, created, **kwargs):
+def create_user_profile(sender, instance, created, raw=False, **kwargs):
     """创建用户时自动创建用户资料"""
-    if created:
+    if created and not raw:
         UserProfile.objects.create(user=instance)
 
 
 @receiver(post_save, sender=User)
-def save_user_profile(sender, instance, **kwargs):
+def save_user_profile(sender, instance, raw=False, **kwargs):
     """保存用户时自动保存用户资料"""
-    if hasattr(instance, 'profile'):
+    if not raw and hasattr(instance, 'profile'):
         instance.profile.save()
 
 

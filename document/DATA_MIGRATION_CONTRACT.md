@@ -51,6 +51,27 @@
 - Announcement
 - SiteMessage
 
+## 工具命令
+
+在冻结写入并取得不可变备份后，从旧应用环境导出：
+
+```powershell
+python manage.py export_site_data D:\migration\ffxivshare-export
+python manage.py validate_site_data D:\migration\ffxivshare-export
+```
+
+在已经执行完 migrations、且业务表为空的目标数据库中导入：
+
+```powershell
+python manage.py import_site_data D:\migration\ffxivshare-export
+```
+
+- 导出目录已存在时命令默认拒绝覆盖；只有显式传入 `--overwrite` 才会替换。
+- 校验结果写入 `validation-report.json`，导入结果写入 `import-report.json`。
+- 任何校验或导入错误都会列入隔离记录，并使整个导入事务回滚。
+- 目标库已有不同数据时拒绝导入；若目标库与数据集逐文件摘要完全一致，则重复执行安全返回，不重复写入。
+- 导入保留主键、密码哈希、分享 ID、时间字段和所有关系，并按数据库后端重置自增序列。
+
 ## 强制校验
 
 迁移前后至少比较：
