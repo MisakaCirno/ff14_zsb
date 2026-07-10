@@ -1,8 +1,11 @@
+from pathlib import Path
+
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
 from .environment import (
     DEVELOPMENT_SECRET_KEY,
+    build_database_config,
     env_bool,
     env_int,
     env_list,
@@ -81,3 +84,77 @@ class ProductionConfigurationTests(SimpleTestCase):
                     validate_runtime_config('production', debug=False, allowed_hosts=hosts)
 
         validate_runtime_config('production', debug=False, allowed_hosts=['example.com'])
+
+
+class DatabaseConfigurationTests(SimpleTestCase):
+    def setUp(self):
+        self.base_dir = Path.cwd()
+
+    def test_sqlite_defaults_use_wal_full_sync_and_immediate_transactions(self):
+        config = build_database_config(self.base_dir, environ={})
+
+        self.assertEqual(config['ENGINE'], 'django.db.backends.sqlite3')
+        self.assertEqual(config['NAME'], (self.base_dir / 'db.sqlite3').resolve())
+        self.assertEqual(config['CONN_MAX_AGE'], 0)
+        self.assertEqual(config['OPTIONS']['timeout'], 30)
+        self.assertEqual(config['OPTIONS']['transaction_mode'], 'IMMEDIATE')
+        self.assertIn('journal_mode=WAL', config['OPTIONS']['init_command'])
+        self.assertIn('synchronous=FULL', config['OPTIONS']['init_command'])
+
+    def test_sqlite_path_and_safe_options_are_configurable(self):
+        config = build_database_config(self.base_dir, environ={
+            'DATABASE_ENGINE': 'sqlite',
+            'DATABASE_PATH': 'data/site.sqlite3',
+            'SQLITE_TIMEOUT': '45',
+            'SQLITE_TRANSACTION_MODE': 'deferred',
+            'SQLITE_JOURNAL_MODE': 'delete',
+            'SQLITE_SYNCHRONOUS': 'extra',
+        })
+
+        self.assertEqual(
+            config['NAME'],
+            (self.base_dir / 'data' / 'site.sqlite3').resolve(),
+        )
+        self.assertEqual(config['OPTIONS']['timeout'], 45)
+        self.assertEqual(config['OPTIONS']['transaction_mode'], 'DEFERRED')
+        self.assertIn('journal_mode=DELETE', config['OPTIONS']['init_command'])
+        self.assertIn('synchronous=EXTRA', config['OPTIONS']['init_command'])
+
+    def test_invalid_database_options_are_rejected(self):
+        for environ in (
+            {'DATABASE_ENGINE': 'mysql'},
+            {'SQLITE_TIMEOUT': '0'},
+            {'SQLITE_TRANSACTION_MODE': 'sometimes'},
+            {'SQLITE_JOURNAL_MODE': 'unsafe'},
+        ):
+            with self.subTest(environ=environ):
+                with self.assertRaises(ImproperlyConfigured):
+                    build_database_config(self.base_dir, environ=environ)
+
+    def test_postgresql_configuration_requires_credentials(self):
+        with self.assertRaisesMessage(ImproperlyConfigured, 'DATABASE_NAME is required'):
+            build_database_config(
+                self.base_dir,
+                environ={'DATABASE_ENGINE': 'postgresql'},
+            )
+
+    def test_postgresql_configuration_is_backend_neutral(self):
+        config = build_database_config(self.base_dir, environ={
+            'DATABASE_ENGINE': 'postgresql',
+            'DATABASE_NAME': 'ffxivshare',
+            'DATABASE_USER': 'ffxivshare',
+            'DATABASE_PASSWORD': 'test-password',
+            'DATABASE_HOST': '127.0.0.1',
+            'DATABASE_PORT': '5433',
+            'DATABASE_CONN_MAX_AGE': '90',
+            'DATABASE_CONNECT_TIMEOUT': '5',
+            'DATABASE_SSLMODE': 'require',
+        })
+
+        self.assertEqual(config['ENGINE'], 'django.db.backends.postgresql')
+        self.assertEqual(config['NAME'], 'ffxivshare')
+        self.assertEqual(config['PORT'], 5433)
+        self.assertEqual(config['CONN_MAX_AGE'], 90)
+        self.assertTrue(config['CONN_HEALTH_CHECKS'])
+        self.assertEqual(config['OPTIONS']['connect_timeout'], 5)
+        self.assertEqual(config['OPTIONS']['sslmode'], 'require')

@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .environment import (
+    build_database_config,
     env_bool,
     env_int,
     env_list,
@@ -95,10 +96,7 @@ WSGI_APPLICATION = 'ffxivshare.wsgi.application'
 
 # Database
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': build_database_config(BASE_DIR),
 }
 
 # Password validation

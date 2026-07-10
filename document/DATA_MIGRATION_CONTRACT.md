@@ -93,3 +93,17 @@ python manage.py import_site_data D:\migration\ffxivshare-export
 - 数据迁移中间格式不依赖数据库引擎。
 - CI 使用 SQLite 和 PostgreSQL 两套数据库运行模型、迁移和核心服务测试。
 - 未来迁移 PostgreSQL 时复用相同的导出、导入和校验流程。
+
+## SQLite 运行和备份
+
+- 生产库放在服务器本地持久化 NTFS 目录，不把数据库或 WAL 文件放在网络共享中。
+- 默认启用 WAL、`FULL` 同步、30 秒锁等待和短事务 `IMMEDIATE` 模式；出现持续锁等待时迁移 PostgreSQL，而不是继续放宽超时。
+- 不直接复制正在运行的 `db.sqlite3`、`-wal` 或 `-shm` 文件。在线备份使用 SQLite Backup API：
+
+```powershell
+python manage.py backup_database D:\FFXIVShareBackups\site-2026-07-11.sqlite3
+```
+
+- 命令会对备份执行 `PRAGMA integrity_check`，并生成同名 `.sha256` 文件；已有文件默认拒绝覆盖。
+- 备份应复制到另一物理存储，并定期在隔离环境中执行恢复、迁移、数据校验和关键流程冒烟。
+- PostgreSQL 使用 `requirements-postgres.txt` 和环境变量切换；CI 会在 PostgreSQL 16 上执行同一套迁移与测试。正式备份使用 `pg_dump`，不使用 SQLite 备份命令。

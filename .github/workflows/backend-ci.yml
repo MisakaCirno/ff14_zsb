@@ -41,3 +41,56 @@ jobs:
       - name: Verify backend
         shell: powershell
         run: .\verify.ps1 -PythonExecutable python
+
+  verify-postgresql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ffxivshare
+          POSTGRES_USER: ffxivshare
+          POSTGRES_PASSWORD: ci-database-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ffxivshare -d ffxivshare"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      APP_ENV: test
+      SECRET_KEY: ci-only-secret-key-with-enough-length-for-django-system-checks
+      DEBUG: "False"
+      ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      CSRF_TRUSTED_ORIGINS: http://localhost
+      DATABASE_ENGINE: postgresql
+      DATABASE_NAME: ffxivshare
+      DATABASE_USER: ffxivshare
+      DATABASE_PASSWORD: ci-database-password
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: "5432"
+      DATABASE_SSLMODE: disable
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-postgres.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-postgres.txt
+
+      - name: Verify backend on PostgreSQL
+        shell: pwsh
+        run: .\verify.ps1 -PythonExecutable python
