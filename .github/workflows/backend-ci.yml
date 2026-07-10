@@ -16,9 +16,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     env:
+      APP_ENV: test
       SECRET_KEY: ci-only-secret-key-with-enough-length-for-django-system-checks
       DEBUG: "False"
-      ALLOWED_HOSTS: localhost,127.0.0.1
+      ALLOWED_HOSTS: localhost,127.0.0.1,testserver
       CSRF_TRUSTED_ORIGINS: http://localhost
 
     steps:

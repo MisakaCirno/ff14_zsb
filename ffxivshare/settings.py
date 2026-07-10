@@ -3,8 +3,16 @@ Django settings for ffxivshare project.
 """
 
 from pathlib import Path
-import os
 from dotenv import load_dotenv
+
+from .environment import (
+    env_bool,
+    env_int,
+    env_list,
+    resolve_app_environment,
+    resolve_secret_key,
+    validate_runtime_config,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -12,15 +20,34 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-dev-key-please-change-in-production')
+APP_ENV = resolve_app_environment()
+IS_PRODUCTION = APP_ENV == 'production'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+SECRET_KEY = resolve_secret_key(APP_ENV)
+DEBUG = env_bool('DEBUG', default=APP_ENV == 'development')
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')
+default_allowed_hosts = () if IS_PRODUCTION else ('127.0.0.1', 'localhost', 'testserver')
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', default=default_allowed_hosts)
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
 
-CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', 'https://ff14hub.com').split(',')
+validate_runtime_config(APP_ENV, debug=DEBUG, allowed_hosts=ALLOWED_HOSTS)
+
+# Security and reverse-proxy settings. The production Waitress service must only
+# listen on loopback, and the reverse proxy must replace X-Forwarded-Proto.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if IS_PRODUCTION else None
+SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', default=IS_PRODUCTION)
+SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
+CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', default=IS_PRODUCTION)
+SECURE_HSTS_SECONDS = env_int(
+    'SECURE_HSTS_SECONDS',
+    default=31536000 if IS_PRODUCTION else 0,
+    minimum=0,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False)
+SECURE_HSTS_PRELOAD = env_bool('SECURE_HSTS_PRELOAD', default=False)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+SESSION_COOKIE_HTTPONLY = True
 
 # Application definition
 INSTALLED_APPS = [
