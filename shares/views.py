@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.contrib.auth import login, logout, authenticate, update_session_auth_hash
+from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
@@ -12,6 +12,7 @@ from django.template.loader import render_to_string
 from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog, SiteMessage
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm, AdminReviewRejectForm, ReportResolutionForm
 from .services.messages import send_site_message
+from .rate_limits import consume_rate_limit, get_client_ip, request_identity
 from .validation import SEARCH_QUERY_MAX_LENGTH
 from io import BytesIO
 import base64
@@ -238,13 +239,15 @@ def share_detail(request, share_id):
     
     # 如果该分享未被当前访客浏览过，则增加浏览量
     if share_id not in viewed_list:
-        Share.objects.filter(share_id=share_id).update(views=F('views') + 1)
-        share.refresh_from_db()
-        # 将该分享ID添加到已浏览列表
-        viewed_list.append(share_id)
-        # 限制Cookie大小，最多保留最近100个浏览记录
-        if len(viewed_list) > 100:
-            viewed_list = viewed_list[-100:]
+        view_limit = consume_rate_limit('view_counter_ip', f'ip:{get_client_ip(request)}')
+        if view_limit.allowed:
+            Share.objects.filter(share_id=share_id).update(views=F('views') + 1)
+            share.refresh_from_db()
+            # 将该分享ID添加到已浏览列表
+            viewed_list.append(share_id)
+            # 限制Cookie大小，最多保留最近100个浏览记录
+            if len(viewed_list) > 100:
+                viewed_list = viewed_list[-100:]
     
     # 获取该分享所属的合集（仅显示公开的，或者作者自己的）
     related_collections = Collection.objects.filter(
@@ -292,9 +295,19 @@ def share_detail(request, share_id):
 
 def create_share(request):
     """创建新分享"""
+    response_status = 200
     if request.method == 'POST':
         form = ShareForm(request.POST)
-        if form.is_valid():
+        rule_name = (
+            'authenticated_create_user'
+            if request.user.is_authenticated
+            else 'anonymous_create_ip'
+        )
+        rate_limit = consume_rate_limit(rule_name, request_identity(request))
+        if not rate_limit.allowed:
+            messages.error(request, '创建请求过于频繁，请稍后再试。')
+            response_status = 429
+        elif form.is_valid():
             share = form.save(commit=False)
             if request.user.is_authenticated:
                 share.author = request.user
@@ -342,7 +355,12 @@ def create_share(request):
     if request.user.is_authenticated:
         user_collections = Collection.objects.filter(author=request.user).order_by('-updated_at')
     
-    return render(request, 'shares/create.html', {'form': form, 'user_collections': user_collections})
+    return render(
+        request,
+        'shares/create.html',
+        {'form': form, 'user_collections': user_collections},
+        status=response_status,
+    )
 
 
 @login_required
@@ -465,6 +483,10 @@ def register(request):
     """用户注册"""
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
+        rate_limit = consume_rate_limit('register_ip', f'ip:{get_client_ip(request)}')
+        if not rate_limit.allowed:
+            messages.error(request, '注册请求过于频繁，请稍后再试。')
+            return render(request, 'shares/register.html', {'form': form}, status=429)
         if form.is_valid():
             user = form.save()
             login(request, user)
@@ -480,14 +502,17 @@ def user_login(request):
     """用户登录"""
     if request.method == 'POST':
         form = AuthenticationForm(request, data=request.POST)
+        username = request.POST.get('username', '').strip().casefold()[:150]
+        ip_limit = consume_rate_limit('login_ip', f'ip:{get_client_ip(request)}')
+        account_limit = consume_rate_limit('login_account', f'account:{username}')
+        if not ip_limit.allowed or not account_limit.allowed:
+            messages.error(request, '登录尝试过于频繁，请稍后再试。')
+            return render(request, 'shares/login.html', {'form': form}, status=429)
         if form.is_valid():
-            username = form.cleaned_data.get('username')
-            password = form.cleaned_data.get('password')
-            user = authenticate(username=username, password=password)
-            if user is not None:
-                login(request, user)
-                messages.success(request, f'欢迎回来，{username}！')
-                return redirect('index')
+            user = form.get_user()
+            login(request, user)
+            messages.success(request, f'欢迎回来，{user.username}！')
+            return redirect('index')
     else:
         form = AuthenticationForm()
     
@@ -726,6 +751,15 @@ def report_share(request, share_id):
     
     if request.method == 'POST':
         form = ReportForm(request.POST)
+        rate_limit = consume_rate_limit('report_user', request_identity(request))
+        if not rate_limit.allowed:
+            messages.error(request, '举报请求过于频繁，请稍后再试。')
+            return render(
+                request,
+                'shares/report_share.html',
+                {'form': form, 'share': share},
+                status=429,
+            )
         if form.is_valid():
             report = form.save(commit=False)
             report.share = share
@@ -1145,11 +1179,13 @@ def record_copy(request, share_id):
     copied_list = copied_shares.split(',') if copied_shares else []
     
     if share_id not in copied_list:
-        Share.objects.filter(share_id=share_id).update(copies=F('copies') + 1)
-        share.refresh_from_db()
-        copied_list.append(share_id)
-        if len(copied_list) > 100:
-            copied_list = copied_list[-100:]
+        copy_limit = consume_rate_limit('copy_counter_ip', f'ip:{get_client_ip(request)}')
+        if copy_limit.allowed:
+            Share.objects.filter(share_id=share_id).update(copies=F('copies') + 1)
+            share.refresh_from_db()
+            copied_list.append(share_id)
+            if len(copied_list) > 100:
+                copied_list = copied_list[-100:]
     
     response = JsonResponse({
         'status': 'success',

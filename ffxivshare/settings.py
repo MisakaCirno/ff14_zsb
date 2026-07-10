@@ -33,8 +33,10 @@ CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS')
 validate_runtime_config(APP_ENV, debug=DEBUG, allowed_hosts=ALLOWED_HOSTS)
 
 # Security and reverse-proxy settings. The production Waitress service must only
-# listen on loopback, and the reverse proxy must replace X-Forwarded-Proto.
+# listen on loopback, and the reverse proxy must replace forwarded headers.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if IS_PRODUCTION else None
+TRUST_X_FORWARDED_FOR = env_bool('TRUST_X_FORWARDED_FOR', default=IS_PRODUCTION)
+RATE_LIMIT_ENABLED = env_bool('RATE_LIMIT_ENABLED', default=True)
 SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', default=IS_PRODUCTION)
 SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
 CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', default=IS_PRODUCTION)
