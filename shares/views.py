@@ -1,8 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.contrib.auth import login, logout, update_session_auth_hash
-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import Http404, JsonResponse, HttpResponse
@@ -12,7 +10,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog, SiteMessage
-from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm, AdminReviewRejectForm, ReportResolutionForm
+from .forms import ShareForm, ReportForm, CollectionForm, AdminReviewRejectForm, ReportResolutionForm
 from .services.messages import send_site_message
 from .services.audit import log_share_action
 from .selectors import admin_task_counts, annotate_share_cards
@@ -394,148 +392,6 @@ def my_shares(request):
         'collections': collections,
         'current_tab': tab,
     })
-
-
-def register(request):
-    """用户注册"""
-    if request.method == 'POST':
-        form = UserCreationForm(request.POST)
-        rate_limit = consume_rate_limit('register_ip', f'ip:{get_client_ip(request)}')
-        if not rate_limit.allowed:
-            messages.error(request, '注册请求过于频繁，请稍后再试。')
-            return render(request, 'shares/register.html', {'form': form}, status=429)
-        if form.is_valid():
-            user = form.save()
-            login(request, user)
-            messages.success(request, '注册成功！')
-            return redirect('index')
-    else:
-        form = UserCreationForm()
-    
-    return render(request, 'shares/register.html', {'form': form})
-
-
-def user_login(request):
-    """用户登录"""
-    if request.method == 'POST':
-        form = AuthenticationForm(request, data=request.POST)
-        username = request.POST.get('username', '').strip().casefold()[:150]
-        ip_limit = consume_rate_limit('login_ip', f'ip:{get_client_ip(request)}')
-        account_limit = consume_rate_limit('login_account', f'account:{username}')
-        if not ip_limit.allowed or not account_limit.allowed:
-            messages.error(request, '登录尝试过于频繁，请稍后再试。')
-            return render(request, 'shares/login.html', {'form': form}, status=429)
-        if form.is_valid():
-            user = form.get_user()
-            login(request, user)
-            messages.success(request, f'欢迎回来，{user.username}！')
-            return redirect('index')
-    else:
-        form = AuthenticationForm()
-    
-    return render(request, 'shares/login.html', {'form': form})
-
-
-@require_POST
-def user_logout(request):
-    """用户登出"""
-    logout(request)
-    messages.info(request, '已退出登录')
-    return redirect('index')
-
-
-@login_required
-def profile_edit(request):
-    """编辑个人资料"""
-    if request.method == 'POST':
-        profile, _ = UserProfile.objects.get_or_create(user=request.user)
-        form = UserProfileForm(request.POST, instance=profile)
-        if form.is_valid():
-            form.save()
-            messages.success(request, '个人资料更新成功！')
-            return redirect('profile_edit')
-    else:
-        try:
-            profile = request.user.profile
-        except UserProfile.DoesNotExist:
-            profile = UserProfile(user=request.user)
-        form = UserProfileForm(instance=profile)
-    
-    return render(request, 'shares/profile_edit.html', {'form': form, 'profile': profile})
-
-
-@login_required
-def password_change(request):
-    """修改密码"""
-    if request.method == 'POST':
-        form = CustomPasswordChangeForm(user=request.user, data=request.POST)
-        if form.is_valid():
-            user = form.save()
-            update_session_auth_hash(request, user)  # 保持登录状态
-            messages.success(request, '密码修改成功！')
-            return redirect('profile_edit')
-    else:
-        form = CustomPasswordChangeForm(user=request.user)
-    
-    return render(request, 'shares/password_change.html', {'form': form})
-
-
-@login_required
-def site_message_list(request):
-    """站内信列表"""
-    messages_list = SiteMessage.objects.filter(
-        recipient=request.user,
-        archived_at__isnull=True,
-    ).select_related('sender', 'related_share', 'related_report')
-
-    paginator = Paginator(messages_list, 20)
-    page_number = request.GET.get('page')
-    site_messages = paginator.get_page(page_number)
-
-    return render(request, 'shares/site_message_list.html', {
-        'site_messages': site_messages,
-    })
-
-
-@login_required
-def site_message_detail(request, message_id):
-    """站内信详情"""
-    site_message = get_object_or_404(
-        SiteMessage.objects.select_related('sender', 'related_share', 'related_report'),
-        id=message_id,
-        recipient=request.user,
-    )
-
-    return render(request, 'shares/site_message_detail.html', {
-        'site_message': site_message,
-    })
-
-
-@login_required
-@require_POST
-def open_site_message(request, message_id):
-    site_message = get_object_or_404(
-        SiteMessage,
-        id=message_id,
-        recipient=request.user,
-    )
-    if site_message.read_at is None:
-        site_message.read_at = timezone.now()
-        site_message.save(update_fields=['read_at'])
-    return redirect('site_message_detail', message_id=site_message.id)
-
-
-@login_required
-@require_POST
-def mark_all_site_messages_read(request):
-    """标记全部站内信为已读"""
-    updated = SiteMessage.objects.filter(
-        recipient=request.user,
-        read_at__isnull=True,
-        archived_at__isnull=True,
-    ).update(read_at=timezone.now())
-    messages.success(request, f'已将 {updated} 条站内信标记为已读')
-    return redirect('site_message_list')
 
 
 def search(request):

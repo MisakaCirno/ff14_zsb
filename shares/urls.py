@@ -1,5 +1,6 @@
 from django.urls import path, re_path
 from . import views
+from .web import accounts, messages as message_views
 
 urlpatterns = [
     # 主页
@@ -15,18 +16,18 @@ urlpatterns = [
     path('search/', views.search, name='search'),
     
     # 用户认证
-    path('register/', views.register, name='register'),
-    path('login/', views.user_login, name='login'),
-    path('logout/', views.user_logout, name='logout'),
+    path('register/', accounts.register, name='register'),
+    path('login/', accounts.user_login, name='login'),
+    path('logout/', accounts.user_logout, name='logout'),
     
     # 用户资料
     path('u/<str:username>/', views.user_public_profile, name='user_public_profile'),
-    path('profile/edit/', views.profile_edit, name='profile_edit'),
-    path('profile/password/', views.password_change, name='password_change'),
-    path('messages/', views.site_message_list, name='site_message_list'),
-    path('messages/mark-all-read/', views.mark_all_site_messages_read, name='mark_all_site_messages_read'),
-    path('messages/<int:message_id>/open/', views.open_site_message, name='open_site_message'),
-    path('messages/<int:message_id>/', views.site_message_detail, name='site_message_detail'),
+    path('profile/edit/', accounts.profile_edit, name='profile_edit'),
+    path('profile/password/', accounts.password_change, name='password_change'),
+    path('messages/', message_views.site_message_list, name='site_message_list'),
+    path('messages/mark-all-read/', message_views.mark_all_site_messages_read, name='mark_all_site_messages_read'),
+    path('messages/<int:message_id>/open/', message_views.open_site_message, name='open_site_message'),
+    path('messages/<int:message_id>/', message_views.site_message_detail, name='site_message_detail'),
     
     # 其他
     path('about/', views.about, name='about'),
