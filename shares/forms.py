@@ -2,10 +2,26 @@ from django import forms
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from .models import Share, UserProfile, Report, Collection
+from .validation import (
+    COLLECTION_DESCRIPTION_MAX_LENGTH,
+    PROFILE_BIO_MAX_LENGTH,
+    REPORT_REASON_MAX_LENGTH,
+    RICH_TEXT_MAX_LENGTH,
+    STAFF_REASON_MAX_LENGTH,
+    STRATEGY_CODE_INPUT_MAX_LENGTH,
+    normalize_strategy_code,
+)
 
 
 class CollectionForm(forms.ModelForm):
     """合集创建/编辑表单"""
+    description = forms.CharField(
+        label='描述',
+        required=False,
+        max_length=COLLECTION_DESCRIPTION_MAX_LENGTH,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '添加描述（可选）'}),
+    )
+
     class Meta:
         model = Collection
         fields = ['title', 'description', 'is_public']
@@ -23,6 +39,12 @@ class CollectionForm(forms.ModelForm):
 
 class ReportForm(forms.ModelForm):
     """举报表单"""
+    reason = forms.CharField(
+        label='举报原因',
+        max_length=REPORT_REASON_MAX_LENGTH,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '请详细描述违规情况...'}),
+    )
+
     class Meta:
         model = Report
         fields = ['reason']
@@ -39,6 +61,7 @@ class AdminReviewRejectForm(forms.Form):
     reason = forms.CharField(
         label='拒绝原因',
         min_length=2,
+        max_length=STAFF_REASON_MAX_LENGTH,
         widget=forms.Textarea(attrs={
             'class': 'form-control',
             'rows': 3,
@@ -52,6 +75,7 @@ class ReportResolutionForm(forms.Form):
     reason = forms.CharField(
         label='处理说明',
         min_length=2,
+        max_length=STAFF_REASON_MAX_LENGTH,
         widget=forms.Textarea(attrs={
             'class': 'form-control',
             'rows': 3,
@@ -62,6 +86,22 @@ class ReportResolutionForm(forms.Form):
 
 class ShareForm(forms.ModelForm):
     """分享创建/编辑表单"""
+    strategy_code = forms.CharField(
+        label='战术板代码',
+        max_length=STRATEGY_CODE_INPUT_MAX_LENGTH,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': '粘贴战术板代码，例如：[stgy:a0+k-wvpr...]',
+        }),
+    )
+    description = forms.CharField(
+        label='描述',
+        required=False,
+        max_length=RICH_TEXT_MAX_LENGTH,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '添加描述（可选）'}),
+    )
+
     class Meta:
         model = Share
         fields = ['title', 'strategy_code', 'description', 'category', 'visibility', 'is_spoiler', 'is_nsfw', 'is_original']
@@ -85,10 +125,19 @@ class ShareForm(forms.ModelForm):
             'is_nsfw': '可能令人不适',
             'is_original': '我是原创作者',
         }
+    def clean_strategy_code(self):
+        return normalize_strategy_code(self.cleaned_data['strategy_code'])
 
 
 class UserProfileForm(forms.ModelForm):
     """用户资料编辑表单"""
+    bio = forms.CharField(
+        label='个人简介',
+        required=False,
+        max_length=PROFILE_BIO_MAX_LENGTH,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '介绍一下自己（可选）'}),
+    )
+
     class Meta:
         model = UserProfile
         fields = ['nickname', 'bio', 'home_feed_mode']

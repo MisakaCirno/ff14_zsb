@@ -12,6 +12,7 @@ from django.template.loader import render_to_string
 from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog, SiteMessage
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm, AdminReviewRejectForm, ReportResolutionForm
 from .services.messages import send_site_message
+from .validation import SEARCH_QUERY_MAX_LENGTH
 from io import BytesIO
 import base64
 
@@ -588,6 +589,10 @@ def search(request):
     query = request.GET.get('q', '').strip()
     
     if not query:
+        return redirect('index')
+
+    if len(query) > SEARCH_QUERY_MAX_LENGTH:
+        messages.error(request, f'搜索内容不能超过 {SEARCH_QUERY_MAX_LENGTH} 个字符。')
         return redirect('index')
         
     # 优先匹配 share_id (不再限制长度，兼容不同版本的ID格式)
