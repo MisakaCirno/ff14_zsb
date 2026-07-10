@@ -6,7 +6,7 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.http import Http404, JsonResponse, HttpResponse
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q, Count, Prefetch, Max, Exists, OuterRef, F
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -765,10 +765,30 @@ def report_share(request, share_id):
                 status=429,
             )
         if form.is_valid():
+            existing_report = Report.objects.filter(
+                share=share,
+                reporter=request.user,
+                status=Report.Status.PENDING,
+            ).exists()
+            if existing_report:
+                messages.warning(request, '你已经提交过待处理的举报，请等待管理员处理。')
+                return redirect('share_detail', share_id=share_id)
+
             report = form.save(commit=False)
             report.share = share
             report.reporter = request.user
-            report.save()
+            try:
+                with transaction.atomic():
+                    report.save()
+            except IntegrityError:
+                if Report.objects.filter(
+                    share=share,
+                    reporter=request.user,
+                    status=Report.Status.PENDING,
+                ).exists():
+                    messages.warning(request, '你已经提交过待处理的举报，请等待管理员处理。')
+                    return redirect('share_detail', share_id=share_id)
+                raise
             messages.success(request, '举报已提交，管理员将尽快处理。')
             return redirect('share_detail', share_id=share_id)
     else:

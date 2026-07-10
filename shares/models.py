@@ -26,6 +26,15 @@ class UserProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 
     class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(home_feed_mode__in=[
+                    'paginated',
+                    'infinite',
+                ]),
+                name='profile_feed_mode_valid',
+            ),
+        ]
         verbose_name = '用户资料'
         verbose_name_plural = '用户资料'
 
@@ -53,7 +62,7 @@ def save_user_profile(sender, instance, **kwargs):
 
 class Share(models.Model):
     """战术板分享模型"""
-    share_id = models.CharField(max_length=21, unique=True, editable=False, db_index=True)
+    share_id = models.CharField(max_length=21, unique=True, editable=False)
     title = models.CharField(max_length=200, verbose_name='标题')
     strategy_code = models.TextField(verbose_name='战术板代码')
     description = models.TextField(blank=True, verbose_name='描述')
@@ -110,6 +119,66 @@ class Share(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['visibility', 'status', '-created_at'],
+                name='share_feed_idx',
+            ),
+            models.Index(
+                fields=['author', '-created_at'],
+                name='share_author_idx',
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(category__in=[
+                    'entertainment',
+                    'combat',
+                ]),
+                name='share_category_valid',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(visibility__in=[
+                    'public',
+                    'unlisted',
+                    'private',
+                ]),
+                name='share_visibility_valid',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(status__in=[
+                    'pending',
+                    'approved',
+                    'rejected',
+                ]),
+                name='share_status_valid',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(views__gte=0),
+                name='share_views_nonnegative',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(copies__gte=0),
+                name='share_copies_nonnegative',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(status='pending')
+                    | (
+                        models.Q(reviewed_at__isnull=True)
+                        & models.Q(reviewed_by__isnull=True)
+                    )
+                ),
+                name='share_pending_unreviewed',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(reviewed_at__isnull=False)
+                    | models.Q(reviewed_by__isnull=True)
+                ),
+                name='share_reviewer_has_time',
+            ),
+        ]
         verbose_name = '战术板分享'
         verbose_name_plural = '战术板分享'
 
@@ -186,6 +255,49 @@ class Report(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['status', 'share', '-created_at'],
+                name='report_queue_idx',
+            ),
+            models.Index(
+                fields=['reporter', '-created_at'],
+                name='report_reporter_idx',
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(status__in=[
+                    'pending',
+                    'resolved',
+                    'dismissed',
+                ]),
+                name='report_status_valid',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(status='pending')
+                    | (
+                        models.Q(resolved_at__isnull=True)
+                        & models.Q(resolved_by__isnull=True)
+                        & models.Q(resolution_reason='')
+                    )
+                ),
+                name='report_pending_unresolved',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(status='pending')
+                    | models.Q(resolved_at__isnull=False)
+                ),
+                name='report_finished_has_time',
+            ),
+            models.UniqueConstraint(
+                fields=['share', 'reporter'],
+                condition=models.Q(status='pending'),
+                name='report_one_pending',
+            ),
+        ]
         verbose_name = '举报'
         verbose_name_plural = '举报'
 
@@ -217,6 +329,10 @@ class SiteMessage(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['recipient', 'read_at', '-created_at']),
+            models.Index(
+                fields=['recipient', 'archived_at', '-created_at'],
+                name='message_inbox_idx',
+            ),
         ]
         verbose_name = '站内信'
         verbose_name_plural = '站内信'
@@ -239,6 +355,12 @@ class Announcement(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['is_active', '-created_at'],
+                name='announcement_active_idx',
+            ),
+        ]
         verbose_name = '站点动态'
         verbose_name_plural = '站点动态'
 
@@ -264,6 +386,12 @@ class Collection(models.Model):
 
     class Meta:
         ordering = ['-updated_at']
+        indexes = [
+            models.Index(
+                fields=['author', 'is_public', '-updated_at'],
+                name='collection_author_idx',
+            ),
+        ]
         verbose_name = '合集'
         verbose_name_plural = '合集'
 
@@ -280,9 +408,24 @@ class CollectionItem(models.Model):
 
     class Meta:
         ordering = ['order', 'added_at']
+        indexes = [
+            models.Index(
+                fields=['collection', 'order', 'added_at'],
+                name='collection_item_order_idx',
+            ),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['collection', 'share'],
+                name='collection_share_unique',
+            ),
+            models.UniqueConstraint(
+                fields=['collection', 'order'],
+                name='collection_order_unique',
+            ),
+        ]
         verbose_name = '合集项'
         verbose_name_plural = '合集项'
-        unique_together = ('collection', 'share')
 
 
 class ShareLog(models.Model):
@@ -307,6 +450,16 @@ class ShareLog(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['share', '-created_at'],
+                name='share_log_share_idx',
+            ),
+            models.Index(
+                fields=['user', '-created_at'],
+                name='share_log_user_idx',
+            ),
+        ]
         verbose_name = '操作日志'
         verbose_name_plural = '操作日志'
 
