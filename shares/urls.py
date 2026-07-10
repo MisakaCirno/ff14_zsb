@@ -1,6 +1,6 @@
 from django.urls import path, re_path
 from . import views
-from .web import accounts, messages as message_views
+from .web import accounts, api, collections, interactions, messages as message_views
 
 urlpatterns = [
     # 主页
@@ -49,18 +49,18 @@ urlpatterns = [
     path('staff/reports/share/<str:share_id>/<str:action>/', views.admin_resolve_share_reports, name='admin_resolve_share_reports'),
     
     # 合集相关
-    path('collections/create/', views.create_collection, name='create_collection'),
-    path('collections/<int:collection_id>/', views.collection_detail, name='collection_detail'),
-    path('collections/<int:collection_id>/edit/', views.edit_collection, name='edit_collection'),
-    path('collections/<int:collection_id>/delete/', views.delete_collection, name='delete_collection'),
-    path('share/<str:share_id>/add-to-collection/', views.add_share_to_collection, name='add_share_to_collection'),
-    path('share/<str:share_id>/like/', views.toggle_like, name='toggle_like'),
-    path('share/<str:share_id>/favorite/', views.toggle_favorite, name='toggle_favorite'),
-    path('share/<str:share_id>/view/', views.record_view, name='record_view'),
-    path('share/<str:share_id>/copy/', views.record_copy, name='record_copy'),
-    path('collections/<int:collection_id>/remove-share/<str:share_id>/', views.remove_share_from_collection, name='remove_share_from_collection'),
+    path('collections/create/', collections.create_collection, name='create_collection'),
+    path('collections/<int:collection_id>/', collections.collection_detail, name='collection_detail'),
+    path('collections/<int:collection_id>/edit/', collections.edit_collection, name='edit_collection'),
+    path('collections/<int:collection_id>/delete/', collections.delete_collection, name='delete_collection'),
+    path('share/<str:share_id>/add-to-collection/', collections.add_share_to_collection, name='add_share_to_collection'),
+    path('share/<str:share_id>/like/', interactions.toggle_like, name='toggle_like'),
+    path('share/<str:share_id>/favorite/', interactions.toggle_favorite, name='toggle_favorite'),
+    path('share/<str:share_id>/view/', interactions.record_view, name='record_view'),
+    path('share/<str:share_id>/copy/', interactions.record_copy, name='record_copy'),
+    path('collections/<int:collection_id>/remove-share/<str:share_id>/', collections.remove_share_from_collection, name='remove_share_from_collection'),
     
     # API
-    path('api/share/<str:share_id>/code/', views.get_share_code, name='get_share_code'),
-    path('api/collection/<int:collection_id>/codes/', views.get_collection_codes, name='get_collection_codes'),
+    path('api/share/<str:share_id>/code/', api.get_share_code, name='get_share_code'),
+    path('api/collection/<int:collection_id>/codes/', api.get_collection_codes, name='get_collection_codes'),
 ]
