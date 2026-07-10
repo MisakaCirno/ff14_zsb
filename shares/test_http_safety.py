@@ -42,6 +42,7 @@ class SafeMethodContractTests(TestCase):
             reverse('record_copy', args=[self.share.share_id]),
             reverse('toggle_like', args=[self.share.share_id]),
             reverse('toggle_favorite', args=[self.share.share_id]),
+            reverse('add_share_to_collection', args=[self.share.share_id]),
             reverse('logout'),
             reverse('toggle_announcement_visibility', args=[self.announcement.pk]),
             reverse('open_site_message', args=[self.message.pk]),

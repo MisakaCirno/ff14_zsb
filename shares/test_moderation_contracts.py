@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -47,6 +49,14 @@ class ModerationWorkflowContractTests(TestCase):
             action=ShareLog.ActionType.REVIEW_APPROVE,
         ).exists())
 
+        self.client.post(reverse('admin_approve_share', args=[share.share_id]))
+
+        self.assertEqual(ShareLog.objects.filter(
+            share=share,
+            user=self.admin,
+            action=ShareLog.ActionType.REVIEW_APPROVE,
+        ).count(), 1)
+
     def test_resolving_report_takes_share_down_and_notifies_both_sides(self):
         share = self.create_share()
         report = self.create_report(share)
@@ -76,6 +86,22 @@ class ModerationWorkflowContractTests(TestCase):
             related_report=report,
         ).exists())
 
+        log_count = ShareLog.objects.filter(
+            share=share,
+            action=ShareLog.ActionType.REPORT_HANDLE,
+        ).count()
+        message_count = SiteMessage.objects.filter(related_report=report).count()
+        self.client.post(
+            reverse('admin_resolve_report', args=[report.id, 'resolve']),
+            {'reason': '重复提交不应再次处理'},
+        )
+
+        self.assertEqual(ShareLog.objects.filter(
+            share=share,
+            action=ShareLog.ActionType.REPORT_HANDLE,
+        ).count(), log_count)
+        self.assertEqual(SiteMessage.objects.filter(related_report=report).count(), message_count)
+
     def test_batch_dismiss_marks_all_pending_reports_and_notifies_reporters(self):
         share = self.create_share()
         first_report = self.create_report(share)
@@ -100,6 +126,115 @@ class ModerationWorkflowContractTests(TestCase):
             SiteMessage.objects.filter(message_type=SiteMessage.MessageType.REPORT_DISMISSED).count(),
             2,
         )
+
+        self.client.post(
+            reverse('admin_resolve_share_reports', args=[share.share_id, 'dismiss']),
+            {'reason': '重复提交不应再次处理'},
+        )
+
+        self.assertEqual(
+            ShareLog.objects.filter(
+                share=share,
+                action=ShareLog.ActionType.REPORT_HANDLE,
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            SiteMessage.objects.filter(message_type=SiteMessage.MessageType.REPORT_DISMISSED).count(),
+            2,
+        )
+
+    def test_approve_rolls_back_when_audit_log_fails(self):
+        share = self.create_share(status=Share.Status.PENDING)
+        self.client.force_login(self.admin)
+
+        with patch('shares.views.log_share_action', side_effect=RuntimeError('log failed')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse('admin_approve_share', args=[share.share_id]))
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, Share.Status.PENDING)
+        self.assertIsNone(share.reviewed_at)
+        self.assertFalse(ShareLog.objects.filter(share=share).exists())
+
+    def test_reject_is_idempotent(self):
+        share = self.create_share(status=Share.Status.PENDING)
+        self.client.force_login(self.admin)
+        url = reverse('admin_reject_share', args=[share.share_id])
+
+        self.client.post(url, {'reason': '需要修改'})
+        self.client.post(url, {'reason': '重复提交'})
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, Share.Status.REJECTED)
+        self.assertEqual(share.review_feedback, '需要修改')
+        self.assertEqual(ShareLog.objects.filter(
+            share=share,
+            action=ShareLog.ActionType.REVIEW_REJECT,
+        ).count(), 1)
+        self.assertEqual(SiteMessage.objects.filter(
+            related_share=share,
+            message_type=SiteMessage.MessageType.SHARE_REJECTED,
+        ).count(), 1)
+
+    def test_reject_rolls_back_when_notification_fails(self):
+        share = self.create_share(status=Share.Status.PENDING)
+        self.client.force_login(self.admin)
+
+        with patch('shares.views.send_site_message', side_effect=RuntimeError('message failed')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse('admin_reject_share', args=[share.share_id]),
+                    {'reason': '需要修改'},
+                )
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, Share.Status.PENDING)
+        self.assertEqual(share.visibility, Share.Visibility.PUBLIC)
+        self.assertFalse(ShareLog.objects.filter(share=share).exists())
+        self.assertFalse(SiteMessage.objects.filter(related_share=share).exists())
+
+    def test_report_resolution_rolls_back_when_notification_fails(self):
+        share = self.create_share()
+        report = self.create_report(share)
+        self.client.force_login(self.admin)
+
+        with patch('shares.views.send_site_message', side_effect=RuntimeError('message failed')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse('admin_resolve_report', args=[report.id, 'resolve']),
+                    {'reason': '确认违规'},
+                )
+
+        share.refresh_from_db()
+        report.refresh_from_db()
+        self.assertEqual(share.visibility, Share.Visibility.PUBLIC)
+        self.assertEqual(report.status, Report.Status.PENDING)
+        self.assertIsNone(report.resolved_at)
+        self.assertFalse(ShareLog.objects.filter(share=share).exists())
+        self.assertFalse(SiteMessage.objects.filter(related_report=report).exists())
+
+    def test_batch_resolution_rolls_back_when_notification_fails(self):
+        share = self.create_share()
+        first_report = self.create_report(share)
+        second_report = self.create_report(share, reporter=self.second_reporter)
+        self.client.force_login(self.admin)
+
+        with patch('shares.views.send_site_message', side_effect=RuntimeError('message failed')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(
+                    reverse('admin_resolve_share_reports', args=[share.share_id, 'resolve']),
+                    {'reason': '确认违规'},
+                )
+
+        share.refresh_from_db()
+        self.assertEqual(share.visibility, Share.Visibility.PUBLIC)
+        for report in (first_report, second_report):
+            report.refresh_from_db()
+            self.assertEqual(report.status, Report.Status.PENDING)
+            self.assertIsNone(report.resolved_at)
+        self.assertFalse(ShareLog.objects.filter(share=share).exists())
+        self.assertFalse(SiteMessage.objects.filter(related_share=share).exists())
 
     def test_non_staff_user_cannot_open_moderation_queue(self):
         self.client.force_login(self.regular_user)
@@ -166,3 +301,13 @@ class AnnouncementVisibilityContractTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.active.title)
         self.assertContains(response, self.inactive.title)
+
+    def test_setting_visibility_is_idempotent(self):
+        self.client.force_login(self.admin)
+        url = reverse('toggle_announcement_visibility', args=[self.active.id])
+
+        self.client.post(url, {'is_active': '0'})
+        self.client.post(url, {'is_active': '0'})
+
+        self.active.refresh_from_db()
+        self.assertFalse(self.active.is_active)
