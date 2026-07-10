@@ -79,17 +79,18 @@ FFXIVShare/
 │       └── embed.html   # 战术板预览页面
 ├── venv/                # Python 虚拟环境
 ├── manage.py            # Django 管理脚本
-├── requirements.txt     # 依赖包列表
+├── requirements.txt     # 运行时依赖
+├── requirements-dev.txt # 开发维护工具依赖
 └── db.sqlite3           # SQLite 数据库
 ```
 
 ## 技术栈
 
-- **后端**: Django 4.2.8
+- **后端**: Django 5.2.16 LTS
 - **数据库**: SQLite3
 - **前端**: Bootstrap 5.3 + Vue 3
-- **短链接**: nanoid
-- **二维码**: qrcode + Pillow
+- **短链接**: 应用内生成的 8 位分享 ID
+- **二维码**: 浏览器端 qrcodejs2
 
 ## 常用命令
 

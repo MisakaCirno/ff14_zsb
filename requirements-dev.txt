@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Used by the image compression maintenance script.
+Pillow==10.1.0

@@ -89,9 +89,9 @@ python manage.py runserver
 ```
 
 ### 技术栈
-- 后端使用django实现，SQLite数据库
+- 后端使用Django 5.2 LTS实现，SQLite数据库
 - 前端使用bootstrap+vue3
-- 短链接使用nanoid
+- 短链接使用应用内生成的8位分享ID
 - 使用虚拟环境
 
 ## 📄 致谢
