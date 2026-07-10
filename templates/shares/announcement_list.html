@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load safe_content %}
 
 {% block title %}站点动态 - 粘鼠板儿{% endblock %}
 
@@ -35,7 +36,7 @@
                             {% endif %}
                         </div>
                     </div>
-                    <div class="mb-1 text-break announcement-content">{{ announcement.content|safe }}</div>
+                    <div class="mb-1 text-break announcement-content">{{ announcement.content|sanitize_html }}</div>
                 </div>
                 {% empty %}
                 <div class="list-group-item p-5 text-center text-muted">

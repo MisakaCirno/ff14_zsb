@@ -5,6 +5,8 @@ from django.dispatch import receiver
 from ckeditor.fields import RichTextField
 import random
 
+from .content_sanitizer import sanitize_rich_text
+
 
 class UserProfile(models.Model):
     """用户资料扩展模型"""
@@ -115,6 +117,9 @@ class Share(models.Model):
     def save(self, *args, **kwargs):
         if not self.share_id:
             self.share_id = self._generate_unique_id()
+        update_fields = kwargs.get('update_fields')
+        if update_fields is None or 'description' in update_fields:
+            self.description = sanitize_rich_text(self.description)
         super().save(*args, **kwargs)
 
     def _generate_unique_id(self):
@@ -240,6 +245,12 @@ class Announcement(models.Model):
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if update_fields is None or 'content' in update_fields:
+            self.content = sanitize_rich_text(self.content)
+        super().save(*args, **kwargs)
 
 
 class Collection(models.Model):
