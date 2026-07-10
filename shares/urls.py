@@ -4,6 +4,7 @@ from . import views
 urlpatterns = [
     # 主页
     path('', views.index, name='index'),
+    path('preferences/feed-mode/', views.set_home_feed_mode, name='set_home_feed_mode'),
     
     # 分享相关
     re_path(r'^s/(?P<share_id>[^/]+)(?:/.*)?$', views.share_detail, name='share_detail'),
@@ -24,6 +25,7 @@ urlpatterns = [
     path('profile/password/', views.password_change, name='password_change'),
     path('messages/', views.site_message_list, name='site_message_list'),
     path('messages/mark-all-read/', views.mark_all_site_messages_read, name='mark_all_site_messages_read'),
+    path('messages/<int:message_id>/open/', views.open_site_message, name='open_site_message'),
     path('messages/<int:message_id>/', views.site_message_detail, name='site_message_detail'),
     
     # 其他
@@ -53,6 +55,7 @@ urlpatterns = [
     path('share/<str:share_id>/add-to-collection/', views.add_share_to_collection, name='add_share_to_collection'),
     path('share/<str:share_id>/like/', views.toggle_like, name='toggle_like'),
     path('share/<str:share_id>/favorite/', views.toggle_favorite, name='toggle_favorite'),
+    path('share/<str:share_id>/view/', views.record_view, name='record_view'),
     path('share/<str:share_id>/copy/', views.record_copy, name='record_copy'),
     path('collections/<int:collection_id>/remove-share/<str:share_id>/', views.remove_share_from_collection, name='remove_share_from_collection'),
     

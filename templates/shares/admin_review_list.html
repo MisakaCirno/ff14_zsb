@@ -150,9 +150,12 @@
                             <i class="bi bi-eye"></i> 查看详情
                         </a>
                         <div class="btn-group" role="group">
-                            <a href="{% url 'admin_approve_share' share.share_id %}" class="btn btn-sm btn-success">
-                                <i class="bi bi-check-circle"></i> 通过
-                            </a>
+                            <form method="post" action="{% url 'admin_approve_share' share.share_id %}" class="d-inline-flex">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-success">
+                                    <i class="bi bi-check-circle"></i> 通过
+                                </button>
+                            </form>
                             <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal{{ share.share_id }}">
                                 <i class="bi bi-x-circle"></i> 拒绝
                             </button>

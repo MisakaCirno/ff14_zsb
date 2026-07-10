@@ -26,13 +26,16 @@
                                 <i class="bi bi-clock"></i> {{ announcement.created_at|date:"Y-m-d H:i" }}
                             </small>
                             {% if user.is_staff or user.is_superuser %}
-                            <a href="{% url 'toggle_announcement_visibility' announcement.id %}" class="btn btn-sm {% if announcement.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
+                            <form method="post" action="{% url 'toggle_announcement_visibility' announcement.id %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm {% if announcement.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
                                 {% if announcement.is_active %}
                                 <i class="bi bi-eye-slash"></i> 隐藏
                                 {% else %}
                                 <i class="bi bi-eye"></i> 显示
                                 {% endif %}
-                            </a>
+                                </button>
+                            </form>
                             {% endif %}
                         </div>
                     </div>

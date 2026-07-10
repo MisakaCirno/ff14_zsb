@@ -25,15 +25,31 @@ class HomeFeedModeTests(TestCase):
         self.assertContains(response, '瀑布')
         self.assertContains(response, 'id="infinite-scroll-sentinel"')
 
-    def test_authenticated_feed_mode_choice_is_saved(self):
+    def test_get_feed_mode_choice_does_not_mutate_profile(self):
         self.client.login(username='alice', password='password123')
+        self.user.profile.home_feed_mode = UserProfile.HomeFeedMode.PAGINATED
+        self.user.profile.save(update_fields=['home_feed_mode'])
 
         response = self.client.get(reverse('index'), {'feed': UserProfile.HomeFeedMode.INFINITE})
 
         self.assertEqual(response.status_code, 200)
         self.user.profile.refresh_from_db()
-        self.assertEqual(self.user.profile.home_feed_mode, UserProfile.HomeFeedMode.INFINITE)
+        self.assertEqual(self.user.profile.home_feed_mode, UserProfile.HomeFeedMode.PAGINATED)
         self.assertContains(response, 'id="infinite-scroll-sentinel"')
+
+    def test_post_feed_mode_choice_is_saved(self):
+        self.client.login(username='alice', password='password123')
+        self.user.profile.home_feed_mode = UserProfile.HomeFeedMode.PAGINATED
+        self.user.profile.save(update_fields=['home_feed_mode'])
+
+        response = self.client.post(reverse('set_home_feed_mode'), {
+            'feed': UserProfile.HomeFeedMode.INFINITE,
+            'next': '/?feed=infinite',
+        })
+
+        self.assertRedirects(response, '/?feed=infinite')
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.home_feed_mode, UserProfile.HomeFeedMode.INFINITE)
 
     def test_share_partial_returns_next_page_cards(self):
         response = self.client.get(reverse('index'), {
@@ -111,7 +127,7 @@ class SiteMessageWorkflowTests(TestCase):
         self.assertEqual(message.related_report, report)
         self.assertIn('核查后暂未发现违规内容', message.content)
 
-    def test_opening_site_message_marks_it_read(self):
+    def test_site_message_is_only_marked_read_by_post_open_action(self):
         message = SiteMessage.objects.create(
             recipient=self.author,
             sender=self.admin,
@@ -121,8 +137,14 @@ class SiteMessageWorkflowTests(TestCase):
         )
 
         self.client.login(username='author', password='password123')
-        response = self.client.get(reverse('site_message_detail', args=[message.id]))
+        detail_response = self.client.get(reverse('site_message_detail', args=[message.id]))
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(detail_response.status_code, 200)
+        message.refresh_from_db()
+        self.assertIsNone(message.read_at)
+
+        response = self.client.post(reverse('open_site_message', args=[message.id]))
+
+        self.assertRedirects(response, reverse('site_message_detail', args=[message.id]))
         message.refresh_from_db()
         self.assertIsNotNone(message.read_at)

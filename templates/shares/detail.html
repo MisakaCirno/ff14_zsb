@@ -215,7 +215,7 @@
                         <div class="d-flex justify-content-between mb-1">
                             <span><i class="bi bi-calendar3"></i> {{ share.created_at|date:"Y-m-d" }}</span>
                             <span>
-                                <i class="bi bi-eye"></i> {{ share.views }} 浏览
+                                <i class="bi bi-eye"></i> <span id="views-count">{{ share.views }}</span> 浏览
                                 <span class="ms-2"><i class="bi bi-clipboard"></i> <span id="copies-count">{{ share.copies }}</span> 复制</span>
                             </span>
                         </div>
@@ -954,6 +954,21 @@ function toggleFavorite() {
     document.addEventListener('DOMContentLoaded', function() {
         // Set share URL from window location (excluding query parameters)
         document.getElementById('shareUrl').value = window.location.origin + window.location.pathname;
+
+        fetch('{% url "record_view" share.share_id %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            credentials: 'same-origin'
+        })
+        .then(response => response.ok ? response.json() : null)
+        .then(data => {
+            if (data) {
+                document.getElementById('views-count').textContent = data.views_count;
+            }
+        })
+        .catch(error => console.error('Failed to record view:', error));
 
         // Save visit history
         const shareId = "{{ share.share_id|escapejs }}";

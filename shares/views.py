@@ -8,7 +8,9 @@ from django.core.paginator import Paginator
 from django.http import Http404, JsonResponse, HttpResponse
 from django.db.models import Q, Count, Prefetch, Max, Exists, OuterRef, F
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.template.loader import render_to_string
+from django.views.decorators.http import require_POST
 from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog, SiteMessage
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm, AdminReviewRejectForm, ReportResolutionForm
 from .services.messages import send_site_message
@@ -68,23 +70,43 @@ def annotate_share_cards(shares_list, user):
 
 
 def get_home_feed_mode(request):
-    """读取并保存主页浏览模式，登录用户存资料，未登录用户存 session。"""
+    """Read the requested or persisted home-feed mode without mutating state."""
     requested_mode = request.GET.get('feed')
     if requested_mode in HOME_FEED_MODES:
-        if request.user.is_authenticated:
-            profile, _ = UserProfile.objects.get_or_create(user=request.user)
-            if profile.home_feed_mode != requested_mode:
-                profile.home_feed_mode = requested_mode
-                profile.save(update_fields=['home_feed_mode', 'updated_at'])
-        else:
-            request.session['home_feed_mode'] = requested_mode
         return requested_mode
 
     if request.user.is_authenticated:
-        profile, _ = UserProfile.objects.get_or_create(user=request.user)
-        return profile.home_feed_mode
+        try:
+            return request.user.profile.home_feed_mode
+        except UserProfile.DoesNotExist:
+            return UserProfile.HomeFeedMode.INFINITE
 
     return request.session.get('home_feed_mode', UserProfile.HomeFeedMode.INFINITE)
+
+
+@require_POST
+def set_home_feed_mode(request):
+    requested_mode = request.POST.get('feed')
+    if requested_mode not in HOME_FEED_MODES:
+        messages.error(request, '无效的浏览模式。')
+        return redirect('index')
+
+    if request.user.is_authenticated:
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        if profile.home_feed_mode != requested_mode:
+            profile.home_feed_mode = requested_mode
+            profile.save(update_fields=['home_feed_mode', 'updated_at'])
+    else:
+        request.session['home_feed_mode'] = requested_mode
+
+    next_url = request.POST.get('next')
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+    return redirect('index')
 
 
 def build_query_string(request, **updates):
@@ -185,6 +207,7 @@ def announcement_list(request):
 
 
 @user_passes_test(is_admin)
+@require_POST
 def toggle_announcement_visibility(request, announcement_id):
     """切换站点动态可见性"""
     announcement = get_object_or_404(Announcement, id=announcement_id)
@@ -205,23 +228,6 @@ def share_detail(request, share_id):
     if not can_view_share(request.user, share):
         messages.error(request, '该分享不存在或您没有权限访问')
         return redirect('index')
-    
-    # 精准浏览量统计：使用Cookie防止重复计数
-    # Cookie名称：viewed_shares，存储已浏览的分享ID列表
-    viewed_shares = request.COOKIES.get('viewed_shares', '')
-    viewed_list = viewed_shares.split(',') if viewed_shares else []
-    
-    # 如果该分享未被当前访客浏览过，则增加浏览量
-    if share_id not in viewed_list:
-        view_limit = consume_rate_limit('view_counter_ip', f'ip:{get_client_ip(request)}')
-        if view_limit.allowed:
-            Share.objects.filter(share_id=share_id).update(views=F('views') + 1)
-            share.refresh_from_db()
-            # 将该分享ID添加到已浏览列表
-            viewed_list.append(share_id)
-            # 限制Cookie大小，最多保留最近100个浏览记录
-            if len(viewed_list) > 100:
-                viewed_list = viewed_list[-100:]
     
     # 获取该分享所属的合集（仅显示公开的，或者作者自己的）
     related_collections = Collection.objects.filter(
@@ -250,7 +256,7 @@ def share_detail(request, share_id):
         is_liked = share.likes.filter(id=request.user.id).exists()
         is_favorited = share.favorites.filter(id=request.user.id).exists()
 
-    response = render(request, 'shares/detail.html', {
+    return render(request, 'shares/detail.html', {
         'share': share,
         'related_collections': related_collections,
         'user_collections': user_collections,
@@ -258,16 +264,6 @@ def share_detail(request, share_id):
         'is_liked': is_liked,
         'is_favorited': is_favorited,
     })
-
-    response.set_cookie(
-        'viewed_shares',
-        ','.join(viewed_list),
-        max_age=30*24*60*60,  # 30天
-        httponly=True,  # 防止JavaScript访问
-        samesite='Lax'  # CSRF保护
-    )
-    
-    return response
 
 
 def create_share(request):
@@ -496,6 +492,7 @@ def user_login(request):
     return render(request, 'shares/login.html', {'form': form})
 
 
+@require_POST
 def user_logout(request):
     """用户登出"""
     logout(request)
@@ -506,15 +503,18 @@ def user_logout(request):
 @login_required
 def profile_edit(request):
     """编辑个人资料"""
-    profile, created = UserProfile.objects.get_or_create(user=request.user)
-    
     if request.method == 'POST':
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
         form = UserProfileForm(request.POST, instance=profile)
         if form.is_valid():
             form.save()
             messages.success(request, '个人资料更新成功！')
             return redirect('profile_edit')
     else:
+        try:
+            profile = request.user.profile
+        except UserProfile.DoesNotExist:
+            profile = UserProfile(user=request.user)
         form = UserProfileForm(instance=profile)
     
     return render(request, 'shares/profile_edit.html', {'form': form, 'profile': profile})
@@ -562,21 +562,29 @@ def site_message_detail(request, message_id):
         recipient=request.user,
     )
 
-    if site_message.read_at is None:
-        site_message.read_at = timezone.now()
-        site_message.save(update_fields=['read_at'])
-
     return render(request, 'shares/site_message_detail.html', {
         'site_message': site_message,
     })
 
 
 @login_required
+@require_POST
+def open_site_message(request, message_id):
+    site_message = get_object_or_404(
+        SiteMessage,
+        id=message_id,
+        recipient=request.user,
+    )
+    if site_message.read_at is None:
+        site_message.read_at = timezone.now()
+        site_message.save(update_fields=['read_at'])
+    return redirect('site_message_detail', message_id=site_message.id)
+
+
+@login_required
+@require_POST
 def mark_all_site_messages_read(request):
     """标记全部站内信为已读"""
-    if request.method != 'POST':
-        return redirect('site_message_list')
-
     updated = SiteMessage.objects.filter(
         recipient=request.user,
         read_at__isnull=True,
@@ -660,6 +668,7 @@ def admin_review_list(request):
 
 
 @user_passes_test(is_admin)
+@require_POST
 def admin_approve_share(request, share_id):
     """管理员通过审核"""
     share = get_object_or_404(Share, share_id=share_id)
@@ -674,13 +683,10 @@ def admin_approve_share(request, share_id):
 
 
 @user_passes_test(is_admin)
+@require_POST
 def admin_reject_share(request, share_id):
     """管理员拒绝审核"""
     share = get_object_or_404(Share, share_id=share_id)
-    if request.method != 'POST':
-        messages.error(request, '请填写拒绝原因后再提交审核结果')
-        return redirect('admin_review_list')
-
     form = AdminReviewRejectForm(request.POST)
     if not form.is_valid():
         messages.error(request, '拒绝原因不能为空')
@@ -762,13 +768,10 @@ def admin_report_list(request):
 
 
 @user_passes_test(is_admin)
+@require_POST
 def admin_resolve_report(request, report_id, action):
     """管理员处理单条举报"""
     report = get_object_or_404(Report, id=report_id)
-    if request.method != 'POST':
-        messages.error(request, '请填写处理说明后再处理举报')
-        return redirect('admin_report_list')
-
     form = ReportResolutionForm(request.POST)
     if not form.is_valid():
         messages.error(request, '处理说明不能为空')
@@ -833,6 +836,7 @@ def admin_resolve_report(request, report_id, action):
 
 
 @user_passes_test(is_admin)
+@require_POST
 def admin_resolve_share_reports(request, share_id, action):
     """批量处理某分享的所有待处理举报"""
     share = get_object_or_404(Share, share_id=share_id)
@@ -840,10 +844,6 @@ def admin_resolve_share_reports(request, share_id, action):
     
     if not pending_reports.exists():
         messages.warning(request, '该分享没有待处理的举报')
-        return redirect('admin_report_list')
-
-    if request.method != 'POST':
-        messages.error(request, '请填写处理说明后再处理举报')
         return redirect('admin_report_list')
 
     form = ReportResolutionForm(request.POST)
@@ -993,7 +993,11 @@ def create_collection(request):
             
             # 支持 next 参数重定向
             next_url = request.GET.get('next')
-            if next_url:
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
                 return redirect(next_url)
                 
             return redirect('my_shares')  # 或者跳转到合集详情页
@@ -1084,6 +1088,7 @@ def add_share_to_collection(request, share_id):
 
 
 @login_required
+@require_POST
 def remove_share_from_collection(request, collection_id, share_id):
     """从合集移除分享"""
     collection = get_object_or_404(Collection, id=collection_id, author=request.user)
@@ -1115,11 +1120,42 @@ def get_share_code(request, share_id):
     return JsonResponse(data, safe=False)
 
 
+@require_POST
+def record_view(request, share_id):
+    """记录一次分享浏览；Cookie 用于避免同一访客重复计数。"""
+    share = get_object_or_404(Share, share_id=share_id)
+    if not can_view_share(request.user, share):
+        return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
+
+    viewed_shares = request.COOKIES.get('viewed_shares', '')
+    viewed_list = viewed_shares.split(',') if viewed_shares else []
+
+    if share_id not in viewed_list:
+        view_limit = consume_rate_limit('view_counter_ip', f'ip:{get_client_ip(request)}')
+        if view_limit.allowed:
+            Share.objects.filter(share_id=share_id).update(views=F('views') + 1)
+            share.refresh_from_db()
+            viewed_list.append(share_id)
+            if len(viewed_list) > 100:
+                viewed_list = viewed_list[-100:]
+
+    response = JsonResponse({
+        'status': 'success',
+        'views_count': share.views,
+    })
+    response.set_cookie(
+        'viewed_shares',
+        ','.join(viewed_list),
+        max_age=30 * 24 * 60 * 60,
+        httponly=True,
+        samesite='Lax',
+    )
+    return response
+
+
+@require_POST
 def record_copy(request, share_id):
     """记录分享被复制的次数，使用Cookie防止重复计数"""
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=405)
-    
     share = get_object_or_404(Share, share_id=share_id)
     if not can_view_share(request.user, share):
         return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
@@ -1154,10 +1190,8 @@ def record_copy(request, share_id):
 
 
 @login_required
+@require_POST
 def toggle_like(request, share_id):
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=405)
-        
     share = get_object_or_404(Share, share_id=share_id)
     if not can_view_share(request.user, share):
         return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
@@ -1177,10 +1211,8 @@ def toggle_like(request, share_id):
 
 
 @login_required
+@require_POST
 def toggle_favorite(request, share_id):
-    if request.method != 'POST':
-        return JsonResponse({'status': 'error', 'message': 'Invalid method'}, status=405)
-        
     share = get_object_or_404(Share, share_id=share_id)
     if not can_view_share(request.user, share):
         return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)

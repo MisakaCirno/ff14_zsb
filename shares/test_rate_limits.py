@@ -141,8 +141,8 @@ class RateLimitedWorkflowTests(TestCase):
             status=Share.Status.APPROVED,
         )
 
-        self.client.get(reverse('share_detail', args=[self.share.share_id]))
-        second_view = self.client.get(reverse('share_detail', args=[other_share.share_id]))
+        self.client.post(reverse('record_view', args=[self.share.share_id]))
+        second_view = self.client.post(reverse('record_view', args=[other_share.share_id]))
         self.client.post(reverse('record_copy', args=[self.share.share_id]))
         second_copy = self.client.post(reverse('record_copy', args=[other_share.share_id]))
 

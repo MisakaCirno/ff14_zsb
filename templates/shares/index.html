@@ -119,12 +119,22 @@
                             </div>
 
                             <div class="btn-group" role="group" aria-label="主页浏览模式">
-                                <a href="?{{ paginated_query }}" class="btn btn-outline-secondary {% if feed_mode == 'paginated' %}active{% endif %}" title="使用分页浏览">
-                                    <i class="bi bi-layout-three-columns"></i> 分页
-                                </a>
-                                <a href="?{{ infinite_query }}" class="btn btn-outline-secondary {% if feed_mode == 'infinite' %}active{% endif %}" title="瀑布式自动加载">
-                                    <i class="bi bi-arrow-down-circle"></i> 瀑布
-                                </a>
+                                <form method="post" action="{% url 'set_home_feed_mode' %}" class="d-inline-flex">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="feed" value="paginated">
+                                    <input type="hidden" name="next" value="?{{ paginated_query }}">
+                                    <button type="submit" class="btn btn-outline-secondary rounded-end-0 {% if feed_mode == 'paginated' %}active{% endif %}" title="使用分页浏览">
+                                        <i class="bi bi-layout-three-columns"></i> 分页
+                                    </button>
+                                </form>
+                                <form method="post" action="{% url 'set_home_feed_mode' %}" class="d-inline-flex">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="feed" value="infinite">
+                                    <input type="hidden" name="next" value="?{{ infinite_query }}">
+                                    <button type="submit" class="btn btn-outline-secondary rounded-start-0 {% if feed_mode == 'infinite' %}active{% endif %}" title="瀑布式自动加载">
+                                        <i class="bi bi-arrow-down-circle"></i> 瀑布
+                                    </button>
+                                </form>
                             </div>
                         </div>
                     </div>
