@@ -1,5 +1,5 @@
-from .models import Share, Report, SiteMessage
-from django.db.models import Count, Q
+from .policies import is_moderator
+from .selectors import admin_task_counts, unread_site_message_count
 
 def admin_counts(request):
     """
@@ -8,23 +8,16 @@ def admin_counts(request):
     context = {}
 
     if request.user.is_authenticated:
-        unread_messages_count = SiteMessage.objects.filter(
-            recipient=request.user,
-            read_at__isnull=True,
-            archived_at__isnull=True,
-        ).count()
+        unread_messages_count = unread_site_message_count(request.user)
         context.update({
             'global_unread_site_messages_count': unread_messages_count,
             'has_user_notifications': unread_messages_count > 0,
         })
 
-    if request.user.is_authenticated and (request.user.is_staff or request.user.is_superuser):
-        pending_reviews_count = Share.objects.filter(status=Share.Status.PENDING).count()
-        
-        pending_reports_count = Share.objects.annotate(
-            pending_count=Count('reports', filter=Q(reports__status=Report.Status.PENDING))
-        ).filter(pending_count__gt=0).count()
-        
+    if is_moderator(request.user):
+        counts = admin_task_counts()
+        pending_reviews_count = counts['pending_reviews_count']
+        pending_reports_count = counts['pending_reports_count']
         context.update({
             'global_pending_reviews_count': pending_reviews_count,
             'global_pending_reports_count': pending_reports_count,

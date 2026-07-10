@@ -10,11 +10,18 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q, Count, Prefetch, Max, Exists, OuterRef, F
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.template.loader import render_to_string
 from django.views.decorators.http import require_POST
 from .models import Share, UserProfile, Report, Announcement, Collection, CollectionItem, ShareLog, SiteMessage
 from .forms import ShareForm, UserProfileForm, CustomPasswordChangeForm, ReportForm, CollectionForm, AdminReviewRejectForm, ReportResolutionForm
 from .services.messages import send_site_message
+from .services.audit import log_share_action
+from .selectors import admin_task_counts, annotate_share_cards
+from .presentation import (
+    HOME_FEED_MODES,
+    build_query_string,
+    get_home_feed_mode,
+    render_share_cards_response,
+)
 from .rate_limits import consume_rate_limit, get_client_ip, request_identity
 from .policies import (
     can_view_collection,
@@ -26,60 +33,6 @@ from .policies import (
 from .validation import SEARCH_QUERY_MAX_LENGTH
 from io import BytesIO
 import base64
-
-
-HOME_FEED_MODES = {
-    UserProfile.HomeFeedMode.PAGINATED,
-    UserProfile.HomeFeedMode.INFINITE,
-}
-
-
-def log_share_action(user, share, action_type, details=''):
-    """记录分享操作日志"""
-    if not user.is_authenticated:
-        return
-        
-    # 确保 share 是实例而不是 None (针对创建分享前的情况处理，需在创建后调用)
-    if not share:
-        return
-
-    return ShareLog.objects.create(
-        user=user,
-        share=share,
-        action=action_type,
-        details=details,
-    )
-
-
-def annotate_share_cards(shares_list, user):
-    """为首页卡片补齐统计和当前用户状态。"""
-    shares_list = shares_list.select_related('author', 'author__profile').annotate(
-        likes_count=Count('likes', distinct=True),
-        favorites_count=Count('favorites', distinct=True)
-    )
-
-    if user.is_authenticated:
-        shares_list = shares_list.annotate(
-            is_liked=Exists(Share.likes.through.objects.filter(share_id=OuterRef('pk'), user_id=user.id)),
-            is_favorited=Exists(Share.favorites.through.objects.filter(share_id=OuterRef('pk'), user_id=user.id))
-        )
-
-    return shares_list
-
-
-def get_home_feed_mode(request):
-    """Read the requested or persisted home-feed mode without mutating state."""
-    requested_mode = request.GET.get('feed')
-    if requested_mode in HOME_FEED_MODES:
-        return requested_mode
-
-    if request.user.is_authenticated:
-        try:
-            return request.user.profile.home_feed_mode
-        except UserProfile.DoesNotExist:
-            return UserProfile.HomeFeedMode.INFINITE
-
-    return request.session.get('home_feed_mode', UserProfile.HomeFeedMode.INFINITE)
 
 
 @require_POST
@@ -105,29 +58,6 @@ def set_home_feed_mode(request):
     ):
         return redirect(next_url)
     return redirect('index')
-
-
-def build_query_string(request, **updates):
-    params = request.GET.copy()
-    for key, value in updates.items():
-        if value is None:
-            params.pop(key, None)
-        else:
-            params[key] = value
-    return params.urlencode()
-
-
-def render_share_cards_response(request, shares):
-    html = render_to_string(
-        'shares/includes/share_cards.html',
-        {'shares': shares},
-        request=request
-    )
-    return JsonResponse({
-        'html': html,
-        'has_next': shares.has_next(),
-        'next_page': shares.next_page_number() if shares.has_next() else None,
-    })
 
 
 def index(request):
@@ -988,13 +918,8 @@ def admin_resolve_share_reports(request, share_id, action):
 
 
 def get_admin_counts():
-    """获取管理员待办事项计数"""
-    return {
-        'pending_reviews_count': Share.objects.filter(status=Share.Status.PENDING).count(),
-        'pending_reports_count': Share.objects.annotate(
-            pending_count=Count('reports', filter=Q(reports__status=Report.Status.PENDING))
-        ).filter(pending_count__gt=0).count()
-    }
+    """Compatibility alias while moderation views are being split."""
+    return admin_task_counts()
 
 
 @user_passes_test(is_admin)
