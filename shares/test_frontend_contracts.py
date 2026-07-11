@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from django.conf import settings
@@ -116,12 +117,55 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
     def test_base_template_has_no_classic_business_script(self):
         source = self.read_template('base.html')
+        main_source = self.read_frontend('main.ts')
 
         self.assertNotIn('vue.global.js', source)
         self.assertNotIn('function showMessage', source)
         self.assertNotIn('function updateHistoryDropdown', source)
         self.assertNotIn('onclick="copyQQGroup', source)
         self.assertNotIn('onclick="clearHistory', source)
+        self.assertNotIn('window.showMessage', main_source)
+        self.assertNotIn('window.fallbackCopyTextToClipboard', main_source)
+        self.assertNotIn('window.updateHistoryDropdown', main_source)
+
+    def test_main_templates_do_not_use_inline_event_handlers(self):
+        templates_root = Path(settings.BASE_DIR) / 'templates'
+
+        for template_path in templates_root.rglob('*.html'):
+            with self.subTest(template=template_path.relative_to(templates_root)):
+                source = template_path.read_text(encoding='utf-8')
+                self.assertNotRegex(
+                    source,
+                    re.compile(r'\son[a-z]+\s*=', re.IGNORECASE),
+                )
+
+    def test_common_template_events_use_data_contracts(self):
+        for template_path in (
+            'shares/includes/share_cards.html',
+            'shares/my_shares.html',
+            'shares/user_public_profile.html',
+        ):
+            with self.subTest(template=template_path):
+                source = self.read_template(template_path)
+                self.assertIn('data-preview-frame', source)
+                self.assertIn('data-preview-image', source)
+                self.assertIn('data-preview-loading', source)
+
+        self.assertIn(
+            'data-submit-on-change',
+            self.read_template('shares/index.html'),
+        )
+        self.assertIn(
+            'data-confirm-message',
+            self.read_template('shares/collection_detail.html'),
+        )
+        preview_source = self.read_frontend('features/preview-images.ts')
+        controls_source = self.read_frontend('features/form-controls.ts')
+        self.assertIn("image.addEventListener('load'", preview_source)
+        self.assertIn("image.addEventListener('error'", preview_source)
+        self.assertIn("document.addEventListener('htmx:load'", preview_source)
+        self.assertIn('form?.requestSubmit()', controls_source)
+        self.assertIn('window.confirm(message)', controls_source)
 
     def test_card_reaction_templates_do_not_use_inline_handlers(self):
         for template_path in (

@@ -2,7 +2,7 @@ import { showMessage } from './notify'
 
 type CopySuccess = () => void
 
-export function fallbackCopyTextToClipboard(
+function fallbackCopyTextToClipboard(
   text: string,
   onSuccess?: CopySuccess,
 ): void {

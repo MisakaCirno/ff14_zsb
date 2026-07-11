@@ -1,25 +1,22 @@
 import Alpine from 'alpinejs'
 import htmx from 'htmx.org'
 
-import { fallbackCopyTextToClipboard } from './core/clipboard'
 import { getCsrfToken } from './core/csrf'
-import { showMessage } from './core/notify'
 import { initializeAnnouncement } from './features/announcement'
+import { initializeFormControls } from './features/form-controls'
 import { initializeInfiniteScrollStatus } from './features/infinite-scroll'
+import { initializePreviewImages } from './features/preview-images'
 import { initializeShareActions } from './features/share-actions'
 import { initializeShareDetails } from './features/share-detail'
 import { initializeShareEditors } from './features/share-editor'
 import { initializeShareImages } from './features/share-image'
-import { initializeVisitHistory, updateHistoryDropdown } from './features/visit-history'
+import { initializeVisitHistory } from './features/visit-history'
 import './styles/main.css'
 
 declare global {
   interface Window {
     Alpine: typeof Alpine
-    fallbackCopyTextToClipboard: typeof fallbackCopyTextToClipboard
     htmx: typeof htmx
-    showMessage: typeof showMessage
-    updateHistoryDropdown: typeof updateHistoryDropdown
   }
 }
 
@@ -38,12 +35,11 @@ document.addEventListener('htmx:configRequest', (event) => {
 })
 
 window.Alpine = Alpine
-window.fallbackCopyTextToClipboard = fallbackCopyTextToClipboard
 window.htmx = htmx
-window.showMessage = showMessage
-window.updateHistoryDropdown = updateHistoryDropdown
 htmx.config.allowEval = false
 
+initializeFormControls()
+initializePreviewImages()
 initializeVisitHistory()
 initializeShareActions()
 initializeAnnouncement()

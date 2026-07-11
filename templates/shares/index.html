@@ -94,12 +94,12 @@
                                 
                                 <div class="form-check form-switch mb-0">
                                     <input class="form-check-input" type="checkbox" id="hideSpoiler" name="hide_spoiler" 
-                                        {% if hide_spoiler %}checked{% endif %} onchange="this.form.submit()">
+                                        {% if hide_spoiler %}checked{% endif %} data-submit-on-change>
                                     <label class="form-check-label" for="hideSpoiler">隐藏剧透</label>
                                 </div>
                                 <div class="form-check form-switch mb-0">
                                     <input class="form-check-input" type="checkbox" id="hideNsfw" name="hide_nsfw" 
-                                        {% if hide_nsfw %}checked{% endif %} onchange="this.form.submit()">
+                                        {% if hide_nsfw %}checked{% endif %} data-submit-on-change>
                                     <label class="form-check-label" for="hideNsfw">隐藏令人不适</label>
                                 </div>
                             </form>

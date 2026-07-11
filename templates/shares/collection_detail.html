@@ -155,7 +155,7 @@
                                     <i class="bi bi-arrow-right-circle"></i> 查看详情
                                 </a>
                                 {% if user == collection.author %}
-                                <form action="{% url 'remove_share_from_collection' collection.id item.share.share_id %}" method="post" onsubmit="return confirm('确定要从合集中移除吗？');" class="d-inline">
+                                <form action="{% url 'remove_share_from_collection' collection.id item.share.share_id %}" method="post" data-confirm-message="确定要从合集中移除吗？" class="d-inline">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-sm btn-outline-danger hover-lift" title="从合集移除">
                                         <i class="bi bi-trash"></i>

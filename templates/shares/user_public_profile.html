@@ -72,7 +72,7 @@
                         <div class="card h-100 card-hover shadow-sm">
                             <!-- 预览区域 -->
                             <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none">
-                                <div class="card-img-top position-relative" style="overflow: hidden; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                <div class="card-img-top position-relative" data-preview-frame style="overflow: hidden; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
                                     <div class="ratio ratio-4x3">
                                         <img 
                                             src="/n/board/{{ share.strategy_code }}" 
@@ -80,7 +80,7 @@
                                             class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
                                             loading="lazy"
                                             alt="战术板预览"
-                                            onload="this.closest('.card-img-top').querySelector('.preview-loading').style.display='none'">
+                                            data-preview-image>
                                     </div>
 
                                     {% if share.is_spoiler or share.is_nsfw %}
@@ -98,7 +98,7 @@
                                     </div>
                                     {% endif %}
 
-                                    <div class="preview-loading position-absolute top-50 start-50 translate-middle text-white">
+                                    <div class="preview-loading position-absolute top-50 start-50 translate-middle text-white" data-preview-loading>
                                         <div class="spinner-border" role="status">
                                             <span class="visually-hidden">加载中...</span>
                                         </div>

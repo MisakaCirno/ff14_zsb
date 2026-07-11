@@ -68,7 +68,7 @@ function createHistoryItem(item: VisitHistoryItem): HTMLLIElement {
   return listItem
 }
 
-export function updateHistoryDropdown(): void {
+function updateHistoryDropdown(): void {
   const container = document.getElementById('historyList')
   const header = container?.querySelector('.dropdown-header')?.parentElement
   const divider = container?.querySelector('.dropdown-divider')?.parentElement
