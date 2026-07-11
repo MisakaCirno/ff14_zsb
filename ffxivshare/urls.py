@@ -52,4 +52,4 @@ if settings.DEBUG:
         re_path(r'^n/(?P<path>.*)$', proxy_view),
     ]
 
-handler404 = 'shares.views.page_not_found'
+handler404 = 'shares.web.browse.page_not_found'

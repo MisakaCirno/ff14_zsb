@@ -148,7 +148,7 @@ class ModerationWorkflowContractTests(TestCase):
         share = self.create_share(status=Share.Status.PENDING)
         self.client.force_login(self.admin)
 
-        with patch('shares.views.log_share_action', side_effect=RuntimeError('log failed')):
+        with patch('shares.web.moderation.log_share_action', side_effect=RuntimeError('log failed')):
             with self.assertRaises(RuntimeError):
                 self.client.post(reverse('admin_approve_share', args=[share.share_id]))
 
@@ -181,7 +181,7 @@ class ModerationWorkflowContractTests(TestCase):
         share = self.create_share(status=Share.Status.PENDING)
         self.client.force_login(self.admin)
 
-        with patch('shares.views.send_site_message', side_effect=RuntimeError('message failed')):
+        with patch('shares.web.moderation.send_site_message', side_effect=RuntimeError('message failed')):
             with self.assertRaises(RuntimeError):
                 self.client.post(
                     reverse('admin_reject_share', args=[share.share_id]),
@@ -199,7 +199,7 @@ class ModerationWorkflowContractTests(TestCase):
         report = self.create_report(share)
         self.client.force_login(self.admin)
 
-        with patch('shares.views.send_site_message', side_effect=RuntimeError('message failed')):
+        with patch('shares.web.moderation.send_site_message', side_effect=RuntimeError('message failed')):
             with self.assertRaises(RuntimeError):
                 self.client.post(
                     reverse('admin_resolve_report', args=[report.id, 'resolve']),
@@ -220,7 +220,7 @@ class ModerationWorkflowContractTests(TestCase):
         second_report = self.create_report(share, reporter=self.second_reporter)
         self.client.force_login(self.admin)
 
-        with patch('shares.views.send_site_message', side_effect=RuntimeError('message failed')):
+        with patch('shares.web.moderation.send_site_message', side_effect=RuntimeError('message failed')):
             with self.assertRaises(RuntimeError):
                 self.client.post(
                     reverse('admin_resolve_share_reports', args=[share.share_id, 'resolve']),
