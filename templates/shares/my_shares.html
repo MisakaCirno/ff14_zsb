@@ -187,18 +187,8 @@
                                 </div>
 
                                 <div class="btn-group w-50 shadow-sm" role="group">
-                                    <button type="button" class="btn btn-sm {% if share.is_liked %}btn-danger{% else %}btn-outline-danger{% endif %} hover-lift w-50" 
-                                            id="btn-like-{{ share.share_id }}" 
-                                            onclick="toggleIndexLike('{{ share.share_id }}')"
-                                            title="{% if share.is_liked %}取消点赞{% else %}点赞{% endif %}">
-                                        <i class="bi {% if share.is_liked %}bi-heart-fill{% else %}bi-heart{% endif %}"></i> <span id="likes-count-{{ share.share_id }}">{{ share.likes_count }}</span>
-                                    </button>
-                                    <button type="button" class="btn btn-sm {% if share.is_favorited %}btn-warning{% else %}btn-outline-secondary{% endif %} hover-lift w-50" 
-                                            id="btn-favorite-{{ share.share_id }}" 
-                                            onclick="toggleIndexFavorite('{{ share.share_id }}')"
-                                            title="{% if share.is_favorited %}取消收藏{% else %}收藏{% endif %}">
-                                        <i class="bi {% if share.is_favorited %}bi-star-fill{% else %}bi-star{% endif %}"></i> <span id="favorites-count-{{ share.share_id }}">{{ share.favorites_count }}</span>
-                                    </button>
+                                    {% include 'shares/includes/like_button.html' with is_liked=share.is_liked likes_count=share.likes_count %}
+                                    {% include 'shares/includes/favorite_button.html' with is_favorited=share.is_favorited favorites_count=share.favorites_count %}
                                 </div>
                             </div>
                             {% endif %}
@@ -324,112 +314,4 @@
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-    function toggleIndexLike(shareId) {
-        // Prevent bubbling
-        event.preventDefault();
-        event.stopPropagation();
-
-        const btn = document.getElementById('btn-like-' + shareId);
-        const icon = btn.querySelector('i');
-        const countSpan = document.getElementById('likes-count-' + shareId);
-        
-        btn.disabled = true;
-
-        fetch('/share/' + shareId + '/like/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-                'Content-Type': 'application/json'
-            },
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                if (data.is_liked) {
-                    btn.classList.remove('btn-outline-danger');
-                    btn.classList.add('btn-danger');
-                    icon.classList.remove('bi-heart');
-                    icon.classList.add('bi-heart-fill');
-                    btn.title = '取消点赞';
-                } else {
-                    btn.classList.remove('btn-danger');
-                    btn.classList.add('btn-outline-danger');
-                    icon.classList.remove('bi-heart-fill');
-                    icon.classList.add('bi-heart');
-                    btn.title = '点赞';
-                }
-                countSpan.textContent = data.likes_count;
-            } else {
-                if (typeof showMessage === 'function') {
-                    showMessage(data.message || '操作失败', 'danger');
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            if (typeof showMessage === 'function') {
-                showMessage('网络请求失败', 'danger');
-            }
-        })
-        .finally(() => {
-            btn.disabled = false;
-        });
-    }
-
-    function toggleIndexFavorite(shareId) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const btn = document.getElementById('btn-favorite-' + shareId);
-        const icon = btn.querySelector('i');
-        const countSpan = document.getElementById('favorites-count-' + shareId);
-        
-        btn.disabled = true;
-
-        fetch('/share/' + shareId + '/favorite/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-                'Content-Type': 'application/json'
-            },
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                if (data.is_favorited) {
-                    btn.classList.remove('btn-outline-secondary');
-                    btn.classList.add('btn-warning');
-                    icon.classList.remove('bi-star');
-                    icon.classList.add('bi-star-fill');
-                    btn.title = '取消收藏';
-                } else {
-                    btn.classList.remove('btn-warning');
-                    btn.classList.add('btn-outline-secondary');
-                    icon.classList.remove('bi-star-fill');
-                    icon.classList.add('bi-star');
-                    btn.title = '收藏';
-                }
-                countSpan.textContent = data.favorites_count;
-            } else {
-                if (typeof showMessage === 'function') {
-                    showMessage(data.message || '操作失败', 'danger');
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            if (typeof showMessage === 'function') {
-                showMessage('网络请求失败', 'danger');
-            }
-        })
-        .finally(() => {
-            btn.disabled = false;
-        });
-    }
-
-</script>
 {% endblock %}

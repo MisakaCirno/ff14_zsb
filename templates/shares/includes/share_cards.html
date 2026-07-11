@@ -98,18 +98,8 @@
 
                 <div class="btn-group w-50 shadow-sm" role="group">
                     {% if user.is_authenticated %}
-                    <button type="button" class="btn btn-sm {% if share.is_liked %}btn-danger{% else %}btn-outline-danger{% endif %} hover-lift w-50"
-                            id="btn-like-{{ share.share_id }}"
-                            onclick="toggleIndexLike('{{ share.share_id }}')"
-                            title="{% if share.is_liked %}取消点赞{% else %}点赞{% endif %}">
-                        <i class="bi {% if share.is_liked %}bi-heart-fill{% else %}bi-heart{% endif %}"></i> <span id="likes-count-{{ share.share_id }}">{{ share.likes_count }}</span>
-                    </button>
-                    <button type="button" class="btn btn-sm {% if share.is_favorited %}btn-warning{% else %}btn-outline-secondary{% endif %} hover-lift w-50"
-                            id="btn-favorite-{{ share.share_id }}"
-                            onclick="toggleIndexFavorite('{{ share.share_id }}')"
-                            title="{% if share.is_favorited %}取消收藏{% else %}收藏{% endif %}">
-                        <i class="bi {% if share.is_favorited %}bi-star-fill{% else %}bi-star{% endif %}"></i> <span id="favorites-count-{{ share.share_id }}">{{ share.favorites_count }}</span>
-                    </button>
+                    {% include 'shares/includes/like_button.html' with is_liked=share.is_liked likes_count=share.likes_count %}
+                    {% include 'shares/includes/favorite_button.html' with is_favorited=share.is_favorited favorites_count=share.favorites_count %}
                     {% else %}
                     <a href="{% url 'login' %}?next={{ share_cards_return_url|urlencode }}" class="btn btn-sm btn-outline-danger hover-lift w-50" title="登录后点赞">
                         <i class="bi bi-heart"></i> {{ share.likes_count }}

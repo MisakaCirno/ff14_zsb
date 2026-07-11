@@ -10,11 +10,11 @@ from .models import Share
 
 class FrontendShellContractTests(TestCase):
     def setUp(self):
-        author = User.objects.create_user(username='author', password='password123')
+        self.author = User.objects.create_user(username='author', password='password123')
         self.share = Share.objects.create(
             title='前端契约测试',
             strategy_code='[stgy:a&"b]',
-            author=author,
+            author=self.author,
             visibility=Share.Visibility.PUBLIC,
             status=Share.Status.APPROVED,
         )
@@ -37,6 +37,23 @@ class FrontendShellContractTests(TestCase):
         self.assertIn('data-copy-code="[stgy:a&amp;&quot;b]"', content)
         self.assertIn(f'data-share-id="{self.share.share_id}"', content)
         self.assertNotIn('copyStrategyCode(', content)
+
+    def test_authenticated_card_reactions_use_htmx_fragments(self):
+        self.client.force_login(self.author)
+
+        response = self.client.get(reverse('index'))
+        content = response.content.decode()
+
+        self.assertIn(
+            f'hx-post="/share/{self.share.share_id}/like/?fragment=card"',
+            content,
+        )
+        self.assertIn(
+            f'hx-post="/share/{self.share.share_id}/favorite/?fragment=card"',
+            content,
+        )
+        self.assertNotIn('toggleIndexLike(', content)
+        self.assertNotIn('toggleIndexFavorite(', content)
 
 
 class FrontendTemplateSourceTests(SimpleTestCase):
@@ -66,3 +83,13 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('function updateHistoryDropdown', source)
         self.assertNotIn('onclick="copyQQGroup', source)
         self.assertNotIn('onclick="clearHistory', source)
+
+    def test_card_reaction_templates_do_not_use_inline_handlers(self):
+        for template_path in (
+            'shares/includes/share_cards.html',
+            'shares/my_shares.html',
+        ):
+            with self.subTest(template=template_path):
+                source = self.read_template(template_path)
+                self.assertNotIn('toggleIndexLike(', source)
+                self.assertNotIn('toggleIndexFavorite(', source)

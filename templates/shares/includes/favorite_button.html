@@ -1,0 +1,10 @@
+<button type="button"
+        class="btn btn-sm {% if is_favorited %}btn-warning{% else %}btn-outline-secondary{% endif %} hover-lift w-50"
+        id="btn-favorite-{{ share.share_id }}"
+        hx-post="{% url 'toggle_favorite' share.share_id %}?fragment=card"
+        hx-target="this"
+        hx-swap="outerHTML"
+        title="{% if is_favorited %}取消收藏{% else %}收藏{% endif %}">
+    <i class="bi {% if is_favorited %}bi-star-fill{% else %}bi-star{% endif %}"></i>
+    <span id="favorites-count-{{ share.share_id }}">{{ favorites_count }}</span>
+</button>

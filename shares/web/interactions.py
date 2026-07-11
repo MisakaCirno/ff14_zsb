@@ -1,12 +1,15 @@
-from django.contrib.auth.decorators import login_required
 from django.db.models import F
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
+from django.http import HttpResponseBadRequest, JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
+from django.views.decorators.vary import vary_on_headers
 
 from shares.models import Share
 from shares.policies import can_view_share
+from shares.presentation import is_htmx_request
 from shares.rate_limits import consume_rate_limit, get_client_ip
+from shares.web.decorators import login_required_or_hx_redirect
 
 
 def _record_counter(request, share, *, cookie_name, rule_name, field_name):
@@ -68,9 +71,13 @@ def record_copy(request, share_id):
     return response
 
 
-@login_required
+@vary_on_headers('HX-Request', 'Cookie')
+@never_cache
+@login_required_or_hx_redirect
 @require_POST
 def toggle_like(request, share_id):
+    if is_htmx_request(request) and request.GET.get('fragment') != 'card':
+        return HttpResponseBadRequest('Unsupported interaction fragment.')
     share = get_object_or_404(Share, share_id=share_id)
     if not can_view_share(request.user, share):
         return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
@@ -80,16 +87,27 @@ def toggle_like(request, share_id):
     else:
         share.likes.add(request.user)
         is_liked = True
+    likes_count = share.likes.count()
+    if is_htmx_request(request):
+        return render(request, 'shares/includes/like_button.html', {
+            'share': share,
+            'is_liked': is_liked,
+            'likes_count': likes_count,
+        })
     return JsonResponse({
         'status': 'success',
         'is_liked': is_liked,
-        'likes_count': share.likes.count(),
+        'likes_count': likes_count,
     })
 
 
-@login_required
+@vary_on_headers('HX-Request', 'Cookie')
+@never_cache
+@login_required_or_hx_redirect
 @require_POST
 def toggle_favorite(request, share_id):
+    if is_htmx_request(request) and request.GET.get('fragment') != 'card':
+        return HttpResponseBadRequest('Unsupported interaction fragment.')
     share = get_object_or_404(Share, share_id=share_id)
     if not can_view_share(request.user, share):
         return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
@@ -99,8 +117,15 @@ def toggle_favorite(request, share_id):
     else:
         share.favorites.add(request.user)
         is_favorited = True
+    favorites_count = share.favorites.count()
+    if is_htmx_request(request):
+        return render(request, 'shares/includes/favorite_button.html', {
+            'share': share,
+            'is_favorited': is_favorited,
+            'favorites_count': favorites_count,
+        })
     return JsonResponse({
         'status': 'success',
         'is_favorited': is_favorited,
-        'favorites_count': share.favorites.count(),
+        'favorites_count': favorites_count,
     })

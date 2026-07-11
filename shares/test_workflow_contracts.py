@@ -146,6 +146,26 @@ class InteractionWorkflowTests(TestCase):
             'likes_count': 0,
         })
         self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
+        self.assertIn('HX-Request', add_response.headers['Vary'])
+        self.assertIn('no-store', add_response.headers['Cache-Control'])
+
+    def test_hx_like_endpoint_returns_reusable_card_button(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card',
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers['Content-Type'].startswith('text/html'))
+        self.assertContains(response, 'btn-danger')
+        self.assertContains(response, 'bi-heart-fill')
+        self.assertContains(response, 'hx-post=')
+        self.assertContains(response, '>1</span>')
+        self.assertIn('HX-Request', response.headers['Vary'])
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
 
     def test_favorite_endpoint_toggles_relation(self):
         self.client.force_login(self.user)
@@ -158,6 +178,43 @@ class InteractionWorkflowTests(TestCase):
         self.assertFalse(remove_response.json()['is_favorited'])
         self.assertEqual(remove_response.json()['favorites_count'], 0)
         self.assertFalse(self.share.favorites.filter(pk=self.user.pk).exists())
+
+    def test_hx_favorite_endpoint_returns_reusable_card_button(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('toggle_favorite', args=[self.share.share_id]) + '?fragment=card',
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'btn-warning')
+        self.assertContains(response, 'bi-star-fill')
+        self.assertContains(response, 'hx-post=')
+        self.assertContains(response, '>1</span>')
+        self.assertTrue(self.share.favorites.filter(pk=self.user.pk).exists())
+
+    def test_hx_interaction_rejects_unknown_fragment_without_mutating(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=detail',
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
+
+    def test_expired_hx_interaction_redirects_the_full_page_to_login(self):
+        response = self.client.post(
+            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card',
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertIn('/login/?next=', response.headers['HX-Redirect'])
+        self.assertNotIn('Location', response.headers)
+        self.assertFalse(self.share.likes.exists())
 
     def test_copy_counter_only_increments_once_per_client_cookie(self):
         first_response = self.client.post(reverse('record_copy', args=[self.share.share_id]))
