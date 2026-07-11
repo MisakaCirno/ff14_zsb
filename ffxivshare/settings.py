@@ -130,6 +130,8 @@ ADMIN_INDEX_TITLE = '欢迎使用管理后台'
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+VITE_MANIFEST_PATH = BASE_DIR / 'static' / 'app' / 'manifest.json'
+VITE_ENTRYPOINT = 'src/main.ts'
 
 # Media files
 MEDIA_URL = '/media/'

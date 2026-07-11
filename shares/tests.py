@@ -24,6 +24,7 @@ class HomeFeedModeTests(TestCase):
         self.assertEqual(response.context['feed_mode'], UserProfile.HomeFeedMode.INFINITE)
         self.assertContains(response, '瀑布')
         self.assertContains(response, 'id="infinite-scroll-sentinel"')
+        self.assertContains(response, '<script type="module" src="/static/app/assets/main-')
         self.assertIn(
             'shares/includes/share_cards.html',
             [template.name for template in response.templates],
