@@ -6,14 +6,18 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_safe
+from django.views.decorators.vary import vary_on_headers
 
 from shares.models import Announcement, Collection, Share, UserProfile
 from shares.policies import can_view_share, is_moderator, public_share_queryset
 from shares.presentation import (
     HOME_FEED_MODES,
     build_query_string,
+    build_share_cards_return_url,
     get_home_feed_mode,
+    is_htmx_request,
+    redirect_response,
     render_share_cards_response,
 )
 from shares.selectors import annotate_share_cards
@@ -43,6 +47,8 @@ def set_home_feed_mode(request):
     return redirect('index')
 
 
+@vary_on_headers('HX-Request', 'Cookie')
+@require_safe
 def index(request):
     queryset = public_share_queryset()
     category = request.GET.get('category')
@@ -63,7 +69,7 @@ def index(request):
         'copies': ('-copies', '-created_at'),
     }.get(sort_by, ('-created_at',))
     shares = Paginator(queryset.order_by(*ordering), 12).get_page(request.GET.get('page'))
-    if request.GET.get('partial') == 'shares':
+    if is_htmx_request(request) or request.GET.get('partial') == 'shares':
         return render_share_cards_response(request, shares)
     feed_mode = get_home_feed_mode(request)
     return render(request, 'shares/index.html', {
@@ -88,20 +94,23 @@ def index(request):
             page=None,
             partial=None,
         ),
+        'share_cards_return_url': build_share_cards_return_url(request),
     })
 
 
+@vary_on_headers('HX-Request', 'Cookie')
+@require_safe
 def search(request):
     query = request.GET.get('q', '').strip()
     if not query:
-        return redirect('index')
+        return redirect_response(request, 'index')
     if len(query) > SEARCH_QUERY_MAX_LENGTH:
         messages.error(request, f'搜索内容不能超过 {SEARCH_QUERY_MAX_LENGTH} 个字符。')
-        return redirect('index')
+        return redirect_response(request, 'index')
     try:
         share = Share.objects.get(share_id=query)
         if can_view_share(request.user, share):
-            return redirect('share_detail', share_id=share.share_id)
+            return redirect_response(request, 'share_detail', share_id=share.share_id)
     except Share.DoesNotExist:
         pass
     queryset = public_share_queryset().filter(
@@ -114,7 +123,7 @@ def search(request):
         annotate_share_cards(queryset, request.user).order_by('-created_at'),
         12,
     ).get_page(request.GET.get('page'))
-    if request.GET.get('partial') == 'shares':
+    if is_htmx_request(request) or request.GET.get('partial') == 'shares':
         return render_share_cards_response(request, shares)
     return render(request, 'shares/index.html', {
         'shares': shares,
@@ -133,6 +142,7 @@ def search(request):
             page=None,
             partial=None,
         ),
+        'share_cards_return_url': build_share_cards_return_url(request),
     })
 
 

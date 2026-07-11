@@ -91,6 +91,42 @@ class ShareAccessContractTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['shares'].object_list), [visible])
 
+    def test_hx_text_search_returns_cards_only(self):
+        visible = self.create_share(title='局部搜索结果')
+
+        response = self.client.get(
+            reverse('search'),
+            {'q': '局部搜索'},
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, visible.title)
+        self.assertNotContains(response, '<!DOCTYPE html>')
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        self.assertIn('HX-Request', response.headers['Vary'])
+        self.assertIn('Cookie', response.headers['Vary'])
+
+    def test_hx_search_redirects_use_full_page_navigation(self):
+        share = self.create_share(visibility=Share.Visibility.UNLISTED)
+        cases = (
+            ({}, reverse('index')),
+            ({'q': share.share_id}, reverse('share_detail', args=[share.share_id])),
+            ({'q': 'x' * 201}, reverse('index')),
+        )
+
+        for params, expected_url in cases:
+            with self.subTest(params=params):
+                response = self.client.get(
+                    reverse('search'),
+                    params,
+                    HTTP_HX_REQUEST='true',
+                )
+                self.assertEqual(response.status_code, 204)
+                self.assertEqual(response.headers['HX-Redirect'], expected_url)
+                self.assertNotIn('Location', response.headers)
+                self.assertIn('no-store', response.headers['Cache-Control'])
+
 
 class OverlayApiContractTests(TestCase):
     def setUp(self):
@@ -203,6 +239,8 @@ class OverlayApiContractTests(TestCase):
 
         anonymous_response = self.client.get(reverse('get_share_code', args=[share.share_id]))
         self.assertEqual(anonymous_response.status_code, 403)
+        self.assertEqual(anonymous_response.json(), {'error': 'Permission denied'})
+        self.assert_private_json_response(anonymous_response)
 
         self.client.force_login(self.author)
         author_response = self.client.get(reverse('get_share_code', args=[share.share_id]))
@@ -241,6 +279,8 @@ class OverlayApiContractTests(TestCase):
 
         anonymous_response = self.client.get(reverse('get_collection_codes', args=[collection.id]))
         self.assertEqual(anonymous_response.status_code, 403)
+        self.assertEqual(anonymous_response.json(), {'error': 'Permission denied'})
+        self.assert_private_json_response(anonymous_response)
 
         self.client.force_login(self.author)
         owner_response = self.client.get(reverse('get_collection_codes', args=[collection.id]))

@@ -24,6 +24,12 @@ class HomeFeedModeTests(TestCase):
         self.assertEqual(response.context['feed_mode'], UserProfile.HomeFeedMode.INFINITE)
         self.assertContains(response, '瀑布')
         self.assertContains(response, 'id="infinite-scroll-sentinel"')
+        self.assertIn(
+            'shares/includes/share_cards.html',
+            [template.name for template in response.templates],
+        )
+        self.assertIn('HX-Request', response.headers['Vary'])
+        self.assertIn('Cookie', response.headers['Vary'])
 
     def test_get_feed_mode_choice_does_not_mutate_profile(self):
         self.client.login(username='alice', password='password123')
@@ -65,6 +71,45 @@ class HomeFeedModeTests(TestCase):
         self.assertIsNone(data['next_page'])
         self.assertIn('card h-100', data['html'])
         self.assertIn('分享', data['html'])
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        self.assertIn('HX-Request', response.headers['Vary'])
+
+    def test_share_partial_login_return_url_excludes_transport_parameters(self):
+        response = self.client.get(reverse('index'), {
+            'feed': UserProfile.HomeFeedMode.INFINITE,
+            'partial': 'shares',
+            'page': 2,
+            'sort': 'likes',
+        })
+
+        html = response.json()['html']
+        self.assertIn(
+            'next=/%3Ffeed%3Dinfinite%26sort%3Dlikes',
+            html,
+        )
+        self.assertNotIn('partial%3Dshares', html)
+        self.assertNotIn('page%3D2', html)
+
+    def test_hx_request_returns_html_fragment_and_takes_precedence(self):
+        response = self.client.get(
+            reverse('index'),
+            {'partial': 'shares', 'page': 2},
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers['Content-Type'].startswith('text/html'))
+        self.assertContains(response, 'card h-100')
+        self.assertNotContains(response, '<!DOCTYPE html>')
+        self.assertNotContains(response, 'id="infinite-scroll-sentinel"')
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        self.assertIn('HX-Request', response.headers['Vary'])
+        self.assertIn('Cookie', response.headers['Vary'])
+
+    def test_home_and_search_reject_unsafe_methods(self):
+        for url in (reverse('index'), reverse('search')):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.post(url).status_code, 405)
 
 
 class SiteMessageWorkflowTests(TestCase):
