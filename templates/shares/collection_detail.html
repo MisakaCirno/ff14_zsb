@@ -116,20 +116,12 @@
                 {% endfor %}
             </div>
             {% else %}
-            <div class="card border-0 shadow-sm">
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-folder2-open display-1 text-muted mb-3"></i>
-                    <h4 class="text-muted">合集是空的</h4>
-                    {% if user == collection.author %}
-                    <p class="text-muted">去您的分享详情页，点击“添加到合集”按钮来添加内容吧！</p>
-                    <a href="{% url 'my_shares' %}" class="btn btn-primary">
-                        <i class="bi bi-arrow-right"></i> 去我的分享
-                    </a>
-                    {% else %}
-                    <p class="text-muted">作者还没有添加任何内容。</p>
-                    {% endif %}
-                </div>
-            </div>
+                {% if user == collection.author %}
+                    {% url 'my_shares' as empty_action_url %}
+                    {% include 'shares/includes/empty_state.html' with icon='bi-folder2-open' title='合集是空的' message='去您的分享详情页，点击“添加到合集”按钮来添加内容吧！' action_url=empty_action_url action_label='去我的分享' action_icon='bi-arrow-right' only %}
+                {% else %}
+                    {% include 'shares/includes/empty_state.html' with icon='bi-folder2-open' title='合集是空的' message='作者还没有添加任何内容。' only %}
+                {% endif %}
             {% endif %}
         </div>
     </div>

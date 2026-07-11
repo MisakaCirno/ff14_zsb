@@ -108,13 +108,7 @@
                     </div>
                     {% empty %}
                     <div class="col-12">
-                        <div class="card border-0 shadow-sm">
-                            <div class="card-body text-center py-5">
-                                <i class="bi bi-inbox display-1 text-muted mb-3"></i>
-                                <h3 class="text-muted mb-3">暂无公开分享</h3>
-                                <p class="text-muted mb-4">该用户暂时没有发布公开的战术板分享。</p>
-                            </div>
-                        </div>
+                        {% include 'shares/includes/empty_state.html' with icon='bi-inbox' title='暂无公开分享' message='该用户暂时没有发布公开的战术板分享。' only %}
                     </div>
                     {% endfor %}
                 </div>
@@ -208,13 +202,7 @@
                 </div>
                 {% empty %}
                 <div class="col-12">
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-body text-center py-5">
-                            <i class="bi bi-folder2-open display-1 text-muted mb-3"></i>
-                            <h3 class="text-muted mb-3">暂无公开合集</h3>
-                            <p class="text-muted">该用户暂时没有创建公开的合集。</p>
-                        </div>
-                    </div>
+                    {% include 'shares/includes/empty_state.html' with icon='bi-folder2-open' title='暂无公开合集' message='该用户暂时没有创建公开的合集。' only %}
                 </div>
                 {% endfor %}
             </div>

@@ -1,0 +1,15 @@
+<div class="card empty-state">
+    <div class="card-body">
+        <i class="bi {{ icon|default:'bi-inbox' }} empty-state__icon" aria-hidden="true"></i>
+        <h3 class="empty-state__title">{{ title }}</h3>
+        {% if message %}
+        <p class="empty-state__message">{{ message }}</p>
+        {% endif %}
+        {% if action_url and action_label %}
+        <a href="{{ action_url }}" class="btn btn-primary btn-lg">
+            {% if action_icon %}<i class="bi {{ action_icon }}" aria-hidden="true"></i>{% endif %}
+            {{ action_label }}
+        </a>
+        {% endif %}
+    </div>
+</div>

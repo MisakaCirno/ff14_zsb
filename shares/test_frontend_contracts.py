@@ -200,6 +200,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './bootstrap-adapter.css';",
             "@import './components.css';",
             "@import './share-preview.css';",
+            "@import './empty-state.css';",
             "@import './feedback.css';",
             "@import './pagination.css';",
         )
@@ -442,6 +443,38 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('点击查看详情', review)
         self.assertNotIn('bi bi-eye"></i> 123', review)
         self.assertNotIn('bi bi-clipboard"></i> 456', review)
+
+    def test_empty_state_component_is_escaped_and_reused(self):
+        content = render_to_string(
+            'shares/includes/empty_state.html',
+            {
+                'icon': 'bi-inbox',
+                'title': '<script>alert(1)</script>',
+                'message': '没有内容 & 请稍后再试',
+                'action_url': '/create/?next=a&b=1',
+                'action_label': '创建内容',
+                'action_icon': 'bi-plus-circle',
+            },
+        )
+
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', content)
+        self.assertNotIn('<script>', content)
+        self.assertIn('没有内容 &amp; 请稍后再试', content)
+        self.assertIn('href="/create/?next=a&amp;b=1"', content)
+        self.assertIn('aria-hidden="true"', content)
+
+        for template_path in (
+            'shares/includes/share_cards.html',
+            'shares/my_shares.html',
+            'shares/user_public_profile.html',
+            'shares/collection_detail.html',
+        ):
+            with self.subTest(template=template_path):
+                source = self.read_template(template_path)
+                self.assertIn(
+                    "{% include 'shares/includes/empty_state.html' with ",
+                    source,
+                )
 
     def test_card_reaction_templates_do_not_use_inline_handlers(self):
         for template_path in (

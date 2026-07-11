@@ -64,21 +64,12 @@
 </div>
 {% empty %}
 <div class="col-12">
-    <div class="card border-0 shadow-sm">
-        <div class="card-body text-center py-5">
-            <i class="bi bi-inbox display-1 text-muted mb-3"></i>
-            <h3 class="text-muted mb-3">暂无分享</h3>
-            <p class="text-muted mb-4">快来创建第一个战术板分享吧！</p>
-            {% if user.is_authenticated %}
-            <a href="{% url 'create_share' %}" class="btn btn-primary btn-lg">
-                <i class="bi bi-plus-circle"></i> 创建分享
-            </a>
-            {% else %}
-            <a href="{% url 'register' %}" class="btn btn-primary btn-lg">
-                <i class="bi bi-person-plus"></i> 注册账户
-            </a>
-            {% endif %}
-        </div>
-    </div>
+    {% if user.is_authenticated %}
+        {% url 'create_share' as empty_action_url %}
+        {% include 'shares/includes/empty_state.html' with icon='bi-inbox' title='暂无分享' message='快来创建第一个战术板分享吧！' action_url=empty_action_url action_label='创建分享' action_icon='bi-plus-circle' only %}
+    {% else %}
+        {% url 'register' as empty_action_url %}
+        {% include 'shares/includes/empty_state.html' with icon='bi-inbox' title='暂无分享' message='快来创建第一个战术板分享吧！' action_url=empty_action_url action_label='注册账户' action_icon='bi-person-plus' only %}
+    {% endif %}
 </div>
 {% endfor %}
