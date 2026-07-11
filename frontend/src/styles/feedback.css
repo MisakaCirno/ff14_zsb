@@ -1,0 +1,17 @@
+.app-notifications {
+  z-index: var(--app-z-floating-message);
+  min-width: 300px;
+  max-width: 80%;
+}
+
+.app-notification__message {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 375px) {
+  .app-notifications {
+    min-width: calc(100vw - (2 * var(--app-space-4)));
+    max-width: calc(100vw - (2 * var(--app-space-4)));
+  }
+}

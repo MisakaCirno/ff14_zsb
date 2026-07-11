@@ -1,0 +1,14 @@
+<div
+    id="message-container"
+    class="app-notifications position-fixed top-0 start-50 translate-middle-x p-3"
+    role="region"
+    aria-label="站点通知"
+    aria-live="polite"
+    aria-atomic="false">
+    {% for message in messages %}
+    <div class="app-notification alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow" role="alert" data-notification>
+        <span class="app-notification__message">{{ message }}</span>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="关闭通知"></button>
+    </div>
+    {% endfor %}
+</div>

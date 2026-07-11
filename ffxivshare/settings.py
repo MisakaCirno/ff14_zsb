@@ -3,6 +3,8 @@ Django settings for ffxivshare project.
 """
 
 from pathlib import Path
+
+from django.contrib.messages import constants as message_constants
 from dotenv import load_dotenv
 
 from .environment import (
@@ -91,6 +93,11 @@ TEMPLATES = [
         },
     },
 ]
+
+MESSAGE_TAGS = {
+    message_constants.DEBUG: 'secondary',
+    message_constants.ERROR: 'danger',
+}
 
 WSGI_APPLICATION = 'ffxivshare.wsgi.application'
 

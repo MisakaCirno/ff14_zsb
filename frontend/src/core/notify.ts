@@ -1,4 +1,11 @@
-const allowedTypes = new Set(['danger', 'info', 'primary', 'success', 'warning'])
+const allowedTypes = new Set([
+  'danger',
+  'info',
+  'primary',
+  'secondary',
+  'success',
+  'warning',
+])
 
 export function showMessage(message: unknown, type = 'success'): void {
   const container = document.getElementById('message-container')
@@ -11,13 +18,14 @@ export function showMessage(message: unknown, type = 'success'): void {
   const messageText = document.createElement('span')
   const closeButton = document.createElement('button')
 
-  alert.className = `alert alert-${safeType} alert-dismissible fade show shadow`
+  alert.className = `app-notification alert alert-${safeType} alert-dismissible fade show shadow`
   alert.role = 'alert'
-  messageText.style.whiteSpace = 'pre-line'
+  alert.dataset.notification = ''
+  messageText.className = 'app-notification__message'
   messageText.textContent = String(message ?? '')
   closeButton.type = 'button'
   closeButton.className = 'btn-close'
-  closeButton.setAttribute('aria-label', '关闭')
+  closeButton.setAttribute('aria-label', '关闭通知')
 
   const dismiss = (): void => {
     alert.classList.remove('show')

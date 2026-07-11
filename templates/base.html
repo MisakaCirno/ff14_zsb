@@ -151,16 +151,7 @@
     </nav>
 
     <!-- 消息提示 -->
-    <div id="message-container" class="position-fixed top-0 start-50 translate-middle-x p-3" style="z-index: 1100; min-width: 300px; max-width: 80%;">
-        {% if messages %}
-        {% for message in messages %}
-        <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-        {% endfor %}
-        {% endif %}
-    </div>
+    {% include 'shares/includes/flash_messages.html' %}
 
     <!-- 主内容 -->
     <main class="py-4">

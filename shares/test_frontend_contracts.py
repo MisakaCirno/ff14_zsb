@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.messages import constants as message_constants
 from django.contrib.auth.models import User
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -31,6 +32,24 @@ class FrontendShellContractTests(TestCase):
         self.assertIn('csrftoken', response.cookies)
         self.assertNotIn('vue.global.js', content)
         self.assertNotIn('function updateHistoryDropdown', content)
+
+    def test_error_feedback_uses_bootstrap_and_accessibility_contracts(self):
+        response = self.client.post(
+            reverse('set_home_feed_mode'),
+            {'feed': 'invalid'},
+            follow=True,
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="app-notifications ', content)
+        self.assertIn('role="region"', content)
+        self.assertIn('aria-live="polite"', content)
+        self.assertIn('alert-danger', content)
+        self.assertNotIn('alert-error', content)
+        self.assertIn('aria-label="关闭通知"', content)
+        self.assertEqual(settings.MESSAGE_TAGS[message_constants.DEBUG], 'secondary')
+        self.assertEqual(settings.MESSAGE_TAGS[message_constants.ERROR], 'danger')
 
     def test_share_copy_button_uses_escaped_data_contract(self):
         response = self.client.get(reverse('index'))
@@ -152,6 +171,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './tokens.css';",
             "@import './foundations.css';",
             "@import './components.css';",
+            "@import './feedback.css';",
         )
         import_positions = []
         for style_import in style_imports:
@@ -179,6 +199,15 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             'admin-tabs',
             self.read_template('shares/includes/admin_tabs.html'),
         )
+
+        base_source = self.read_template('base.html')
+        feedback_source = self.read_template('shares/includes/flash_messages.html')
+        notify_source = self.read_frontend('core/notify.ts')
+        self.assertIn("{% include 'shares/includes/flash_messages.html' %}", base_source)
+        self.assertIn('app-notifications', feedback_source)
+        self.assertIn('app-notification__message', feedback_source)
+        self.assertIn('app-notification__message', notify_source)
+        self.assertNotIn('messageText.style', notify_source)
 
     def test_common_template_events_use_data_contracts(self):
         for template_path in (

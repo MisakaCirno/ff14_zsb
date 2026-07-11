@@ -34,6 +34,6 @@ npm --prefix frontend run dev
 
 1. `tokens.css`：颜色、排版、间距、圆角、阴影、焦点、动效和层级令牌。
 2. `foundations.css`：页面根布局和不依赖具体组件的基础规则。
-3. `components.css`：Bootstrap 适配与主站组件样式。
+3. `components.css` 及同级组件文件：Bootstrap 适配与主站组件样式。
 
 新增或迁移的视觉规则使用 CSS class；现存模板内联属性会按页面批次继续收口。`data-*` 属性只作为 TypeScript 行为钩子。第三方 CSS 保留在 `../static/css/`，Vite 构建产物中不直接维护样式。
