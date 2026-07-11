@@ -3,8 +3,10 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.messages import constants as message_constants
-from django.contrib.auth.models import User
-from django.test import SimpleTestCase, TestCase
+from django.contrib.auth.models import AnonymousUser, User
+from django.core.paginator import Paginator
+from django.template.loader import render_to_string
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
 
 from .models import Share
@@ -172,6 +174,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './foundations.css';",
             "@import './components.css';",
             "@import './feedback.css';",
+            "@import './pagination.css';",
         )
         import_positions = []
         for style_import in style_imports:
@@ -208,6 +211,59 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('app-notification__message', feedback_source)
         self.assertIn('app-notification__message', notify_source)
         self.assertNotIn('messageText.style', notify_source)
+
+    def test_pagination_component_preserves_query_parameters(self):
+        request = RequestFactory().get(
+            '/admin/logs/',
+            {'tab': 'review', 'filter': 'open', 'page': '2'},
+        )
+        request.user = AnonymousUser()
+        paginator = Paginator(range(30), 10)
+        page_obj = paginator.get_page(2)
+        content = render_to_string(
+            'shares/includes/pagination.html',
+            {'page_obj': page_obj, 'aria_label': '测试分页'},
+            request=request,
+        )
+
+        self.assertIn('aria-label="测试分页"', content)
+        self.assertIn('aria-current="page"', content)
+        self.assertIn('rel="prev"', content)
+        self.assertIn('rel="next"', content)
+        self.assertIn('?tab=review&amp;filter=open&amp;page=1', content)
+        self.assertIn('?tab=review&amp;filter=open&amp;page=3', content)
+
+        first_page_content = render_to_string(
+            'shares/includes/pagination.html',
+            {'page_obj': paginator.get_page(1), 'aria_label': '测试分页'},
+            request=request,
+        )
+        self.assertIn('aria-disabled="true"', first_page_content)
+
+        large_page_content = render_to_string(
+            'shares/includes/pagination.html',
+            {
+                'page_obj': Paginator(range(10_000), 10).get_page(500),
+                'aria_label': '大列表分页',
+            },
+            request=request,
+        )
+        self.assertIn('省略部分页码', large_page_content)
+        self.assertLessEqual(large_page_content.count('class="page-item'), 11)
+
+    def test_admin_log_pages_use_shared_pagination_component(self):
+        for template_path in (
+            'shares/admin_log_list.html',
+            'shares/admin_review_logs.html',
+            'shares/admin_report_logs.html',
+        ):
+            with self.subTest(template=template_path):
+                source = self.read_template(template_path)
+                self.assertIn(
+                    "{% include 'shares/includes/pagination.html' with page_obj=logs",
+                    source,
+                )
+                self.assertNotIn('logs.paginator.page_range', source)
 
     def test_common_template_events_use_data_contracts(self):
         for template_path in (

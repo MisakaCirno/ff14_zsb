@@ -1,0 +1,23 @@
+.app-pagination .pagination {
+  flex-wrap: wrap;
+  row-gap: var(--app-space-1);
+}
+
+.app-pagination .page-link {
+  min-width: 2.5rem;
+  text-align: center;
+}
+
+.app-pagination .page-item.active .page-link {
+  font-weight: var(--app-font-semibold);
+}
+
+.app-pagination__ellipsis .page-link {
+  min-width: 2rem;
+}
+
+.app-pagination .page-link:focus-visible {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring-color);
+  outline-offset: var(--app-focus-ring-offset);
+  box-shadow: none;
+}
