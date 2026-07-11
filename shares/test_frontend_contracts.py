@@ -12,7 +12,7 @@ class FrontendShellContractTests(TestCase):
     def setUp(self):
         self.author = User.objects.create_user(username='author', password='password123')
         self.share = Share.objects.create(
-            title='前端契约测试',
+            title='前端契约 & "测试"',
             strategy_code='[stgy:a&"b]',
             author=self.author,
             visibility=Share.Visibility.PUBLIC,
@@ -62,6 +62,17 @@ class FrontendShellContractTests(TestCase):
         content = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
+        self.assertIn('data-share-detail', content)
+        self.assertIn(f'data-share-id="{self.share.share_id}"', content)
+        self.assertIn('data-share-title="前端契约 &amp; &quot;测试&quot;"', content)
+        self.assertIn(
+            f'data-record-view-url="/share/{self.share.share_id}/view/"',
+            content,
+        )
+        self.assertIn(
+            f'data-record-copy-url="/share/{self.share.share_id}/copy/"',
+            content,
+        )
         self.assertIn(
             f'hx-post="/share/{self.share.share_id}/like/?fragment=detail"',
             content,
@@ -79,6 +90,11 @@ class FrontendShellContractTests(TestCase):
 class FrontendTemplateSourceTests(SimpleTestCase):
     def read_template(self, relative_path):
         return (Path(settings.BASE_DIR) / 'templates' / relative_path).read_text(
+            encoding='utf-8',
+        )
+
+    def read_frontend(self, relative_path):
+        return (Path(settings.BASE_DIR) / 'frontend' / 'src' / relative_path).read_text(
             encoding='utf-8',
         )
 
@@ -127,3 +143,31 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('data-infinite-scroll-sentinel', page_source)
         self.assertIn('hx-trigger="intersect, click"', page_source)
         self.assertNotIn('hx-trigger="revealed"', page_source)
+
+    def test_detail_basic_interactions_use_module_contract(self):
+        source = self.read_template('shares/detail.html')
+        module_source = self.read_frontend('features/share-detail.ts')
+
+        for hook in (
+            'data-share-detail',
+            'data-content-overlay',
+            'data-copy-detail-code',
+            'data-copy-share-url',
+            'data-views-count',
+            'data-copies-count',
+        ):
+            self.assertIn(hook, source)
+
+        for legacy_handler in (
+            'onclick="revealContent',
+            'onclick="copyCode',
+            'onclick="copyUrl',
+            'function revealContent',
+            'function copyCode',
+            'function copyUrl',
+        ):
+            self.assertNotIn(legacy_handler, source)
+
+        self.assertIn('recordVisitHistory(shareId, shareTitle)', module_source)
+        self.assertIn("updateCounter(root, '[data-views-count]'", module_source)
+        self.assertIn("updateCounter(root, '[data-copies-count]'", module_source)

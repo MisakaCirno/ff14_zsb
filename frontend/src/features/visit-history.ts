@@ -99,6 +99,26 @@ export function updateHistoryDropdown(): void {
   }
 }
 
+export function recordVisitHistory(id: string, title: string): void {
+  const normalizedId = id.trim()
+  if (!normalizedId) {
+    return
+  }
+
+  try {
+    const history = readVisitHistory().filter((item) => item.id !== normalizedId)
+    history.unshift({
+      id: normalizedId,
+      title: title || '未命名分享',
+      timestamp: Date.now(),
+    })
+    localStorage.setItem(historyStorageKey, JSON.stringify(history.slice(0, 10)))
+    updateHistoryDropdown()
+  } catch (error) {
+    console.warn('Unable to save visit history.', error)
+  }
+}
+
 export function initializeVisitHistory(): void {
   updateHistoryDropdown()
   document.addEventListener('click', (event) => {

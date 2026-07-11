@@ -74,10 +74,17 @@ class ClientRenderingSafetyTests(SimpleTestCase):
         self.assertIn('encodeURIComponent(item.id)', history_source)
         self.assertIn("messageText.textContent = String(message ?? '')", notify_source)
 
-    def test_share_id_is_escaped_before_embedding_in_history_script(self):
+    def test_share_history_uses_escaped_data_contract(self):
         source = get_template('shares/detail.html').template.source
+        detail_source = (
+            Path(settings.BASE_DIR) / 'frontend' / 'src' / 'features' / 'share-detail.ts'
+        ).read_text(encoding='utf-8')
 
-        self.assertIn('{{ share.share_id|escapejs }}', source)
+        self.assertIn('data-share-id="{{ share.share_id }}"', source)
+        self.assertIn('data-share-title="{{ share.title }}"', source)
+        self.assertNotIn('const shareId = "{{ share.share_id|escapejs }}"', source)
+        self.assertNotIn("localStorage.setItem('visitHistory'", source)
+        self.assertIn('recordVisitHistory(shareId, shareTitle)', detail_source)
 
 
 class RichTextPersistenceTests(TestCase):
