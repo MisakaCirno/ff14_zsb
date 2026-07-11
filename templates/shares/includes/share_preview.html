@@ -1,0 +1,77 @@
+<div class="card-img-top position-relative share-preview" data-preview-frame>
+    <div class="ratio ratio-4x3">
+        <img
+            src="/n/board/{{ share.strategy_code }}"
+            class="share-preview__image{% if share.is_spoiler or share.is_nsfw %} blur-content{% endif %}"
+            loading="lazy"
+            alt="{{ share.title }} 的战术板预览"
+            data-preview-image>
+    </div>
+
+    {% if share.is_spoiler or share.is_nsfw %}
+    <div class="spoiler-overlay share-preview__warning{% if preview_variant == 'review' %} share-preview__warning--static{% endif %}">
+        <div class="text-center">
+            {% if share.is_nsfw %}
+            <i class="bi bi-exclamation-diamond-fill fs-1 text-danger mb-2"></i>
+            <h5 class="fw-bold">可能令人不适</h5>
+            {% else %}
+            <i class="bi bi-eye-slash-fill fs-1 mb-2"></i>
+            <h5 class="fw-bold">可能包含剧透</h5>
+            {% endif %}
+            {% if preview_variant != 'review' %}
+            <small class="d-block mt-1">点击查看详情</small>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="share-preview__skeleton" data-preview-loading aria-hidden="true"></div>
+    <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay share-preview__veil" aria-hidden="true"></div>
+
+    <div class="position-absolute top-0 start-0 m-2 share-preview__meta">
+        {% if share.category == 'combat' %}
+        <span class="badge bg-danger shadow-sm">战斗</span>
+        {% else %}
+        <span class="badge bg-success shadow-sm">娱乐</span>
+        {% endif %}
+        {% if share.is_original %}
+        <span class="badge bg-primary shadow-sm ms-1">原创</span>
+        {% endif %}
+    </div>
+
+    <div class="position-absolute top-0 end-0 m-2 share-preview__meta">
+        {% if preview_variant == 'review' %}
+        <span class="badge bg-warning text-dark">
+            <i class="bi bi-hourglass-split"></i> 待审核
+        </span>
+        {% else %}
+            {% if preview_variant == 'management' %}
+                {% if share.status == 'pending' %}
+                <span class="badge bg-info text-dark me-1">
+                    <i class="bi bi-hourglass-split"></i> 待审核
+                </span>
+                {% elif share.status == 'rejected' %}
+                <span class="badge bg-danger me-1">
+                    <i class="bi bi-x-circle"></i> 审核失败
+                </span>
+                {% endif %}
+
+                {% if share.visibility == 'private' %}
+                <span class="badge bg-secondary me-1">
+                    <i class="bi bi-lock-fill"></i> 私有
+                </span>
+                {% elif share.visibility == 'unlisted' %}
+                <span class="badge bg-warning text-dark me-1">
+                    <i class="bi bi-link-45deg"></i> 不公开
+                </span>
+                {% endif %}
+            {% endif %}
+        <span class="badge bg-dark bg-opacity-75">
+            <i class="bi bi-eye"></i> {{ share.views }}
+        </span>
+        <span class="badge bg-dark bg-opacity-75">
+            <i class="bi bi-clipboard"></i> {{ share.copies }}
+        </span>
+        {% endif %}
+    </div>
+</div>

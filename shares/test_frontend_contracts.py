@@ -1,5 +1,6 @@
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.contrib.messages import constants as message_constants
@@ -298,25 +299,42 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('href="?page=', my_shares_source)
 
     def test_common_template_events_use_data_contracts(self):
-        for template_path in (
-            'shares/includes/share_cards.html',
-            'shares/my_shares.html',
-            'shares/user_public_profile.html',
-            'shares/collection_detail.html',
-            'shares/admin_review_list.html',
-        ):
+        preview_template = self.read_template('shares/includes/share_preview.html')
+        self.assertIn('data-preview-frame', preview_template)
+        self.assertIn('data-preview-image', preview_template)
+        self.assertIn('data-preview-loading', preview_template)
+        self.assertNotIn('aria-busy="true"', preview_template)
+        self.assertIn('share-preview__image', preview_template)
+        self.assertIn('share-preview__skeleton', preview_template)
+        self.assertIn('aria-hidden="true"', preview_template)
+        self.assertNotIn('spinner-border', preview_template)
+        self.assertNotIn('linear-gradient(135deg, #667eea', preview_template)
+        self.assertNotIn(
+            'object-fit: cover; width: 100%; height: 100%;',
+            preview_template,
+        )
+
+        call_sites = (
+            ('shares/includes/share_cards.html', "share=share preview_variant='standard'"),
+            ('shares/my_shares.html', "share=share preview_variant='management'"),
+            ('shares/user_public_profile.html', "share=share preview_variant='standard'"),
+            ('shares/collection_detail.html', "share=item.share preview_variant='standard'"),
+            ('shares/admin_review_list.html', "share=share preview_variant='review'"),
+        )
+        for template_path, contract in call_sites:
             with self.subTest(template=template_path):
                 source = self.read_template(template_path)
-                self.assertIn('data-preview-frame', source)
-                self.assertIn('data-preview-image', source)
-                self.assertIn('data-preview-loading', source)
-                self.assertNotIn('aria-busy="true"', source)
-                self.assertIn('share-preview__image', source)
-                self.assertIn('share-preview__skeleton', source)
-                self.assertIn('aria-hidden="true"', source)
-                self.assertNotIn('spinner-border', source)
-                self.assertNotIn('linear-gradient(135deg, #667eea', source)
-                self.assertNotIn('object-fit: cover; width: 100%; height: 100%;', source)
+                self.assertIn(
+                    "{% include 'shares/includes/share_preview.html' with "
+                    f'{contract} only %}}',
+                    source,
+                )
+                self.assertNotIn('data-preview-frame', source)
+
+        collection_source = self.read_template('shares/collection_detail.html')
+        review_source = self.read_template('shares/admin_review_list.html')
+        self.assertIn('?collection_id={{ collection.id }}', collection_source)
+        self.assertNotIn('share-preview__link', review_source)
 
         self.assertIn(
             'data-submit-on-change',
@@ -339,6 +357,53 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('var(--app-z-preview-meta)', preview_styles)
         self.assertIn('form?.requestSubmit()', controls_source)
         self.assertIn('window.confirm(message)', controls_source)
+
+    def test_share_preview_variants_render_expected_metadata(self):
+        share = SimpleNamespace(
+            title='预览 & "标题"',
+            strategy_code='[stgy:a&"b]',
+            is_spoiler=True,
+            is_nsfw=True,
+            category='combat',
+            is_original=True,
+            views=123,
+            copies=456,
+            status='pending',
+            visibility='private',
+        )
+
+        standard = render_to_string(
+            'shares/includes/share_preview.html',
+            {'share': share, 'preview_variant': 'standard'},
+        )
+        management = render_to_string(
+            'shares/includes/share_preview.html',
+            {'share': share, 'preview_variant': 'management'},
+        )
+        review = render_to_string(
+            'shares/includes/share_preview.html',
+            {'share': share, 'preview_variant': 'review'},
+        )
+
+        self.assertIn('alt="预览 &amp; &quot;标题&quot; 的战术板预览"', standard)
+        self.assertIn('/n/board/[stgy:a&amp;&quot;b]', standard)
+        self.assertNotIn('<script', standard)
+        self.assertIn('可能令人不适', standard)
+        self.assertNotIn('可能包含剧透', standard)
+        self.assertIn('点击查看详情', standard)
+        self.assertIn('bi bi-eye"></i> 123', standard)
+        self.assertIn('bi bi-clipboard"></i> 456', standard)
+        self.assertNotIn('私有', standard)
+
+        self.assertIn('待审核', management)
+        self.assertIn('私有', management)
+        self.assertIn('bi bi-eye"></i> 123', management)
+
+        self.assertIn('share-preview__warning--static', review)
+        self.assertIn('待审核', review)
+        self.assertNotIn('点击查看详情', review)
+        self.assertNotIn('bi bi-eye"></i> 123', review)
+        self.assertNotIn('bi bi-clipboard"></i> 456', review)
 
     def test_card_reaction_templates_do_not_use_inline_handlers(self):
         for template_path in (

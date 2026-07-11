@@ -2,53 +2,7 @@
 <div class="col">
     <div class="card h-100 card-hover shadow-sm">
         <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link">
-            <div class="card-img-top position-relative share-preview" data-preview-frame>
-                <div class="ratio ratio-4x3">
-                    <img
-                        src="/n/board/{{ share.strategy_code }}"
-                        class="share-preview__image{% if share.is_spoiler or share.is_nsfw %} blur-content{% endif %}"
-                        loading="lazy"
-                        alt="{{ share.title }} 的战术板预览"
-                        data-preview-image>
-                </div>
-
-                {% if share.is_spoiler or share.is_nsfw %}
-                <div class="spoiler-overlay share-preview__warning">
-                    <div class="text-center">
-                        {% if share.is_nsfw %}
-                        <i class="bi bi-exclamation-diamond-fill fs-1 text-danger mb-2"></i>
-                        <h5 class="fw-bold">可能令人不适</h5>
-                        {% else %}
-                        <i class="bi bi-eye-slash-fill fs-1 mb-2"></i>
-                        <h5 class="fw-bold">可能包含剧透</h5>
-                        {% endif %}
-                        <small class="d-block mt-1">点击查看详情</small>
-                    </div>
-                </div>
-                {% endif %}
-
-                <div class="share-preview__skeleton" data-preview-loading aria-hidden="true"></div>
-
-                <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay share-preview__veil" aria-hidden="true"></div>
-                <div class="position-absolute top-0 start-0 m-2 share-preview__meta">
-                    {% if share.category == 'combat' %}
-                    <span class="badge bg-danger shadow-sm">战斗</span>
-                    {% else %}
-                    <span class="badge bg-success shadow-sm">娱乐</span>
-                    {% endif %}
-                    {% if share.is_original %}
-                    <span class="badge bg-primary shadow-sm ms-1">原创</span>
-                    {% endif %}
-                </div>
-                <div class="position-absolute top-0 end-0 m-2 share-preview__meta">
-                    <span class="badge bg-dark bg-opacity-75">
-                        <i class="bi bi-eye"></i> {{ share.views }}
-                    </span>
-                    <span class="badge bg-dark bg-opacity-75">
-                        <i class="bi bi-clipboard"></i> {{ share.copies }}
-                    </span>
-                </div>
-            </div>
+            {% include 'shares/includes/share_preview.html' with share=share preview_variant='standard' only %}
         </a>
 
         <div class="card-body d-flex flex-column">
