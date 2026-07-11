@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import Collection, CollectionItem, Share
@@ -112,6 +112,12 @@ class OverlayApiContractTests(TestCase):
             status=status,
         )
 
+    def assert_private_json_response(self, response):
+        self.assertTrue(response.headers['Content-Type'].startswith('application/json'))
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        self.assertIn('private', response.headers['Cache-Control'])
+        self.assertIn('Cookie', response.headers['Vary'])
+
     def test_public_share_code_api_keeps_overlay_response_shape(self):
         share = self.create_share(title='公开分享', code='[stgy:public]')
 
@@ -122,6 +128,71 @@ class OverlayApiContractTests(TestCase):
             'title': '公开分享',
             'code': '[stgy:public]',
         }])
+
+    def test_overlay_api_paths_remain_stable(self):
+        self.assertEqual(
+            reverse('get_share_code', args=['abc123']),
+            '/api/share/abc123/code/',
+        )
+        self.assertEqual(
+            reverse('get_collection_codes', args=[42]),
+            '/api/collection/42/codes/',
+        )
+
+    def test_overlay_api_errors_keep_json_shape(self):
+        missing_share = self.client.get(reverse('get_share_code', args=['missing']))
+        missing_collection = self.client.get(reverse('get_collection_codes', args=[999]))
+        rejected_share = self.create_share(
+            title='拒绝分享',
+            code='[stgy:rejected]',
+            status=Share.Status.REJECTED,
+        )
+        rejected_response = self.client.get(
+            reverse('get_share_code', args=[rejected_share.share_id]),
+        )
+
+        self.assertEqual(missing_share.status_code, 404)
+        self.assertEqual(missing_share.json(), {'error': 'Share not found'})
+        self.assertEqual(missing_collection.status_code, 404)
+        self.assertEqual(missing_collection.json(), {'error': 'Collection not found'})
+        self.assertEqual(rejected_response.status_code, 404)
+        self.assertEqual(rejected_response.json(), {'error': 'Share not found'})
+        self.assert_private_json_response(missing_share)
+        self.assert_private_json_response(missing_collection)
+        self.assert_private_json_response(rejected_response)
+
+    def test_overlay_api_only_allows_safe_reads_and_is_not_cacheable(self):
+        share = self.create_share(title='公开分享', code='[stgy:public]')
+        collection = Collection.objects.create(
+            title='公开合集',
+            author=self.author,
+            is_public=True,
+        )
+        urls = (
+            reverse('get_share_code', args=[share.share_id]),
+            reverse('get_collection_codes', args=[collection.id]),
+        )
+
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assert_private_json_response(response)
+                head_response = self.client.head(url)
+                self.assertEqual(head_response.status_code, 200)
+                self.assertEqual(head_response.content, b'')
+                self.assert_private_json_response(head_response)
+
+                csrf_client = Client(enforce_csrf_checks=True)
+                for method in ('post', 'put', 'patch', 'delete', 'options', 'trace'):
+                    with self.subTest(url=url, method=method):
+                        method_response = getattr(csrf_client, method)(url)
+                        self.assertEqual(method_response.status_code, 405)
+                        self.assertEqual(method_response.json(), {
+                            'error': 'Method not allowed',
+                        })
+                        self.assertEqual(method_response.headers['Allow'], 'GET, HEAD')
+                        self.assert_private_json_response(method_response)
 
     def test_private_share_code_api_requires_author(self):
         share = self.create_share(
