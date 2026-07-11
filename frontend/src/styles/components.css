@@ -1,0 +1,110 @@
+.navbar-brand {
+  font-weight: var(--app-font-bold);
+}
+
+.card-hover:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--app-shadow-hover);
+  transition: all var(--app-motion-normal) var(--app-ease-standard);
+}
+
+.card-hover:hover .card-img-top iframe {
+  transform: scale(1.05);
+  transition: transform var(--app-motion-normal) var(--app-ease-standard);
+}
+
+.card-hover:hover .preview-overlay {
+  background: rgba(0, 0, 0, 0) !important;
+}
+
+.card-img-top {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-img-top iframe {
+  transition: transform var(--app-motion-normal) var(--app-ease-standard);
+}
+
+.preview-loading {
+  z-index: var(--app-z-preview-loading);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  transition: transform var(--app-motion-fast) var(--app-ease-standard);
+}
+
+.card {
+  border-radius: var(--app-radius-lg);
+  overflow: hidden;
+  transition: all var(--app-motion-normal) var(--app-ease-standard);
+}
+
+.badge {
+  font-size: var(--app-text-xs);
+  padding: 0.35em 0.65em;
+}
+
+.strategy-code {
+  font-family: var(--app-font-mono);
+  font-size: 0.85rem;
+  word-break: break-all;
+  background: var(--app-color-surface-muted);
+  padding: var(--app-space-2);
+  border-radius: var(--app-radius-sm);
+}
+
+.blur-content {
+  filter: blur(30px);
+  transition: filter var(--app-motion-normal) var(--app-ease-standard);
+}
+
+.spoiler-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--app-color-overlay);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: var(--app-color-canvas);
+  z-index: var(--app-z-content-overlay);
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+}
+
+.spoiler-overlay:hover {
+  background: var(--app-color-overlay-hover);
+}
+
+.registration-form #id_username,
+.registration-form #id_password1,
+.registration-form #id_password2 {
+  display: block;
+  width: 100%;
+  padding: 0.375rem 0.75rem;
+  font-size: var(--app-text-base);
+  font-weight: var(--app-font-regular);
+  line-height: var(--app-line-height-normal);
+  color: var(--app-color-text);
+  background-color: var(--app-color-surface);
+  background-clip: padding-box;
+  border: 1px solid var(--app-color-border-strong);
+  appearance: none;
+  border-radius: var(--app-radius-sm);
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.admin-tabs .nav-link {
+  position: relative;
+}
+
+[data-share-rich-text-editor].ql-container {
+  height: 200px;
+  font-family: inherit;
+  font-size: inherit;
+}

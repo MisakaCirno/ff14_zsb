@@ -1,5 +1,5 @@
 <!-- 管理员导航标签 -->
-<ul class="nav nav-tabs mb-4">
+<ul class="nav nav-tabs mb-4 admin-tabs">
     <!-- 左侧：列表页面 -->
     <li class="nav-item">
         <a class="nav-link {% if request.resolver_match.url_name == 'admin_review_list' %}active{% endif %}" href="{% url 'admin_review_list' %}">
@@ -34,9 +34,3 @@
         </a>
     </li>
 </ul>
-
-<style>
-    .nav-tabs .nav-link {
-        position: relative;
-    }
-</style>

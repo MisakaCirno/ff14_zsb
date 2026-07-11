@@ -1,0 +1,24 @@
+[x-cloak] {
+  display: none !important;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--app-font-sans);
+  font-size: var(--app-text-base);
+  font-weight: var(--app-font-regular);
+  line-height: var(--app-line-height-normal);
+  color: var(--app-color-text);
+  background-color: var(--app-color-canvas);
+}
+
+main {
+  flex: 1;
+}
+
+.announcement-content img {
+  max-width: 100%;
+  height: auto;
+}

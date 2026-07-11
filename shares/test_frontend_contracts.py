@@ -139,6 +139,47 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                     re.compile(r'\son[a-z]+\s*=', re.IGNORECASE),
                 )
 
+    def test_application_styles_are_owned_by_vite_entry(self):
+        templates_root = Path(settings.BASE_DIR) / 'templates'
+
+        for template_path in templates_root.rglob('*.html'):
+            with self.subTest(template=template_path.relative_to(templates_root)):
+                source = template_path.read_text(encoding='utf-8')
+                self.assertNotRegex(source, re.compile(r'<style\b', re.IGNORECASE))
+
+        main_source = self.read_frontend('styles/main.css')
+        style_imports = (
+            "@import './tokens.css';",
+            "@import './foundations.css';",
+            "@import './components.css';",
+        )
+        import_positions = []
+        for style_import in style_imports:
+            self.assertIn(style_import, main_source)
+            import_positions.append(main_source.index(style_import))
+        self.assertEqual(import_positions, sorted(import_positions))
+
+        tokens_source = self.read_frontend('styles/tokens.css')
+        self.assertIn('--app-color-primary:', tokens_source)
+        self.assertIn('--app-font-sans:', tokens_source)
+        self.assertIn('--app-space-4:', tokens_source)
+        self.assertIn('--app-radius-lg:', tokens_source)
+        self.assertIn('--app-shadow-hover:', tokens_source)
+        self.assertIn('--app-focus-ring-color:', tokens_source)
+        self.assertIn('--app-motion-normal:', tokens_source)
+
+        components_source = self.read_frontend('styles/components.css')
+        self.assertIn('.registration-form #id_username', components_source)
+        self.assertIn('.admin-tabs .nav-link', components_source)
+        self.assertIn(
+            'class="registration-form"',
+            self.read_template('shares/register.html'),
+        )
+        self.assertIn(
+            'admin-tabs',
+            self.read_template('shares/includes/admin_tabs.html'),
+        )
+
     def test_common_template_events_use_data_contracts(self):
         for template_path in (
             'shares/includes/share_cards.html',
