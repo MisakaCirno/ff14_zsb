@@ -55,6 +55,26 @@ class FrontendShellContractTests(TestCase):
         self.assertNotIn('toggleIndexLike(', content)
         self.assertNotIn('toggleIndexFavorite(', content)
 
+    def test_authenticated_detail_reactions_use_htmx_fragments(self):
+        self.client.force_login(self.author)
+
+        response = self.client.get(reverse('share_detail', args=[self.share.share_id]))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            f'hx-post="/share/{self.share.share_id}/like/?fragment=detail"',
+            content,
+        )
+        self.assertIn(
+            f'hx-post="/share/{self.share.share_id}/favorite/?fragment=detail"',
+            content,
+        )
+        self.assertNotIn('toggleLike()', content)
+        self.assertNotIn('toggleFavorite()', content)
+        self.assertNotIn('function toggleLike', content)
+        self.assertNotIn('function toggleFavorite', content)
+
 
 class FrontendTemplateSourceTests(SimpleTestCase):
     def read_template(self, relative_path):

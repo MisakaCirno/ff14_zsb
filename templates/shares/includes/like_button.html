@@ -1,10 +1,12 @@
+{% with fragment=interaction_fragment|default:'card' %}
 <button type="button"
-        class="btn btn-sm {% if is_liked %}btn-danger{% else %}btn-outline-danger{% endif %} hover-lift w-50"
+        class="btn btn-sm {% if is_liked %}btn-danger{% else %}btn-outline-danger{% endif %}{% if fragment == 'detail' %} me-2{% else %} hover-lift w-50{% endif %}"
         id="btn-like-{{ share.share_id }}"
-        hx-post="{% url 'toggle_like' share.share_id %}?fragment=card"
+        hx-post="{% url 'toggle_like' share.share_id %}?fragment={{ fragment }}"
         hx-target="this"
         hx-swap="outerHTML"
         title="{% if is_liked %}取消点赞{% else %}点赞{% endif %}">
     <i class="bi {% if is_liked %}bi-heart-fill{% else %}bi-heart{% endif %}"></i>
-    <span id="likes-count-{{ share.share_id }}">{{ likes_count }}</span>
+    <span id="likes-count-{{ share.share_id }}"{% if fragment == 'detail' %} class="ms-1"{% endif %}>{{ likes_count }}</span>
 </button>
+{% endwith %}

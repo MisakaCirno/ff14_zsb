@@ -12,6 +12,9 @@ from shares.rate_limits import consume_rate_limit, get_client_ip
 from shares.web.decorators import login_required_or_hx_redirect
 
 
+INTERACTION_FRAGMENTS = {'card', 'detail'}
+
+
 def _record_counter(request, share, *, cookie_name, rule_name, field_name):
     recorded = request.COOKIES.get(cookie_name, '')
     recorded_ids = recorded.split(',') if recorded else []
@@ -76,7 +79,9 @@ def record_copy(request, share_id):
 @login_required_or_hx_redirect
 @require_POST
 def toggle_like(request, share_id):
-    if is_htmx_request(request) and request.GET.get('fragment') != 'card':
+    is_htmx = is_htmx_request(request)
+    fragment = request.GET.get('fragment') if is_htmx else None
+    if is_htmx and fragment not in INTERACTION_FRAGMENTS:
         return HttpResponseBadRequest('Unsupported interaction fragment.')
     share = get_object_or_404(Share, share_id=share_id)
     if not can_view_share(request.user, share):
@@ -88,11 +93,12 @@ def toggle_like(request, share_id):
         share.likes.add(request.user)
         is_liked = True
     likes_count = share.likes.count()
-    if is_htmx_request(request):
+    if is_htmx:
         return render(request, 'shares/includes/like_button.html', {
             'share': share,
             'is_liked': is_liked,
             'likes_count': likes_count,
+            'interaction_fragment': fragment,
         })
     return JsonResponse({
         'status': 'success',
@@ -106,7 +112,9 @@ def toggle_like(request, share_id):
 @login_required_or_hx_redirect
 @require_POST
 def toggle_favorite(request, share_id):
-    if is_htmx_request(request) and request.GET.get('fragment') != 'card':
+    is_htmx = is_htmx_request(request)
+    fragment = request.GET.get('fragment') if is_htmx else None
+    if is_htmx and fragment not in INTERACTION_FRAGMENTS:
         return HttpResponseBadRequest('Unsupported interaction fragment.')
     share = get_object_or_404(Share, share_id=share_id)
     if not can_view_share(request.user, share):
@@ -118,11 +126,12 @@ def toggle_favorite(request, share_id):
         share.favorites.add(request.user)
         is_favorited = True
     favorites_count = share.favorites.count()
-    if is_htmx_request(request):
+    if is_htmx:
         return render(request, 'shares/includes/favorite_button.html', {
             'share': share,
             'is_favorited': is_favorited,
             'favorites_count': favorites_count,
+            'interaction_fragment': fragment,
         })
     return JsonResponse({
         'status': 'success',

@@ -47,3 +47,14 @@ HTMX 搜索遇到空查询、超长查询或精确分享 ID 时返回 `204` 和 
 首页与局部响应共用 `templates/shares/includes/share_cards.html`。瀑布流 continuation 使用 `templates/shares/includes/share_cards_page.html` 包装卡片与下一页状态。匿名登录链接的 `next` 参数会移除 `partial`、`page` 和 `continuation` 并进行 URL 编码，登录后不会误落入局部响应。
 
 `continuation` 是 R12 的内部传输参数，只在 HTMX 瀑布流请求中生效；旧 `partial=shares` JSON 与普通 HTMX 卡片片段继续保持 R11 契约。
+
+## 点赞与收藏响应
+
+点赞 `/share/<share_id>/like/` 和收藏 `/share/<share_id>/favorite/` 只接受 `POST`：
+
+- 已登录的普通请求继续返回原 JSON 字段，不受前端迁移影响。
+- HTMX 请求必须指定 `fragment=card` 或 `fragment=detail`，返回与场景样式匹配的单个按钮 HTML，并由按钮以 `outerHTML` 替换自身。
+- 缺少或传入未知 fragment 时返回 `400`，且不得改变点赞或收藏关系。
+- 登录会话失效时返回 `204` 和 `HX-Redirect`。登录回跳优先采用经过同源校验的 `HX-Current-URL`，禁止外站地址进入 `next`。
+
+响应按 `HX-Request` 和 `Cookie` 区分，并使用私有 `no-store` 缓存策略。CSRF 保护保持启用，浏览器端由全局 HTMX 请求钩子注入 `X-CSRFToken`。

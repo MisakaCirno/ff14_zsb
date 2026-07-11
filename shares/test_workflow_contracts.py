@@ -1,3 +1,5 @@
+from urllib.parse import parse_qs, urlsplit
+
 from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -167,6 +169,23 @@ class InteractionWorkflowTests(TestCase):
         self.assertIn('no-store', response.headers['Cache-Control'])
         self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
 
+    def test_hx_like_endpoint_returns_detail_button(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=detail',
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'btn-danger')
+        self.assertContains(response, 'bi-heart-fill')
+        self.assertContains(response, 'fragment=detail')
+        self.assertContains(response, 'me-2')
+        self.assertContains(response, '>1</span>')
+        self.assertNotContains(response, 'w-50')
+        self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
+
     def test_favorite_endpoint_toggles_relation(self):
         self.client.force_login(self.user)
 
@@ -194,27 +213,81 @@ class InteractionWorkflowTests(TestCase):
         self.assertContains(response, '>1</span>')
         self.assertTrue(self.share.favorites.filter(pk=self.user.pk).exists())
 
-    def test_hx_interaction_rejects_unknown_fragment_without_mutating(self):
+    def test_hx_favorite_endpoint_returns_detail_button(self):
         self.client.force_login(self.user)
 
         response = self.client.post(
-            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=detail',
+            reverse('toggle_favorite', args=[self.share.share_id]) + '?fragment=detail',
             HTTP_HX_REQUEST='true',
         )
 
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'btn-warning')
+        self.assertContains(response, 'bi-star-fill')
+        self.assertContains(response, 'fragment=detail')
+        self.assertContains(response, '>1</span>')
+        self.assertNotContains(response, 'w-50')
+        self.assertTrue(self.share.favorites.filter(pk=self.user.pk).exists())
+
+    def test_hx_interaction_rejects_unknown_or_missing_fragment_without_mutating(self):
+        self.client.force_login(self.user)
+
+        for query in ('', '?fragment=unknown'):
+            with self.subTest(query=query):
+                response = self.client.post(
+                    reverse('toggle_like', args=[self.share.share_id]) + query,
+                    HTTP_HX_REQUEST='true',
+                )
+
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
 
     def test_expired_hx_interaction_redirects_the_full_page_to_login(self):
+        detail_url = reverse('share_detail', args=[self.share.share_id])
         response = self.client.post(
             reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card',
             HTTP_HX_REQUEST='true',
+            HTTP_HX_CURRENT_URL=f'http://testserver{detail_url}',
         )
 
         self.assertEqual(response.status_code, 204)
-        self.assertIn('/login/?next=', response.headers['HX-Redirect'])
+        redirect_query = parse_qs(urlsplit(response.headers['HX-Redirect']).query)
+        self.assertEqual(redirect_query['next'], [detail_url])
         self.assertNotIn('Location', response.headers)
         self.assertFalse(self.share.likes.exists())
+
+    def test_expired_hx_interaction_rejects_external_current_url(self):
+        action_url = reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card'
+
+        response = self.client.post(
+            action_url,
+            HTTP_HX_REQUEST='true',
+            HTTP_HX_CURRENT_URL='https://example.invalid/phishing',
+        )
+
+        redirect_query = parse_qs(urlsplit(response.headers['HX-Redirect']).query)
+        self.assertEqual(redirect_query['next'], [action_url])
+
+    def test_hx_detail_interaction_requires_csrf_token(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.user)
+        action_url = reverse('toggle_like', args=[self.share.share_id]) + '?fragment=detail'
+
+        denied = csrf_client.post(action_url, HTTP_HX_REQUEST='true')
+
+        self.assertEqual(denied.status_code, 403)
+        self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
+
+        page = csrf_client.get(reverse('share_detail', args=[self.share.share_id]))
+        csrf_token = page.cookies['csrftoken'].value
+        allowed = csrf_client.post(
+            action_url,
+            HTTP_HX_REQUEST='true',
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
 
     def test_copy_counter_only_increments_once_per_client_cookie(self):
         first_response = self.client.post(reverse('record_copy', args=[self.share.share_id]))
