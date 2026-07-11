@@ -197,6 +197,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './tokens.css';",
             "@import './foundations.css';",
             "@import './components.css';",
+            "@import './share-preview.css';",
             "@import './feedback.css';",
             "@import './pagination.css';",
         )
@@ -309,6 +310,13 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 self.assertIn('data-preview-frame', source)
                 self.assertIn('data-preview-image', source)
                 self.assertIn('data-preview-loading', source)
+                self.assertNotIn('aria-busy="true"', source)
+                self.assertIn('share-preview__image', source)
+                self.assertIn('share-preview__skeleton', source)
+                self.assertIn('aria-hidden="true"', source)
+                self.assertNotIn('spinner-border', source)
+                self.assertNotIn('linear-gradient(135deg, #667eea', source)
+                self.assertNotIn('object-fit: cover; width: 100%; height: 100%;', source)
 
         self.assertIn(
             'data-submit-on-change',
@@ -319,10 +327,16 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             self.read_template('shares/collection_detail.html'),
         )
         preview_source = self.read_frontend('features/preview-images.ts')
+        preview_styles = self.read_frontend('styles/share-preview.css')
         controls_source = self.read_frontend('features/form-controls.ts')
         self.assertIn("image.addEventListener('load'", preview_source)
         self.assertIn("image.addEventListener('error'", preview_source)
         self.assertIn("document.addEventListener('htmx:load'", preview_source)
+        self.assertIn("setAttribute('aria-busy', 'true')", preview_source)
+        self.assertIn("frame.setAttribute('aria-busy', 'false')", preview_source)
+        self.assertIn(".share-preview[aria-busy='true']", preview_styles)
+        self.assertIn('@media (prefers-reduced-motion: reduce)', preview_styles)
+        self.assertIn('var(--app-z-preview-meta)', preview_styles)
         self.assertIn('form?.requestSubmit()', controls_source)
         self.assertIn('window.confirm(message)', controls_source)
 

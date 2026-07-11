@@ -60,13 +60,14 @@
   --app-focus-ring-width: 0.25rem;
   --app-focus-ring-color: rgba(13, 110, 253, 0.25);
   --app-focus-ring-offset: 0.125rem;
+  --app-focus-ring-inset: -0.25rem;
 
   /* Motion and stacking */
   --app-motion-fast: 0.2s;
   --app-motion-normal: 0.3s;
   --app-ease-standard: ease;
-  --app-z-preview-loading: 10;
   --app-z-content-overlay: 20;
+  --app-z-preview-meta: 15;
   --app-z-floating-message: 1100;
 }
 

@@ -37,19 +37,18 @@
         <div class="col">
             <div class="card h-100 card-hover shadow-sm">
                 <!-- 预览区域 -->
-                <div class="card-img-top position-relative" data-preview-frame style="overflow: hidden; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div class="card-img-top position-relative share-preview" data-preview-frame>
                     <div class="ratio ratio-4x3">
                         <img 
                             src="/n/board/{{ share.strategy_code }}" 
-                            style="object-fit: cover; width: 100%; height: 100%;"
-                            class="{% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
+                            class="share-preview__image{% if share.is_spoiler or share.is_nsfw %} blur-content{% endif %}"
                             loading="lazy"
-                            alt="战术板预览"
+                            alt="{{ share.title }} 的战术板预览"
                             data-preview-image>
                     </div>
 
                     {% if share.is_spoiler or share.is_nsfw %}
-                    <div class="spoiler-overlay">
+                    <div class="spoiler-overlay share-preview__warning share-preview__warning--static">
                         <div class="text-center">
                             {% if share.is_nsfw %}
                             <i class="bi bi-exclamation-diamond-fill fs-1 text-danger mb-2"></i>
@@ -62,16 +61,12 @@
                     </div>
                     {% endif %}
 
-                    <div class="preview-loading position-absolute top-50 start-50 translate-middle text-white" data-preview-loading>
-                        <div class="spinner-border" role="status">
-                            <span class="visually-hidden">加载中...</span>
-                        </div>
-                    </div>
+                    <div class="share-preview__skeleton" data-preview-loading aria-hidden="true"></div>
                     
                     <!-- 半透明遮罩 -->
-                    <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay" style="background: rgba(0,0,0,0.05); pointer-events: none;"></div>
+                    <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay share-preview__veil" aria-hidden="true"></div>
                     <!-- 分类和原创标签 -->
-                    <div class="position-absolute top-0 start-0 m-2">
+                    <div class="position-absolute top-0 start-0 m-2 share-preview__meta">
                         {% if share.category == 'combat' %}
                         <span class="badge bg-danger shadow-sm">战斗</span>
                         {% else %}
@@ -82,7 +77,7 @@
                         {% endif %}
                     </div>
                     <!-- 状态标签 -->
-                    <div class="position-absolute top-0 end-0 m-2">
+                    <div class="position-absolute top-0 end-0 m-2 share-preview__meta">
                         <span class="badge bg-warning text-dark">
                             <i class="bi bi-hourglass-split"></i> 待审核
                         </span>

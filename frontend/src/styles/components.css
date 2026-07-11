@@ -26,10 +26,6 @@
   transition: transform var(--app-motion-normal) var(--app-ease-standard);
 }
 
-.preview-loading {
-  z-index: var(--app-z-preview-loading);
-}
-
 .hover-lift:hover {
   transform: translateY(-2px);
   transition: transform var(--app-motion-fast) var(--app-ease-standard);

@@ -1,8 +1,10 @@
 function hidePreviewLoading(image: HTMLImageElement): void {
-  image
-    .closest<HTMLElement>('[data-preview-frame]')
-    ?.querySelector<HTMLElement>('[data-preview-loading]')
-    ?.classList.add('d-none')
+  const frame = image.closest<HTMLElement>('[data-preview-frame]')
+  if (!frame) {
+    return
+  }
+  frame.querySelector<HTMLElement>('[data-preview-loading]')?.classList.add('d-none')
+  frame.setAttribute('aria-busy', 'false')
 }
 
 const initializedImages = new WeakSet<HTMLImageElement>()
@@ -16,6 +18,8 @@ function initializePreviewImage(image: HTMLImageElement): void {
   image.addEventListener('error', () => hidePreviewLoading(image), { once: true })
   if (image.complete) {
     hidePreviewLoading(image)
+  } else {
+    image.closest<HTMLElement>('[data-preview-frame]')?.setAttribute('aria-busy', 'true')
   }
 }
 
