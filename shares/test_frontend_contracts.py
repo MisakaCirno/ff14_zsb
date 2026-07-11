@@ -197,6 +197,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         style_imports = (
             "@import './tokens.css';",
             "@import './foundations.css';",
+            "@import './bootstrap-adapter.css';",
             "@import './components.css';",
             "@import './share-preview.css';",
             "@import './feedback.css';",
@@ -218,8 +219,24 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('--app-motion-normal:', tokens_source)
 
         components_source = self.read_frontend('styles/components.css')
+        adapter_source = self.read_frontend('styles/bootstrap-adapter.css')
         self.assertIn('.registration-form #id_username', components_source)
         self.assertIn('.admin-tabs .nav-link', components_source)
+        self.assertIn('.share-card {', components_source)
+        self.assertIn('box-shadow: var(--app-shadow-sm);', components_source)
+        self.assertIn('@media (prefers-reduced-motion: reduce)', components_source)
+        self.assertNotIn('transition: all', components_source)
+        self.assertNotRegex(
+            components_source,
+            re.compile(r'\.card\s*\{[^}]*overflow\s*:', re.DOTALL),
+        )
+        self.assertIn('--bs-card-border-radius:', adapter_source)
+        self.assertIn('--bs-card-inner-border-radius:', adapter_source)
+        self.assertIn('--bs-badge-font-size:', adapter_source)
+        self.assertIn('.modal {', adapter_source)
+        self.assertIn('.form-control:focus', adapter_source)
+        self.assertNotIn('--bs-btn-bg:', adapter_source)
+        self.assertNotIn('--bs-alert-bg:', adapter_source)
         self.assertIn(
             'class="registration-form"',
             self.read_template('shares/register.html'),
@@ -228,6 +245,27 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             'admin-tabs',
             self.read_template('shares/includes/admin_tabs.html'),
         )
+        self.assertNotIn(
+            'style="overflow: visible;"',
+            self.read_template('shares/index.html'),
+        )
+
+        for template_path in (
+            'shares/includes/share_cards.html',
+            'shares/my_shares.html',
+            'shares/user_public_profile.html',
+            'shares/collection_detail.html',
+            'shares/admin_review_list.html',
+        ):
+            with self.subTest(template=template_path):
+                source = self.read_template(template_path)
+                self.assertIn('share-card card-hover', source)
+                self.assertNotRegex(
+                    source,
+                    re.compile(
+                        r'class="[^"]*(?:card-hover[^"]*shadow-sm|shadow-sm[^"]*card-hover)',
+                    ),
+                )
 
         base_source = self.read_template('base.html')
         feedback_source = self.read_template('shares/includes/flash_messages.html')

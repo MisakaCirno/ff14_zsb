@@ -1,6 +1,6 @@
 {% for share in shares %}
 <div class="col">
-    <div class="card h-100 card-hover shadow-sm">
+    <div class="card h-100 share-card card-hover">
         <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link">
             {% include 'shares/includes/share_preview.html' with share=share preview_variant='standard' only %}
         </a>

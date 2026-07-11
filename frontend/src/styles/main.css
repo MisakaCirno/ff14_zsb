@@ -1,5 +1,6 @@
 @import './tokens.css';
 @import './foundations.css';
+@import './bootstrap-adapter.css';
 @import './components.css';
 @import './share-preview.css';
 @import './feedback.css';

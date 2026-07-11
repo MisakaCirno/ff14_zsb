@@ -1,0 +1,71 @@
+:root {
+  --bs-body-font-family: var(--app-font-sans);
+  --bs-body-font-size: var(--app-text-base);
+  --bs-body-font-weight: var(--app-font-regular);
+  --bs-body-line-height: var(--app-line-height-normal);
+  --bs-body-color: var(--app-color-text);
+  --bs-body-bg: var(--app-color-canvas);
+  --bs-border-color: var(--app-color-border);
+  --bs-box-shadow-sm: var(--app-shadow-sm);
+  --bs-box-shadow: var(--app-shadow-md);
+  --bs-box-shadow-lg: var(--app-shadow-modal);
+  --bs-focus-ring-width: var(--app-focus-ring-width);
+  --bs-focus-ring-color: var(--app-focus-ring-color);
+}
+
+.btn {
+  --bs-btn-font-weight: var(--app-font-medium);
+  --bs-btn-focus-box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-focus-ring-color);
+}
+
+.card {
+  --bs-card-border-color: var(--app-color-border);
+  --bs-card-border-radius: var(--app-radius-lg);
+  --bs-card-inner-border-radius: calc(
+    var(--app-radius-lg) - var(--bs-card-border-width)
+  );
+}
+
+.badge {
+  --bs-badge-font-size: var(--app-text-xs);
+  --bs-badge-padding-x: 0.65em;
+  --bs-badge-padding-y: 0.35em;
+}
+
+.alert {
+  --bs-alert-border-radius: var(--app-radius-md);
+}
+
+.modal {
+  --bs-modal-border-color: var(--app-color-border);
+  --bs-modal-border-radius: var(--app-radius-lg);
+  --bs-modal-inner-border-radius: calc(
+    var(--app-radius-lg) - var(--bs-modal-border-width)
+  );
+  --bs-modal-box-shadow: var(--app-shadow-modal);
+}
+
+.dropdown-menu:not(.dropdown-menu-dark) {
+  --bs-dropdown-border-color: var(--app-color-border);
+  --bs-dropdown-border-radius: var(--app-radius-md);
+  --bs-dropdown-inner-border-radius: calc(
+    var(--app-radius-md) - var(--bs-dropdown-border-width)
+  );
+  --bs-dropdown-box-shadow: var(--app-shadow-md);
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus,
+.registration-form #id_username:focus,
+.registration-form #id_password1:focus,
+.registration-form #id_password2:focus {
+  border-color: var(--app-color-focus-border);
+  outline: 0;
+  box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-focus-ring-color);
+}
+
+.form-check-input:checked {
+  background-color: var(--app-color-primary);
+  border-color: var(--app-color-primary);
+}

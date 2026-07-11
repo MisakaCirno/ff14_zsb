@@ -35,7 +35,7 @@
     <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
         {% for share in shares %}
         <div class="col">
-            <div class="card h-100 card-hover shadow-sm">
+            <div class="card h-100 share-card card-hover">
                 <!-- 预览区域 -->
                 {% include 'shares/includes/share_preview.html' with share=share preview_variant='review' only %}
                 

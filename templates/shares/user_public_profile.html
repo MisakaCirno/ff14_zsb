@@ -69,7 +69,7 @@
                 <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
                     {% for share in shares %}
                     <div class="col">
-                        <div class="card h-100 card-hover shadow-sm">
+                        <div class="card h-100 share-card card-hover">
                             <!-- 预览区域 -->
                             <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link">
                                 {% include 'shares/includes/share_preview.html' with share=share preview_variant='standard' only %}
@@ -187,7 +187,7 @@
             <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
                 {% for collection in collections %}
                 <div class="col">
-                    <div class="card h-100 shadow-sm card-hover">
+                    <div class="card h-100 card-hover">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <h5 class="card-title fw-bold mb-0">

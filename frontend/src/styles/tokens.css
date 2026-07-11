@@ -14,6 +14,7 @@
   --app-color-info: #0dcaf0;
   --app-color-preview-start: #667eea;
   --app-color-preview-end: #764ba2;
+  --app-color-focus-border: #86b7fe;
   --app-gradient-preview: linear-gradient(
     135deg,
     var(--app-color-preview-start) 0%,

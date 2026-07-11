@@ -2,15 +2,20 @@
   font-weight: var(--app-font-bold);
 }
 
+.card-hover {
+  box-shadow: var(--app-shadow-sm);
+  transition:
+    transform var(--app-motion-normal) var(--app-ease-standard),
+    box-shadow var(--app-motion-normal) var(--app-ease-standard);
+}
+
 .card-hover:hover {
   transform: translateY(-5px);
   box-shadow: var(--app-shadow-hover);
-  transition: all var(--app-motion-normal) var(--app-ease-standard);
 }
 
 .card-hover:hover .card-img-top iframe {
   transform: scale(1.05);
-  transition: transform var(--app-motion-normal) var(--app-ease-standard);
 }
 
 .card-hover:hover .preview-overlay {
@@ -26,20 +31,16 @@
   transition: transform var(--app-motion-normal) var(--app-ease-standard);
 }
 
-.hover-lift:hover {
-  transform: translateY(-2px);
+.hover-lift {
   transition: transform var(--app-motion-fast) var(--app-ease-standard);
 }
 
-.card {
-  border-radius: var(--app-radius-lg);
-  overflow: hidden;
-  transition: all var(--app-motion-normal) var(--app-ease-standard);
+.hover-lift:hover {
+  transform: translateY(-2px);
 }
 
-.badge {
-  font-size: var(--app-text-xs);
-  padding: 0.35em 0.65em;
+.share-card {
+  overflow: hidden;
 }
 
 .strategy-code {
@@ -103,4 +104,19 @@
   height: 200px;
   font-family: inherit;
   font-size: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-hover,
+  .hover-lift,
+  .card-img-top iframe,
+  .blur-content {
+    transition: none;
+  }
+
+  .card-hover:hover,
+  .hover-lift:hover,
+  .card-hover:hover .card-img-top iframe {
+    transform: none;
+  }
 }
