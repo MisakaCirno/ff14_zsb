@@ -82,8 +82,10 @@ class ClientRenderingSafetyTests(SimpleTestCase):
 
         self.assertIn('data-share-id="{{ share.share_id }}"', source)
         self.assertIn('data-share-title="{{ share.title }}"', source)
+        self.assertIn('data-share-author=', source)
         self.assertNotIn('const shareId = "{{ share.share_id|escapejs }}"', source)
         self.assertNotIn("localStorage.setItem('visitHistory'", source)
+        self.assertNotIn('|escapejs', source)
         self.assertIn('recordVisitHistory(shareId, shareTitle)', detail_source)
 
 

@@ -9,6 +9,7 @@ import { initializeInfiniteScrollStatus } from './features/infinite-scroll'
 import { initializeShareActions } from './features/share-actions'
 import { initializeShareDetails } from './features/share-detail'
 import { initializeShareEditors } from './features/share-editor'
+import { initializeShareImages } from './features/share-image'
 import { initializeVisitHistory, updateHistoryDropdown } from './features/visit-history'
 import './styles/main.css'
 
@@ -49,4 +50,5 @@ initializeAnnouncement()
 initializeInfiniteScrollStatus()
 initializeShareEditors()
 initializeShareDetails()
+initializeShareImages()
 Alpine.start()

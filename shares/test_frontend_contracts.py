@@ -18,6 +18,8 @@ class FrontendShellContractTests(TestCase):
             visibility=Share.Visibility.PUBLIC,
             status=Share.Status.APPROVED,
         )
+        self.author.profile.nickname = '作者 & "昵称"'
+        self.author.profile.save(update_fields=['nickname'])
 
     def test_shell_loads_vite_without_legacy_vue_or_inline_base_logic(self):
         response = self.client.get(reverse('index'))
@@ -65,6 +67,7 @@ class FrontendShellContractTests(TestCase):
         self.assertIn('data-share-detail', content)
         self.assertIn(f'data-share-id="{self.share.share_id}"', content)
         self.assertIn('data-share-title="前端契约 &amp; &quot;测试&quot;"', content)
+        self.assertIn('data-share-author="作者 &amp; &quot;昵称&quot;"', content)
         self.assertIn(
             f'data-record-view-url="/share/{self.share.share_id}/view/"',
             content,
@@ -171,3 +174,42 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('recordVisitHistory(shareId, shareTitle)', module_source)
         self.assertIn("updateCounter(root, '[data-views-count]'", module_source)
         self.assertIn("updateCounter(root, '[data-copies-count]'", module_source)
+
+    def test_share_image_uses_module_contract_and_only_qrcode_runtime(self):
+        source = self.read_template('shares/detail.html')
+        about_source = self.read_template('about.html')
+        module_source = self.read_frontend('features/share-image.ts')
+
+        for hook in (
+            'data-share-author',
+            'data-generate-share-image',
+            'data-share-image-spinner',
+            'data-share-image-modal',
+            'data-share-image-canvas',
+            'data-copy-share-image',
+            'data-download-share-image',
+        ):
+            self.assertIn(hook, source)
+
+        for legacy_handler in (
+            'onclick="generateShareImage',
+            'onclick="copyShareImage',
+            'onclick="downloadShareImage',
+            'function generateShareImage',
+            'function copyShareImage',
+            'function downloadShareImage',
+        ):
+            self.assertNotIn(legacy_handler, source)
+
+        self.assertNotIn('<script>', source)
+        self.assertNotIn('html2canvas', source)
+        self.assertNotIn('html2canvas', about_source)
+        self.assertIn("static 'js/qrcode.min.js'", source)
+        self.assertIn('window.QRCode', module_source)
+        self.assertIn('const targetWidth = 960', module_source)
+        self.assertIn('const targetHeight = 720', module_source)
+        self.assertIn("if (blob === null)", module_source)
+        self.assertIn("typeof ClipboardItem !== 'undefined'", module_source)
+        self.assertIn('getOrCreateInstance(modalElement)', module_source)
+        self.assertIn('container.remove()', module_source)
+        self.assertIn('link?.remove()', module_source)

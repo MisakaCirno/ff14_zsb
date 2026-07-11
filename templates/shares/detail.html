@@ -8,6 +8,7 @@
      data-share-detail
      data-share-id="{{ share.share_id }}"
      data-share-title="{{ share.title }}"
+     data-share-author="{% if share.author %}{{ share.author.profile.get_display_name }}{% else %}匿名用户{% endif %}"
      data-record-view-url="{% url 'record_view' share.share_id %}"
      data-record-copy-url="{% url 'record_copy' share.share_id %}">
     {% if share.status == 'pending' and share.visibility == 'public' %}
@@ -73,7 +74,6 @@
                     <div class="ratio" style="--bs-aspect-ratio: 75%;">
                         <img src="/n/board/{{ share.strategy_code }}" 
                              style="object-fit: cover;"
-                             id="previewImage"
                              data-share-preview
                              class="w-100 h-100 {% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
                              alt="战术板预览">
@@ -115,7 +115,7 @@
                             <div class="mb-4">
                                 <h6 class="fw-bold">战术板代码</h6>
                                 <div class="input-group">
-                                    <input type="text" class="form-control strategy-code" id="strategyCode" data-share-code value="{{ share.strategy_code }}" readonly>
+                                    <input type="text" class="form-control strategy-code" data-share-code value="{{ share.strategy_code }}" readonly>
                                     <button class="btn btn-outline-secondary" type="button" data-copy-detail-code>
                                         <i class="bi bi-clipboard"></i> 复制
                                     </button>
@@ -129,11 +129,11 @@
                                     <button class="btn btn-outline-secondary" type="button" data-copy-share-url>
                                         <i class="bi bi-link-45deg"></i> 复制链接
                                     </button>
-                                    <button class="btn btn-outline-primary" onclick="generateShareImage()" id="generateBtn">
+                                    <button class="btn btn-outline-primary" type="button" data-generate-share-image>
                                         <i class="bi bi-image"></i> 生成分享图
                                     </button>
                                 </div>
-                                <div class="spinner-border spinner-border-sm d-none mt-2" role="status" id="loadingSpinner">
+                                <div class="spinner-border spinner-border-sm d-none mt-2" role="status" data-share-image-spinner>
                                     <span class="visually-hidden">生成中...</span>
                                 </div>
                             </div>
@@ -407,7 +407,7 @@
 {% endif %}
 
 <!-- 分享图模态窗口 -->
-<div class="modal fade" id="shareImageModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" data-share-image-modal tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
@@ -416,7 +416,7 @@
             </div>
             <div class="modal-body text-center p-4" style="background-color: #f8f9fa;">
                 <div class="mb-3">
-                    <canvas id="shareCanvas" style="max-width: 100%; height: auto; border: 2px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"></canvas>
+                    <canvas data-share-image-canvas style="max-width: 100%; height: auto; border: 2px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"></canvas>
                 </div>
                 <div class="alert alert-info mb-0">
                     <i class="bi bi-info-circle"></i> 
@@ -427,10 +427,10 @@
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
                     <i class="bi bi-x-circle"></i> 关闭
                 </button>
-                <button type="button" class="btn btn-primary" onclick="copyShareImage()">
+                <button type="button" class="btn btn-primary" data-copy-share-image>
                     <i class="bi bi-clipboard"></i> 复制到剪贴板
                 </button>
-                <button type="button" class="btn btn-success" onclick="downloadShareImage()">
+                <button type="button" class="btn btn-success" data-download-share-image>
                     <i class="bi bi-download"></i> 下载图片
                 </button>
             </div>
@@ -440,337 +440,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/html2canvas.min.js' %}"></script>
 <script src="{% static 'js/qrcode.min.js' %}"></script>
-<script>
-function calculateRegionComplexity(ctx, x, y, width, height) {
-    try {
-        const imageData = ctx.getImageData(x, y, width, height);
-        const data = imageData.data;
-        let score = 0;
-        
-        // 简单的边缘检测算法 (计算相邻像素差异之和)
-        // 步长为4以提高性能
-        for (let i = 0; i < data.length; i += 16) {
-            // 当前像素亮度
-            const r1 = data[i];
-            const g1 = data[i+1];
-            const b1 = data[i+2];
-            const l1 = 0.299 * r1 + 0.587 * g1 + 0.114 * b1;
-            
-            // 下一个像素亮度 (如果存在)
-            if (i + 4 < data.length) {
-                const r2 = data[i+4];
-                const g2 = data[i+5];
-                const b2 = data[i+6];
-                const l2 = 0.299 * r2 + 0.587 * g2 + 0.114 * b2;
-                score += Math.abs(l1 - l2);
-            }
-        }
-        return score;
-    } catch (e) {
-        console.warn('无法计算区域复杂度:', e);
-        return 0;
-    }
-}
-
-async function generateShareImage() {
-    const btn = document.getElementById('generateBtn');
-    const spinner = document.getElementById('loadingSpinner');
-    
-    // 显示加载状态
-    btn.disabled = true;
-    btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 生成中...';
-    spinner.classList.remove('d-none');
-    
-    let qrContainer = null;
-
-    try {
-        const targetWidth = 960;
-        const targetHeight = 720;
-        
-        // 1. 加载预览图
-        const strategyCode = document.getElementById('strategyCode').value;
-        const imageUrl = '/n/board/' + strategyCode;
-        
-        const previewImg = new Image();
-        previewImg.crossOrigin = "Anonymous";
-        previewImg.src = imageUrl;
-        
-        await new Promise((resolve, reject) => {
-             previewImg.onload = resolve;
-             previewImg.onerror = () => reject(new Error("图片加载失败"));
-             // 防止永久挂起
-             setTimeout(() => reject(new Error("图片加载超时")), 10000);
-        });
-
-        // 2. 创建合成画布
-        const finalCanvas = document.getElementById('shareCanvas');
-        const ctx = finalCanvas.getContext('2d');
-        finalCanvas.width = targetWidth;
-        finalCanvas.height = targetHeight;
-        
-        // 3. 绘制预览图 (保持比例填充)
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, targetWidth, targetHeight);
-        
-        // 计算居中裁剪
-        const scale = Math.max(targetWidth / previewImg.width, targetHeight / previewImg.height);
-        const xOffset = (targetWidth - previewImg.width * scale) / 2;
-        const yOffset = (targetHeight - previewImg.height * scale) / 2;
-        
-        ctx.drawImage(previewImg, xOffset, yOffset, previewImg.width * scale, previewImg.height * scale);
-        
-        // 创建二维码容器
-        qrContainer = document.createElement('div');
-        qrContainer.style.position = 'absolute';
-        qrContainer.style.left = '-9999px';
-        qrContainer.style.top = '-9999px';
-        qrContainer.style.visibility = 'hidden';
-        document.body.appendChild(qrContainer);
-        
-        // ...existing code...
-        // 生成二维码 (保持原有逻辑)
-        const cleanUrl = window.location.origin + window.location.pathname;
-        const qrCode = new QRCode(qrContainer, {
-            text: cleanUrl,
-            width: 180,
-            height: 180,
-            colorDark: '#000000',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.H
-        });
-        
-        // 等待二维码生成
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        // ...existing code...
-        // 获取二维码图片逻辑 (保持不变)
-        const qrCanvas = qrContainer.querySelector('canvas');
-        let qrImage = null;
-        
-        if (qrCanvas) {
-            qrImage = qrCanvas;
-        } else {
-            // 降级到 img 元素
-            qrImage = qrContainer.querySelector('img');
-            if (qrImage && !qrImage.complete) {
-                await new Promise((resolve, reject) => {
-                    qrImage.onload = resolve;
-                    qrImage.onerror = reject;
-                    setTimeout(resolve, 1000);
-                });
-            }
-        }
-
-        if (!qrImage) {
-            throw new Error('二维码生成失败');
-        }
-
-        // ...existing code...
-        // 后续绘制二维码和文字的逻辑保持不变，因为 ctx/canvas 变量名一致
-        // 二维码参数 - 适配 960x720 的尺寸
-        const qrSize = 120;
-        const padding = 15;
-        const borderRadius = 6;
-        
-        // 智能位置选择
-        const checkSize = qrSize + padding * 2;
-        const leftScore = calculateRegionComplexity(ctx, 0, finalCanvas.height - checkSize, checkSize, checkSize);
-        const rightScore = calculateRegionComplexity(ctx, finalCanvas.width - checkSize, finalCanvas.height - checkSize, checkSize, checkSize);
-
-        // 默认左下角，如果右下角更空则放右下角
-        let x = padding;
-        if (rightScore < leftScore) {
-            x = finalCanvas.width - qrSize - padding;
-        }
-        
-        const y = finalCanvas.height - qrSize - padding;
-        
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 3;
-        
-        // 绘制圆角矩形
-        ctx.beginPath();
-        ctx.moveTo(x + borderRadius, y);
-        ctx.lineTo(x + qrSize - borderRadius, y);
-        ctx.quadraticCurveTo(x + qrSize, y, x + qrSize, y + borderRadius);
-        ctx.lineTo(x + qrSize, y + qrSize - borderRadius);
-        ctx.quadraticCurveTo(x + qrSize, y + qrSize, x + qrSize - borderRadius, y + qrSize);
-        ctx.lineTo(x + borderRadius, y + qrSize);
-        ctx.quadraticCurveTo(x, y + qrSize, x, y + qrSize - borderRadius);
-        ctx.lineTo(x, y + borderRadius);
-        ctx.quadraticCurveTo(x, y, x + borderRadius, y);
-        ctx.closePath();
-        ctx.fill();
-        
-        // 重置阴影
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        
-        // 添加边框
-        ctx.strokeStyle = '#0d6efd';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        
-        // 绘制二维码
-        const qrPadding = 8;
-        ctx.drawImage(qrImage, 
-            x + qrPadding, 
-            y + qrPadding, 
-            qrSize - qrPadding * 2, 
-            qrSize - qrPadding * 2
-        );
-        
-        // 添加顶部标题栏
-        const headerHeight = 40;
-        const gradient = ctx.createLinearGradient(0, 0, finalCanvas.width, 0);
-        gradient.addColorStop(0, 'rgba(13, 110, 253, 0.95)');
-        gradient.addColorStop(1, 'rgba(102, 126, 234, 0.95)');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, finalCanvas.width, headerHeight);
-        
-        // 添加标题信息 (左侧：标题 by 作者)
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'left';
-        
-        const shareTitle = "{{ share.title|escapejs }}";
-        const shareAuthor = "{% if share.author %}{{ share.author.profile.get_display_name|escapejs }}{% else %}匿名用户{% endif %}";
-        
-        // 标题部分
-        ctx.font = 'bold 20px "Microsoft YaHei", Arial, sans-serif';
-        ctx.fillText(shareTitle, 20, 27);
-        
-        // 作者部分
-        const titleWidth = ctx.measureText(shareTitle).width;
-        ctx.font = '16px "Microsoft YaHei", Arial, sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.fillText(`  by  ${shareAuthor}`, 20 + titleWidth, 27);
-        
-        // 添加页面链接 (右侧)
-        ctx.textAlign = 'right';
-        ctx.font = '14px "Microsoft YaHei", Arial, sans-serif';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        // 显示完整链接（去除协议头以节省空间）
-        let linkText = cleanUrl.replace(/^https?:\/\//, '');
-        ctx.fillText(linkText, finalCanvas.width - 20, 27);
-        
-        // 添加底部提示文字（二维码上方）+ 描边
-        ctx.font = 'bold 14px "Microsoft YaHei", Arial, sans-serif';
-        ctx.textAlign = 'center';
-        
-        // 描边
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
-        ctx.strokeText('获取代码', x + qrSize / 2, y - 6);
-        
-        // 文字
-        ctx.fillStyle = '#495057';
-        ctx.fillText('获取代码', x + qrSize / 2, y - 6);
-        
-        // 显示模态窗口
-        const modal = new bootstrap.Modal(document.getElementById('shareImageModal'));
-        modal.show();
-        
-        // 显示成功提示
-        setTimeout(() => {
-            showMessage('分享图生成成功！', 'success');
-        }, 100);
-        
-    } catch (error) {
-        console.error('生成分享图失败:', error);
-        showMessage('生成分享图失败：' + error.message, 'danger');
-    } finally {
-        // 恢复按钮状态
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-image"></i> 生成分享图';
-        spinner.classList.add('d-none');
-        
-        // 清理临时元素
-        if (qrContainer) {
-            document.body.removeChild(qrContainer);
-        }
-    }
-}
-
-async function copyShareImage() {
-    try {
-        const canvas = document.getElementById('shareCanvas');
-        
-        // 显示加载提示
-        const btn = event.target;
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>复制中...';
-        
-        // 将 canvas 转换为 blob
-        canvas.toBlob(async (blob) => {
-            try {
-                // 尝试使用 Clipboard API
-                if (navigator.clipboard && ClipboardItem) {
-                    await navigator.clipboard.write([
-                        new ClipboardItem({
-                            'image/png': blob
-                        })
-                    ]);
-                    
-                    // 显示成功提示
-                    btn.innerHTML = '<i class="bi bi-check-circle"></i> 已复制！';
-                    btn.classList.remove('btn-primary');
-                    btn.classList.add('btn-success');
-                    
-                    setTimeout(() => {
-                        btn.innerHTML = originalText;
-                        btn.classList.remove('btn-success');
-                        btn.classList.add('btn-primary');
-                        btn.disabled = false;
-                    }, 2000);
-                } else {
-                    // 降级方案：复制 base64 数据
-                    const dataUrl = canvas.toDataURL('image/png');
-                    const textarea = document.createElement('textarea');
-                    textarea.value = dataUrl;
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(textarea);
-                    
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                    showMessage('图片数据已复制到剪贴板！（部分浏览器可能需要使用下载功能）', 'warning');
-                }
-            } catch (err) {
-                console.error('复制失败:', err);
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                showMessage('复制失败，请尝试使用"下载图片"功能，或右键保存图片', 'danger');
-            }
-        }, 'image/png');
-    } catch (error) {
-        console.error('复制失败:', error);
-        showMessage('复制失败，请尝试使用"下载图片"功能', 'danger');
-    }
-}
-
-function downloadShareImage() {
-    try {
-        const canvas = document.getElementById('shareCanvas');
-        const link = document.createElement('a');
-        const timestamp = new Date().getTime();
-        link.download = `zsb-share-{{ share.share_id }}-${timestamp}.png`;
-        link.href = canvas.toDataURL('image/png', 1.0);
-        link.click();
-        
-        // 显示成功提示
-        showMessage('图片下载已开始！', 'success');
-    } catch (error) {
-        console.error('下载失败:', error);
-        showMessage('下载失败，请右键点击图片另存为', 'danger');
-    }
-}
-
-</script>
 {% endblock %}
