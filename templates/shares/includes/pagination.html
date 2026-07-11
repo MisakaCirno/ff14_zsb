@@ -1,8 +1,8 @@
 {% load ui_components %}
 {% if page_obj.has_other_pages %}
 {% pagination_items page_obj as page_items %}
-<nav class="app-pagination" aria-label="{{ aria_label|default:'分页导航' }}">
-    <ul class="pagination justify-content-center mb-0">
+<nav class="app-pagination{% if nav_class %} {{ nav_class }}{% endif %}" aria-label="{{ aria_label|default:'分页导航' }}">
+    <ul class="pagination justify-content-center{% if pagination_class %} {{ pagination_class }}{% else %} mb-0{% endif %}">
         {% if page_obj.has_previous %}
         <li class="page-item">
             <a class="page-link" href="{% querystring page=page_obj.previous_page_number %}" rel="prev">上一页</a>

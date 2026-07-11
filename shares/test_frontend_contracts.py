@@ -111,6 +111,30 @@ class FrontendShellContractTests(TestCase):
         self.assertNotIn('function toggleLike', content)
         self.assertNotIn('function toggleFavorite', content)
 
+    def test_my_reaction_pagination_preserves_active_tab(self):
+        related_shares = []
+        for index in range(13):
+            related_shares.append(Share.objects.create(
+                title=f'分页契约 {index}',
+                strategy_code=f'[stgy:pagination-{index}]',
+                author=self.author,
+                visibility=Share.Visibility.PUBLIC,
+                status=Share.Status.APPROVED,
+            ))
+        self.author.liked_shares.add(*related_shares)
+        self.author.favorited_shares.add(*related_shares)
+        self.client.force_login(self.author)
+
+        for tab in ('likes', 'favorites'):
+            with self.subTest(tab=tab):
+                response = self.client.get(reverse('my_shares'), {'tab': tab})
+                content = response.content.decode()
+
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('aria-label="我的内容分页"', content)
+                self.assertIn(f'?tab={tab}&amp;page=2', content)
+                self.assertNotIn('href="?page=2"', content)
+
 
 class FrontendTemplateSourceTests(SimpleTestCase):
     def read_template(self, relative_path):
@@ -264,6 +288,13 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                     source,
                 )
                 self.assertNotIn('logs.paginator.page_range', source)
+
+        my_shares_source = self.read_template('shares/my_shares.html')
+        self.assertIn(
+            "{% include 'shares/includes/pagination.html' with page_obj=shares",
+            my_shares_source,
+        )
+        self.assertNotIn('href="?page=', my_shares_source)
 
     def test_common_template_events_use_data_contracts(self):
         for template_path in (

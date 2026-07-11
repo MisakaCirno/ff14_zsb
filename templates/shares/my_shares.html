@@ -212,65 +212,7 @@
             </div>
 
             <!-- 分页 -->
-            {% if shares.has_other_pages %}
-            <nav class="mt-5" aria-label="分页导航">
-                <ul class="pagination pagination-lg justify-content-center">
-                    {% if shares.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page=1" aria-label="首页">
-                            <i class="bi bi-chevron-bar-left"></i>
-                        </a>
-                    </li>
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ shares.previous_page_number }}" aria-label="上一页">
-                            <i class="bi bi-chevron-left"></i> 上一页
-                        </a>
-                    </li>
-                    {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">
-                            <i class="bi bi-chevron-bar-left"></i>
-                        </span>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">
-                            <i class="bi bi-chevron-left"></i> 上一页
-                        </span>
-                    </li>
-                    {% endif %}
-                    
-                    <li class="page-item active">
-                        <span class="page-link">
-                            第 {{ shares.number }} / {{ shares.paginator.num_pages }} 页
-                        </span>
-                    </li>
-                    
-                    {% if shares.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ shares.next_page_number }}" aria-label="下一页">
-                            下一页 <i class="bi bi-chevron-right"></i>
-                        </a>
-                    </li>
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ shares.paginator.num_pages }}" aria-label="末页">
-                            <i class="bi bi-chevron-bar-right"></i>
-                        </a>
-                    </li>
-                    {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">
-                            下一页 <i class="bi bi-chevron-right"></i>
-                        </span>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">
-                            <i class="bi bi-chevron-bar-right"></i>
-                        </span>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
-            {% endif %}
+            {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='我的内容分页' nav_class='mt-5' pagination_class='pagination-lg' %}
         </div>
 
         <!-- 合集列表 -->
