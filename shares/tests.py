@@ -24,6 +24,7 @@ class HomeFeedModeTests(TestCase):
         self.assertEqual(response.context['feed_mode'], UserProfile.HomeFeedMode.INFINITE)
         self.assertContains(response, '瀑布')
         self.assertContains(response, 'id="infinite-scroll-sentinel"')
+        self.assertContains(response, 'hx-trigger="intersect, click"')
         self.assertContains(response, '<script type="module" src="/static/app/assets/main-')
         self.assertIn(
             'shares/includes/share_cards.html',
@@ -106,6 +107,76 @@ class HomeFeedModeTests(TestCase):
         self.assertIn('no-store', response.headers['Cache-Control'])
         self.assertIn('HX-Request', response.headers['Vary'])
         self.assertIn('Cookie', response.headers['Vary'])
+
+    def test_hx_infinite_continuation_replaces_sentinel_until_last_page(self):
+        for index in range(13, 25):
+            Share.objects.create(
+                title=f'分享 {index}',
+                strategy_code=f'[stgy:test-{index}]',
+                author=self.user,
+                visibility=Share.Visibility.PUBLIC,
+                status=Share.Status.APPROVED,
+            )
+
+        page_two = self.client.get(
+            reverse('index'),
+            {
+                'feed': UserProfile.HomeFeedMode.INFINITE,
+                'continuation': '1',
+                'page': 2,
+            },
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(page_two.status_code, 200)
+        self.assertContains(page_two, 'card h-100')
+        self.assertContains(page_two, 'id="infinite-scroll-sentinel"')
+        self.assertContains(page_two, 'page=3')
+        self.assertContains(page_two, 'continuation=1')
+        self.assertNotContains(page_two, 'partial=shares')
+        self.assertNotContains(page_two, 'continuation%3D1')
+        self.assertNotContains(page_two, '<!DOCTYPE html>')
+
+        page_three = self.client.get(
+            reverse('index'),
+            {
+                'feed': UserProfile.HomeFeedMode.INFINITE,
+                'continuation': '1',
+                'page': 3,
+            },
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(page_three.status_code, 200)
+        self.assertContains(page_three, 'data-infinite-scroll-end')
+        self.assertNotContains(page_three, 'id="infinite-scroll-sentinel"')
+
+    def test_hx_search_continuation_preserves_search_query(self):
+        for index in range(13, 25):
+            Share.objects.create(
+                title=f'分享 {index}',
+                strategy_code=f'[stgy:test-{index}]',
+                author=self.user,
+                visibility=Share.Visibility.PUBLIC,
+                status=Share.Status.APPROVED,
+            )
+
+        response = self.client.get(
+            reverse('search'),
+            {
+                'q': '分享',
+                'feed': UserProfile.HomeFeedMode.INFINITE,
+                'continuation': '1',
+                'page': 2,
+            },
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'hx-get="/search/?')
+        self.assertContains(response, 'q=%E5%88%86%E4%BA%AB')
+        self.assertContains(response, 'page=3')
+        self.assertNotContains(response, 'continuation%3D1')
 
     def test_home_and_search_reject_unsafe_methods(self):
         for url in (reverse('index'), reverse('search')):

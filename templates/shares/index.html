@@ -19,9 +19,9 @@
     {% if latest_announcement %}
     <div class="row mb-4">
         <div class="col-12">
-            <div id="announcement-banner" class="card border-0 shadow-sm text-start bg-light" style="display: none;">
+            <div id="announcement-banner" class="card border-0 shadow-sm text-start bg-light" style="display: none;" data-announcement-id="{{ latest_announcement.id }}">
                 <div class="card-body position-relative">
-                    <button type="button" class="btn-close position-absolute top-0 end-0 m-3" aria-label="Close" onclick="dismissAnnouncement()"></button>
+                    <button type="button" class="btn-close position-absolute top-0 end-0 m-3" aria-label="关闭" data-dismiss-announcement></button>
                     <div class="d-flex align-items-center mb-2 text-primary">
                         <i class="bi bi-megaphone-fill me-2"></i>
                         <span class="fw-bold">站点动态</span>
@@ -146,7 +146,11 @@
     <!-- 瀑布流布局 -->
     <div id="app">
         <div id="share-grid" class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
+            {% if feed_mode == 'infinite' %}
+            {% include 'shares/includes/share_cards_page.html' %}
+            {% else %}
             {% include 'shares/includes/share_cards.html' %}
+            {% endif %}
         </div>
 
         <!-- 分页 -->
@@ -219,186 +223,6 @@
         </nav>
         {% endif %}
 
-        {% if feed_mode == 'infinite' %}
-        <div id="infinite-scroll-status" class="text-center text-muted py-4" data-has-next="{% if shares.has_next %}true{% else %}false{% endif %}" data-next-page="{% if shares.has_next %}{{ shares.next_page_number }}{% endif %}">
-            {% if shares.has_next %}
-            <div class="spinner-border spinner-border-sm me-2 d-none" id="infinite-scroll-spinner" role="status">
-                <span class="visually-hidden">加载中...</span>
-            </div>
-            <span id="infinite-scroll-text">继续向下滚动加载更多</span>
-            {% elif shares.paginator.count > 0 %}
-            <span>已经到底了</span>
-            {% endif %}
-        </div>
-        <div id="infinite-scroll-sentinel" style="height: 1px;"></div>
-        {% endif %}
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const announcementId = '{{ latest_announcement.id|default:"" }}';
-        const banner = document.getElementById('announcement-banner');
-        
-        if (banner && announcementId) {
-            const dismissedId = localStorage.getItem('dismissed_announcement_id');
-            if (dismissedId !== announcementId) {
-                banner.style.display = 'block';
-            }
-        }
-
-        initInfiniteScroll();
-    });
-
-    function dismissAnnouncement() {
-        const banner = document.getElementById('announcement-banner');
-        const navLink = document.getElementById('nav-announcement-link');
-        const announcementId = '{{ latest_announcement.id|default:"" }}';
-
-        if (!banner) return;
-
-        // Check if nav link exists and is visible
-        const isNavLinkVisible = navLink && navLink.offsetParent !== null;
-
-        // If nav link exists and is visible, animate to it
-        if (isNavLinkVisible) {
-            // Create a clone for animation
-            const clone = banner.cloneNode(true);
-            const rect = banner.getBoundingClientRect();
-            const targetRect = navLink.getBoundingClientRect();
-
-            clone.style.position = 'fixed';
-            clone.style.left = rect.left + 'px';
-            clone.style.top = rect.top + 'px';
-            clone.style.width = rect.width + 'px';
-            clone.style.height = rect.height + 'px';
-            clone.style.zIndex = '9999';
-            clone.style.transition = 'all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)'; // Bouncy effect
-            clone.style.opacity = '1';
-            clone.classList.remove('mb-4'); 
-            
-            // Remove close button from clone to make it look cleaner during animation
-            const closeBtn = clone.querySelector('.btn-close');
-            if (closeBtn) closeBtn.remove();
-
-            document.body.appendChild(clone);
-            
-            // Hide original immediately
-            banner.style.display = 'none';
-            
-            // Force reflow
-            clone.offsetHeight;
-            
-            // Trigger animation
-            requestAnimationFrame(() => {
-                clone.style.left = targetRect.left + 'px';
-                clone.style.top = targetRect.top + 'px';
-                clone.style.width = '20px'; // Shrink to small size
-                clone.style.height = '20px';
-                clone.style.opacity = '0';
-                clone.style.transform = 'scale(0.1)';
-            });
-
-            // Cleanup
-            setTimeout(() => {
-                clone.remove();
-            }, 800);
-        } else {
-            // If nav link is not visible (e.g. mobile menu collapsed), just fade out
-            banner.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-            banner.style.opacity = '0';
-            banner.style.transform = 'scale(0.9)';
-            
-            setTimeout(() => {
-                banner.style.display = 'none';
-            }, 300);
-        }
-
-        
-        if (announcementId) {
-            localStorage.setItem('dismissed_announcement_id', announcementId);
-        }
-    }
-
-    function initInfiniteScroll() {
-        if ('{{ feed_mode|default:"infinite" }}' !== 'infinite') return;
-
-        const grid = document.getElementById('share-grid');
-        const status = document.getElementById('infinite-scroll-status');
-        const sentinel = document.getElementById('infinite-scroll-sentinel');
-        const spinner = document.getElementById('infinite-scroll-spinner');
-        const statusText = document.getElementById('infinite-scroll-text');
-
-        if (!grid || !status || !sentinel) return;
-
-        let hasNext = status.dataset.hasNext === 'true';
-        let nextPage = status.dataset.nextPage ? parseInt(status.dataset.nextPage, 10) : null;
-        let isLoading = false;
-
-        if (!hasNext || !nextPage) return;
-
-        const setLoading = (loading) => {
-            isLoading = loading;
-            if (spinner) spinner.classList.toggle('d-none', !loading);
-            if (statusText) statusText.textContent = loading ? '正在加载更多...' : (hasNext ? '继续向下滚动加载更多' : '已经到底了');
-        };
-
-        const loadNextPage = () => {
-            if (isLoading || !hasNext || !nextPage) return;
-
-            setLoading(true);
-
-            const params = new URLSearchParams(window.location.search);
-            params.set('page', String(nextPage));
-            params.set('partial', 'shares');
-            params.set('feed', 'infinite');
-
-            fetch(`${window.location.pathname}?${params.toString()}`, {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(response => {
-                if (!response.ok) throw new Error('加载失败');
-                return response.json();
-            })
-            .then(data => {
-                if (data.html && data.html.trim()) {
-                    grid.insertAdjacentHTML('beforeend', data.html);
-                }
-
-                hasNext = Boolean(data.has_next);
-                nextPage = data.next_page;
-                status.dataset.hasNext = hasNext ? 'true' : 'false';
-                status.dataset.nextPage = nextPage || '';
-
-                if (!hasNext) {
-                    if (statusText) statusText.textContent = '已经到底了';
-                    observer.disconnect();
-                }
-            })
-            .catch(error => {
-                console.error(error);
-                if (statusText) statusText.textContent = '加载失败，稍后再试';
-            })
-            .finally(() => {
-                isLoading = false;
-                if (spinner) spinner.classList.add('d-none');
-            });
-        };
-
-        const observer = new IntersectionObserver((entries) => {
-            if (entries.some(entry => entry.isIntersecting)) {
-                loadNextPage();
-            }
-        }, {
-            rootMargin: '600px 0px'
-        });
-
-        observer.observe(sentinel);
-    }
-
-</script>
 {% endblock %}

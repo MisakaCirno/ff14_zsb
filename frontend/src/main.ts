@@ -4,6 +4,8 @@ import htmx from 'htmx.org'
 import { fallbackCopyTextToClipboard } from './core/clipboard'
 import { getCsrfToken } from './core/csrf'
 import { showMessage } from './core/notify'
+import { initializeAnnouncement } from './features/announcement'
+import { initializeInfiniteScrollStatus } from './features/infinite-scroll'
 import { initializeShareActions } from './features/share-actions'
 import { initializeVisitHistory, updateHistoryDropdown } from './features/visit-history'
 import './styles/main.css'
@@ -41,4 +43,6 @@ htmx.config.allowEval = false
 
 initializeVisitHistory()
 initializeShareActions()
+initializeAnnouncement()
+initializeInfiniteScrollStatus()
 Alpine.start()

@@ -93,3 +93,17 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 source = self.read_template(template_path)
                 self.assertNotIn('toggleIndexLike(', source)
                 self.assertNotIn('toggleIndexFavorite(', source)
+
+    def test_home_template_delegates_announcement_and_infinite_scroll(self):
+        source = self.read_template('shares/index.html')
+        page_source = self.read_template('shares/includes/share_cards_page.html')
+
+        self.assertIn('data-dismiss-announcement', source)
+        self.assertIn("shares/includes/share_cards_page.html", source)
+        self.assertNotIn('<script', source)
+        self.assertNotIn('dismissAnnouncement()', source)
+        self.assertNotIn('initInfiniteScroll', source)
+        self.assertNotIn('insertAdjacentHTML', source)
+        self.assertIn('data-infinite-scroll-sentinel', page_source)
+        self.assertIn('hx-trigger="intersect, click"', page_source)
+        self.assertNotIn('hx-trigger="revealed"', page_source)

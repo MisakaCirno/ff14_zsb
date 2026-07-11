@@ -14,6 +14,7 @@ from shares.policies import can_view_share, is_moderator, public_share_queryset
 from shares.presentation import (
     HOME_FEED_MODES,
     build_query_string,
+    build_share_cards_next_query,
     build_share_cards_return_url,
     get_home_feed_mode,
     is_htmx_request,
@@ -95,6 +96,7 @@ def index(request):
             partial=None,
         ),
         'share_cards_return_url': build_share_cards_return_url(request),
+        'share_cards_next_query': build_share_cards_next_query(request, shares),
     })
 
 
@@ -143,6 +145,7 @@ def search(request):
             partial=None,
         ),
         'share_cards_return_url': build_share_cards_return_url(request),
+        'share_cards_next_query': build_share_cards_next_query(request, shares),
     })
 
 

@@ -36,13 +36,14 @@
 
 - 普通请求：完整服务端 HTML 页面。
 - `?partial=shares`：兼容现有瀑布流脚本的 JSON，字段为 `html`、`has_next`、`next_page`。
-- `HX-Request: true`：纯 `text/html` 卡片片段，不包含导航、页面外壳或瀑布流 sentinel。
+- `HX-Request: true`：默认返回纯 `text/html` 卡片片段，不包含导航、页面外壳或瀑布流 sentinel。
+- `HX-Request: true` 且带 `feed=infinite&continuation=1`：返回本页卡片和下一页 sentinel；末页改为结束标记。sentinel 通过 `outerHTML` 替换自己，保留搜索、分类、筛选和排序参数。
 - 同时出现 `partial=shares` 和 `HX-Request: true` 时，HTMX HTML 优先。
 
 完整页面和局部响应都设置 `Vary: HX-Request, Cookie`。局部 HTML 与兼容 JSON 包含用户点赞、收藏状态，因此使用私有 `no-store` 缓存策略。
 
 HTMX 搜索遇到空查询、超长查询或精确分享 ID 时返回 `204` 和 `HX-Redirect`，由浏览器执行整页导航；普通请求继续使用标准 `302`。这样可以防止完整页面或详情页被交换进卡片网格。
 
-首页与局部响应共用 `templates/shares/includes/share_cards.html`。匿名登录链接的 `next` 参数会移除 `partial` 和 `page` 并进行 URL 编码，登录后不会误落入 JSON 响应。
+首页与局部响应共用 `templates/shares/includes/share_cards.html`。瀑布流 continuation 使用 `templates/shares/includes/share_cards_page.html` 包装卡片与下一页状态。匿名登录链接的 `next` 参数会移除 `partial`、`page` 和 `continuation` 并进行 URL 编码，登录后不会误落入局部响应。
 
-R11 只建立服务端协商，不引入 HTMX 前端依赖，也不在片段中加入 continuation sentinel。R12 建立 Vite 与 HTMX 管线时再切换浏览器端加载方式。
+`continuation` 是 R12 的内部传输参数，只在 HTMX 瀑布流请求中生效；旧 `partial=shares` JSON 与普通 HTMX 卡片片段继续保持 R11 契约。
