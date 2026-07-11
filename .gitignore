@@ -33,6 +33,9 @@ db.sqlite3-journal
 *.sqlite3-shm
 media/
 staticfiles/
+/static/app/
+/frontend/node_modules/
+coverage/
 
 # IDE
 .vscode/

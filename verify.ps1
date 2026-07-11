@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$PythonExecutable = '',
-    [switch]$SkipTests
+    [string]$NpmExecutable = '',
+    [switch]$SkipTests,
+    [switch]$SkipFrontend
 )
 
 Set-StrictMode -Version Latest
@@ -34,6 +36,10 @@ try {
         }
     }
 
+    if ([string]::IsNullOrWhiteSpace($NpmExecutable)) {
+        $NpmExecutable = if ($env:OS -eq 'Windows_NT') { 'npm.cmd' } else { 'npm' }
+    }
+
     Invoke-CheckedStep 'Django system check' {
         & $PythonExecutable manage.py check
     }
@@ -44,6 +50,12 @@ try {
 
     Invoke-CheckedStep 'Python dependency check' {
         & $PythonExecutable -m pip check
+    }
+
+    if (-not $SkipFrontend) {
+        Invoke-CheckedStep 'Frontend type, lint, and build checks' {
+            & $NpmExecutable --prefix frontend run verify
+        }
     }
 
     if (-not $SkipTests) {
