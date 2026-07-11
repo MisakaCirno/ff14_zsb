@@ -144,6 +144,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             'shares/includes/share_cards.html',
             'shares/my_shares.html',
             'shares/user_public_profile.html',
+            'shares/collection_detail.html',
+            'shares/admin_review_list.html',
         ):
             with self.subTest(template=template_path):
                 source = self.read_template(template_path)
