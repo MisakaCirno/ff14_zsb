@@ -7,6 +7,7 @@ import { showMessage } from './core/notify'
 import { initializeAnnouncement } from './features/announcement'
 import { initializeInfiniteScrollStatus } from './features/infinite-scroll'
 import { initializeShareActions } from './features/share-actions'
+import { initializeShareEditors } from './features/share-editor'
 import { initializeVisitHistory, updateHistoryDropdown } from './features/visit-history'
 import './styles/main.css'
 
@@ -45,4 +46,5 @@ initializeVisitHistory()
 initializeShareActions()
 initializeAnnouncement()
 initializeInfiniteScrollStatus()
+initializeShareEditors()
 Alpine.start()

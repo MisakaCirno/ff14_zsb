@@ -5,16 +5,6 @@
 
 {% block extra_css %}
 <link href="{% static 'css/quill.snow.css' %}" rel="stylesheet">
-<style>
-    #editor-container {
-        height: 200px;
-        font-family: inherit;
-    }
-    .ql-container {
-        font-family: inherit;
-        font-size: inherit;
-    }
-</style>
 {% endblock %}
 
 {% block content %}
@@ -37,7 +27,7 @@
                     <h4 class="mb-0"><i class="bi bi-plus-circle"></i> 创建新分享</h4>
                 </div>
                 <div class="card-body">
-                    <form method="post" id="shareForm">
+                    <form method="post" data-share-editor data-validate-strategy-code>
                         {% csrf_token %}
                         
                         <div class="mb-3">
@@ -67,10 +57,10 @@
                             <label for="{{ form.description.id_for_label }}" class="form-label">
                                 {{ form.description.label }} (可选)
                             </label>
-                            <div style="display: none;">
+                            <div class="d-none" data-share-description-source>
                                 {{ form.description }}
                             </div>
-                            <div id="editor-container"></div>
+                            <div data-share-rich-text-editor></div>
                             {% if form.description.errors %}
                             <div class="text-danger small">{{ form.description.errors }}</div>
                             {% endif %}
@@ -165,93 +155,4 @@
 
 {% block extra_js %}
 <script src="{% static 'js/quill.js' %}"></script>
-<script>
-    function autoFixStrategyCode(input) {
-        let val = input.value.trim();
-        if (!val) return;
-
-        // 1. 尝试直接匹配标准格式
-        let match = val.match(/\[stgy:[^\]]+\]/);
-
-        // 2. 如果没匹配到，但看起来像是分享码（包含 stgy:），尝试修复中文括号后再匹配
-        if (!match && val.toLowerCase().indexOf('stgy:') !== -1) {
-             const fixedVal = val.replace(/【/g, '[').replace(/】/g, ']');
-             match = fixedVal.match(/\[stgy:[^\]]+\]/);
-        }
-
-        if (match) {
-            // 如果找到了匹配项，且当前输入框内容不等于匹配项，则更新
-            if (input.value !== match[0]) {
-                input.value = match[0];
-                // 视觉反馈
-                input.classList.add('is-valid');
-                setTimeout(() => input.classList.remove('is-valid'), 1000);
-            }
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        // 绑定自动修正事件
-        var strategyCodeInput = document.getElementById('{{ form.strategy_code.id_for_label }}');
-        if (strategyCodeInput) {
-            strategyCodeInput.addEventListener('blur', function() {
-                autoFixStrategyCode(this);
-            });
-            // 同时也处理粘贴事件，稍微延迟一下以获取粘贴后的值
-            strategyCodeInput.addEventListener('paste', function() {
-                setTimeout(() => autoFixStrategyCode(this), 100);
-            });
-        }
-
-        var quill = new Quill('#editor-container', {
-            theme: 'snow',
-            placeholder: '请输入描述内容...',
-            modules: {
-                toolbar: [
-                    ['bold', 'italic', 'underline', 'strike'],        // toggled buttons
-                    ['blockquote', 'code-block'],
-
-                    [{ 'header': 1 }, { 'header': 2 }],               // custom button values
-                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                    [{ 'script': 'sub'}, { 'script': 'super' }],      // superscript/subscript
-                    [{ 'indent': '-1'}, { 'indent': '+1' }],          // outdent/indent
-                    [{ 'direction': 'rtl' }],                         // text direction
-
-                    [{ 'size': ['small', false, 'large', 'huge'] }],  // custom dropdown
-                    [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
-
-                    [{ 'color': [] }, { 'background': [] }],          // dropdown with defaults from theme
-                    [{ 'font': [] }],
-                    [{ 'align': [] }],
-
-                    ['clean']                                         // remove formatting button
-                ]
-            }
-        });
-
-        // Sync content to hidden textarea
-        var form = document.getElementById('shareForm');
-        var descriptionInput = document.getElementById('{{ form.description.id_for_label }}');
-        
-        // Initialize editor content if textarea has value (e.g. validation error)
-        if (descriptionInput.value) {
-            quill.clipboard.dangerouslyPasteHTML(descriptionInput.value);
-        }
-
-        form.onsubmit = function(e) {
-            // 验证战术板代码格式
-            var strategyCodeInput = document.getElementById('{{ form.strategy_code.id_for_label }}');
-            var code = strategyCodeInput.value.trim();
-            if (!code.startsWith('[stgy:') || !code.endsWith(']')) {
-                showMessage('战术板代码格式不正确！\n必须以 "[stgy:" 开头，并以 "]" 结尾。', 'danger');
-                if (e) e.preventDefault();
-                return false;
-            }
-
-            descriptionInput.value = quill.getText().trim().length === 0
-                ? ''
-                : quill.getSemanticHTML();
-        };
-    });
-</script>
 {% endblock %}

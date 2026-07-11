@@ -1,3 +1,9 @@
 [x-cloak] {
   display: none !important;
 }
+
+[data-share-rich-text-editor].ql-container {
+  height: 200px;
+  font-family: inherit;
+  font-size: inherit;
+}

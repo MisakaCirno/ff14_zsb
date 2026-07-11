@@ -93,13 +93,19 @@ class ShareForm(forms.ModelForm):
             'class': 'form-control',
             'rows': 3,
             'placeholder': '粘贴战术板代码，例如：[stgy:a0+k-wvpr...]',
+            'data-share-strategy-code': 'true',
         }),
     )
     description = forms.CharField(
         label='描述',
         required=False,
         max_length=RICH_TEXT_MAX_LENGTH,
-        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '添加描述（可选）'}),
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 4,
+            'placeholder': '添加描述（可选）',
+            'data-share-description': 'true',
+        }),
     )
 
     class Meta:
