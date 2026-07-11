@@ -1,12 +1,20 @@
 import Alpine from 'alpinejs'
 import htmx from 'htmx.org'
 
+import { fallbackCopyTextToClipboard } from './core/clipboard'
+import { getCsrfToken } from './core/csrf'
+import { showMessage } from './core/notify'
+import { initializeShareActions } from './features/share-actions'
+import { initializeVisitHistory, updateHistoryDropdown } from './features/visit-history'
 import './styles/main.css'
 
 declare global {
   interface Window {
     Alpine: typeof Alpine
+    fallbackCopyTextToClipboard: typeof fallbackCopyTextToClipboard
     htmx: typeof htmx
+    showMessage: typeof showMessage
+    updateHistoryDropdown: typeof updateHistoryDropdown
   }
 }
 
@@ -14,18 +22,8 @@ interface HtmxConfigRequestDetail {
   headers: Record<string, string>
 }
 
-function readCookie(name: string): string | null {
-  const prefix = `${encodeURIComponent(name)}=`
-  const match = document.cookie
-    .split(';')
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(prefix))
-
-  return match ? decodeURIComponent(match.slice(prefix.length)) : null
-}
-
 document.addEventListener('htmx:configRequest', (event) => {
-  const csrfToken = readCookie('csrftoken')
+  const csrfToken = getCsrfToken()
   if (!csrfToken) {
     return
   }
@@ -35,7 +33,12 @@ document.addEventListener('htmx:configRequest', (event) => {
 })
 
 window.Alpine = Alpine
+window.fallbackCopyTextToClipboard = fallbackCopyTextToClipboard
 window.htmx = htmx
+window.showMessage = showMessage
+window.updateHistoryDropdown = updateHistoryDropdown
 htmx.config.allowEval = false
 
+initializeVisitHistory()
+initializeShareActions()
 Alpine.start()

@@ -153,7 +153,7 @@
                                     <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift" style="width: 66%;">
                                         <i class="bi bi-arrow-right-circle"></i> 查看详情
                                     </a>
-                                    <button type="button" class="btn btn-sm btn-outline-primary hover-lift" style="width: 34%;" onclick="copyStrategyCode(this, '{{ share.strategy_code|escapejs }}', '{{ share.share_id }}')">
+                                    <button type="button" class="btn btn-sm btn-outline-primary hover-lift" style="width: 34%;" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" title="复制分享码">
                                         <i class="bi bi-clipboard"></i> 复制码
                                     </button>
                                 </div>

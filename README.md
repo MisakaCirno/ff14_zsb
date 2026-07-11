@@ -55,6 +55,10 @@
 # 激活虚拟环境
 .\venv\Scripts\Activate.ps1
 
+# 安装并构建主站前端
+npm ci --prefix frontend
+npm --prefix frontend run build
+
 # 启动开发服务器
 python manage.py runserver
 ```
@@ -90,7 +94,7 @@ python manage.py runserver
 
 ### 技术栈
 - 后端使用Django 5.2 LTS实现，SQLite数据库
-- 前端使用bootstrap+vue3
+- 前端使用 Vite、TypeScript、HTMX、Alpine.js 和 Bootstrap
 - 短链接使用应用内生成的8位分享ID
 - 使用虚拟环境
 

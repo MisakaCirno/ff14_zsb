@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from django.conf import settings
 from django.template.loader import get_template
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -58,12 +61,18 @@ class RichTextSanitizerTests(TestCase):
 class ClientRenderingSafetyTests(SimpleTestCase):
     def test_base_template_does_not_interpolate_history_or_messages_as_html(self):
         source = get_template('base.html').template.source
+        history_source = (
+            Path(settings.BASE_DIR) / 'frontend' / 'src' / 'features' / 'visit-history.ts'
+        ).read_text(encoding='utf-8')
+        notify_source = (
+            Path(settings.BASE_DIR) / 'frontend' / 'src' / 'core' / 'notify.ts'
+        ).read_text(encoding='utf-8')
 
         self.assertNotIn('li.innerHTML', source)
         self.assertNotIn('alertDiv.innerHTML', source)
-        self.assertIn('title.textContent = itemTitle', source)
-        self.assertIn('encodeURIComponent(item.id)', source)
-        self.assertIn("messageText.textContent = String(message ?? '')", source)
+        self.assertIn('title.textContent = item.title', history_source)
+        self.assertIn('encodeURIComponent(item.id)', history_source)
+        self.assertIn("messageText.textContent = String(message ?? '')", notify_source)
 
     def test_share_id_is_escaped_before_embedding_in_history_script(self):
         source = get_template('shares/detail.html').template.source
