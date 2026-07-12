@@ -214,6 +214,22 @@
   overflow-y: auto;
 }
 
+.app-history-item {
+  display: flex;
+  gap: var(--app-space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-history-item__title {
+  max-width: 10rem;
+}
+
+.app-history-item__date {
+  flex: 0 0 auto;
+  font-size: var(--app-text-xs);
+}
+
 .app-main:focus {
   outline: none;
 }

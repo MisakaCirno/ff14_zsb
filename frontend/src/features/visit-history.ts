@@ -47,17 +47,16 @@ function createHistoryItem(item: VisitHistoryItem): HTMLLIElement {
   const title = document.createElement('span')
   const dateLabel = document.createElement('small')
 
+  listItem.dataset.historyItem = ''
   link.className = 'dropdown-item text-truncate'
   link.href = `/s/${encodeURIComponent(item.id)}/`
   link.title = item.title
-  content.className = 'd-flex justify-content-between align-items-center'
-  title.className = 'text-truncate me-2'
-  title.style.maxWidth = '160px'
+  content.className = 'app-history-item'
+  title.className = 'app-history-item__title text-truncate'
   title.textContent = item.title
 
   const date = new Date(item.timestamp ?? Number.NaN)
-  dateLabel.className = 'text-muted'
-  dateLabel.style.fontSize = '0.75rem'
+  dateLabel.className = 'app-history-item__date text-muted'
   dateLabel.textContent = Number.isNaN(date.getTime())
     ? ''
     : `${date.getMonth() + 1}-${date.getDate()}`
@@ -70,23 +69,22 @@ function createHistoryItem(item: VisitHistoryItem): HTMLLIElement {
 
 function updateHistoryDropdown(): void {
   const container = document.getElementById('historyList')
-  const header = container?.querySelector('.dropdown-header')?.parentElement
-  const divider = container?.querySelector('.dropdown-divider')?.parentElement
-  if (!container || !header || !divider) {
+  const divider = container?.querySelector<HTMLElement>('[data-history-divider]')
+  const clearButton = container?.querySelector<HTMLButtonElement>('[data-clear-history]')
+  if (!container || !divider || !clearButton) {
     return
   }
 
-  let current = header.nextElementSibling
-  while (current && current !== divider) {
-    const next = current.nextElementSibling
-    current.remove()
-    current = next
-  }
+  container.querySelectorAll('[data-history-item]').forEach((historyItem) => {
+    historyItem.remove()
+  })
 
   const history = readVisitHistory()
+  clearButton.disabled = history.length === 0
   if (history.length === 0) {
     const listItem = document.createElement('li')
     const emptyState = document.createElement('span')
+    listItem.dataset.historyItem = ''
     emptyState.className = 'dropdown-item-text text-muted small text-center'
     emptyState.textContent = '暂无访问记录'
     listItem.appendChild(emptyState)
@@ -123,7 +121,7 @@ export function initializeVisitHistory(): void {
   updateHistoryDropdown()
   document.addEventListener('click', (event) => {
     const target = event.target instanceof Element
-      ? event.target.closest<HTMLElement>('[data-clear-history]')
+      ? event.target.closest<HTMLButtonElement>('[data-clear-history]')
       : null
     if (!target) {
       return

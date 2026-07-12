@@ -213,6 +213,22 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('window.fallbackCopyTextToClipboard', main_source)
         self.assertNotIn('window.updateHistoryDropdown', main_source)
 
+    def test_visit_history_uses_stable_dom_and_style_contracts(self):
+        source = self.read_template('base.html')
+        history_source = self.read_frontend('features/visit-history.ts')
+        app_shell_source = self.read_frontend('styles/app-shell.css')
+
+        self.assertIn('data-history-divider', source)
+        self.assertRegex(source, re.compile(r'data-clear-history\s+disabled'))
+        self.assertIn("listItem.dataset.historyItem = ''", history_source)
+        self.assertIn("querySelectorAll('[data-history-item]')", history_source)
+        self.assertIn('clearButton.disabled = history.length === 0', history_source)
+        self.assertNotIn('header.nextElementSibling', history_source)
+        self.assertNotIn('title.style.', history_source)
+        self.assertNotIn('dateLabel.style.', history_source)
+        self.assertIn('.app-history-item__title', app_shell_source)
+        self.assertIn('.app-history-item__date', app_shell_source)
+
     def test_main_templates_do_not_use_inline_event_handlers(self):
         templates_root = Path(settings.BASE_DIR) / 'templates'
 
