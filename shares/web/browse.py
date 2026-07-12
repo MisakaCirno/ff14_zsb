@@ -1,3 +1,5 @@
+from urllib.parse import urlsplit
+
 from django.contrib import messages
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import User
@@ -39,10 +41,14 @@ def set_home_feed_mode(request):
     else:
         request.session['home_feed_mode'] = requested_mode
     next_url = request.POST.get('next')
-    if next_url and url_has_allowed_host_and_scheme(
-        next_url,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
+    if (
+        next_url
+        and url_has_allowed_host_and_scheme(
+            next_url,
+            allowed_hosts={request.get_host()},
+            require_https=request.is_secure(),
+        )
+        and urlsplit(next_url).path.startswith('/')
     ):
         return redirect(next_url)
     return redirect('index')

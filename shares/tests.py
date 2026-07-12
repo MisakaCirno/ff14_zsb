@@ -59,6 +59,50 @@ class HomeFeedModeTests(TestCase):
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.profile.home_feed_mode, UserProfile.HomeFeedMode.INFINITE)
 
+    def test_rendered_feed_mode_forms_preserve_the_current_page_path(self):
+        response = self.client.get(reverse('index'), {
+            'category': Share.Category.COMBAT,
+            'sort': 'likes',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'name="next" value="/?category=combat&amp;sort=likes&amp;feed=paginated"',
+        )
+        self.assertContains(
+            response,
+            'name="next" value="/?category=combat&amp;sort=likes&amp;feed=infinite"',
+        )
+
+        search_response = self.client.get(reverse('search'), {'q': 'alice'})
+        self.assertEqual(search_response.status_code, 200)
+        self.assertContains(
+            search_response,
+            'name="next" value="/search/?q=alice&amp;feed=paginated"',
+        )
+        self.assertContains(
+            search_response,
+            'name="next" value="/search/?q=alice&amp;feed=infinite"',
+        )
+
+    def test_invalid_feed_mode_return_targets_fall_back_to_home(self):
+        invalid_targets = (
+            '?feed=paginated',
+            'relative-path',
+            'https://example.net/phishing',
+            'http://[invalid',
+        )
+
+        for next_url in invalid_targets:
+            with self.subTest(next_url=next_url):
+                response = self.client.post(reverse('set_home_feed_mode'), {
+                    'feed': UserProfile.HomeFeedMode.PAGINATED,
+                    'next': next_url,
+                })
+
+                self.assertRedirects(response, reverse('index'))
+
     def test_share_partial_returns_next_page_cards(self):
         response = self.client.get(reverse('index'), {
             'feed': UserProfile.HomeFeedMode.INFINITE,
