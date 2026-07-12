@@ -2,6 +2,7 @@
 @import './foundations.css';
 @import './bootstrap-adapter.css';
 @import './components.css';
+@import './app-shell.css';
 @import './share-preview.css';
 @import './empty-state.css';
 @import './feedback.css';

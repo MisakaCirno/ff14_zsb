@@ -1,6 +1,6 @@
 :root {
   /* Color */
-  --app-color-canvas: #ffffff;
+  --app-color-canvas: #f5f7fb;
   --app-color-surface: #ffffff;
   --app-color-surface-muted: #f8f9fa;
   --app-color-text: #212529;
@@ -23,6 +23,13 @@
   );
   --app-color-overlay: rgba(0, 0, 0, 0.6);
   --app-color-overlay-hover: rgba(0, 0, 0, 0.5);
+  --app-color-shell: #171725;
+  --app-color-shell-raised: #252441;
+  --app-color-shell-text: #f8f8ff;
+  --app-color-shell-text-muted: #c9cada;
+  --app-color-shell-border: rgba(255, 255, 255, 0.14);
+  --app-color-shell-hover: rgba(255, 255, 255, 0.09);
+  --app-gradient-shell: linear-gradient(115deg, #171725 0%, #28234d 100%);
 
   /* Typography */
   --app-font-sans: var(--bs-font-sans-serif);
@@ -59,6 +66,7 @@
   --app-shadow-md: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
   --app-shadow-hover: 0 0.5rem 1.5625rem rgba(0, 0, 0, 0.15);
   --app-shadow-modal: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+  --app-shadow-shell: 0 0.35rem 1.25rem rgba(18, 17, 40, 0.18);
   --app-focus-ring-width: 0.25rem;
   --app-focus-ring-color: rgba(13, 110, 253, 0.25);
   --app-focus-ring-offset: 0.125rem;

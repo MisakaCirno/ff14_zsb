@@ -9,6 +9,7 @@ from django.core.paginator import Paginator
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import Share
 
@@ -35,6 +36,44 @@ class FrontendShellContractTests(TestCase):
         self.assertIn('csrftoken', response.cookies)
         self.assertNotIn('vue.global.js', content)
         self.assertNotIn('function updateHistoryDropdown', content)
+
+    def test_shell_exposes_responsive_accessible_navigation(self):
+        response = self.client.get(reverse('index'))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('class="app-skip-link" href="#main-content"', content)
+        self.assertIn('<nav class="navbar navbar-expand-xl navbar-dark app-navbar" aria-label="主导航">', content)
+        self.assertIn('aria-controls="navbarNav"', content)
+        self.assertIn('aria-expanded="false"', content)
+        self.assertIn('aria-label="展开或收起导航菜单"', content)
+        self.assertIn('aria-label="浏览记录"', content)
+        self.assertRegex(
+            content,
+            re.compile(
+                r'class="nav-link active"\s+href="/"\s+aria-current="page"',
+            ),
+        )
+        self.assertIn('role="search"', content)
+        self.assertIn('for="site-search">搜索分享或分享 ID</label>', content)
+        self.assertIn('aria-label="提交搜索"', content)
+        self.assertIn('<main id="main-content" class="app-main py-4" tabindex="-1">', content)
+        self.assertIn(f'2010 - {timezone.localdate().year} SQUARE ENIX', content)
+
+    def test_authenticated_shell_marks_my_content_as_current(self):
+        self.client.force_login(self.author)
+
+        response = self.client.get(reverse('my_shares'))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertRegex(
+            content,
+            re.compile(
+                r'class="nav-link active"\s+href="/my-shares/"\s+'
+                r'aria-current="page"',
+            ),
+        )
 
     def test_error_feedback_uses_bootstrap_and_accessibility_contracts(self):
         response = self.client.post(
@@ -199,6 +238,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './foundations.css';",
             "@import './bootstrap-adapter.css';",
             "@import './components.css';",
+            "@import './app-shell.css';",
             "@import './share-preview.css';",
             "@import './empty-state.css';",
             "@import './feedback.css';",
@@ -220,6 +260,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('--app-motion-normal:', tokens_source)
 
         components_source = self.read_frontend('styles/components.css')
+        app_shell_source = self.read_frontend('styles/app-shell.css')
         adapter_source = self.read_frontend('styles/bootstrap-adapter.css')
         self.assertIn('.registration-form #id_username', components_source)
         self.assertIn('.admin-tabs .nav-link', components_source)
@@ -238,6 +279,11 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('.form-control:focus', adapter_source)
         self.assertNotIn('--bs-btn-bg:', adapter_source)
         self.assertNotIn('--bs-alert-bg:', adapter_source)
+        self.assertIn('.app-navbar__actions', app_shell_source)
+        self.assertIn('.app-footer__inner', app_shell_source)
+        self.assertIn('@media (max-width: 1199.98px)', app_shell_source)
+        self.assertIn('@media (prefers-reduced-motion: reduce)', app_shell_source)
+        self.assertNotIn('style="min-width: 260px;', self.read_template('base.html'))
         self.assertIn(
             'class="registration-form"',
             self.read_template('shares/register.html'),

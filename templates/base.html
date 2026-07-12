@@ -11,162 +11,225 @@
     {% vite_assets %}
     {% block extra_css %}{% endblock %}
 </head>
-<body>
-    <!-- 导航栏 -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
-            <a class="navbar-brand" href="{% url 'index' %}">
-                <i class="bi bi-dice-6"></i> 粘鼠板儿
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'index' %}">
-                            <i class="bi bi-house"></i> 主页
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'announcement_list' %}" id="nav-announcement-link">
-                            <i class="bi bi-megaphone"></i> 站点动态
-                        </a>
-                    </li>
-                    {% if user.is_authenticated %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'my_shares' %}">
-                            <i class="bi bi-person-circle"></i> 我的内容
-                        </a>
-                    </li>
-                    {% endif %}
-                    <li class="nav-item d-none d-lg-block">
-                        <span class="nav-link px-0 text-secondary opacity-25">|</span>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% static 'overlay/stgy.html' %}" target="_blank">
-                            <i class="bi bi-file-text"></i> 小抄儿 <i class="bi bi-box-arrow-up-right small"></i>
-                        </a>
-                    </li>
-                </ul>
+<body class="app-body">
+    <a class="app-skip-link" href="#main-content">跳到主要内容</a>
 
-                <ul class="navbar-nav me-2">
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="historyDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-clock-history"></i> 浏览记录
+    <header class="app-header">
+        <nav class="navbar navbar-expand-xl navbar-dark app-navbar" aria-label="主导航">
+            <div class="container-fluid app-navbar__container">
+                <a class="navbar-brand app-navbar__brand" href="{% url 'index' %}" aria-label="粘鼠板儿主页">
+                    <span class="app-navbar__brand-mark" aria-hidden="true">
+                        <i class="bi bi-dice-6"></i>
+                    </span>
+                    <span>粘鼠板儿</span>
+                </a>
+                <button
+                    class="navbar-toggler"
+                    type="button"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#navbarNav"
+                    aria-controls="navbarNav"
+                    aria-expanded="false"
+                    aria-label="展开或收起导航菜单">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse app-navbar__collapse" id="navbarNav">
+                    <ul class="navbar-nav app-navbar__primary me-xl-auto">
+                        <li class="nav-item">
+                            <a
+                                class="nav-link{% if request.resolver_match.url_name == 'index' or request.resolver_match.url_name == 'search' %} active{% endif %}"
+                                href="{% url 'index' %}"
+                                {% if request.resolver_match.url_name == 'index' %}aria-current="page"{% endif %}>
+                                <i class="bi bi-house" aria-hidden="true"></i>
+                                <span>主页</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a
+                                class="nav-link{% if request.resolver_match.url_name == 'announcement_list' %} active{% endif %}"
+                                href="{% url 'announcement_list' %}"
+                                id="nav-announcement-link"
+                                {% if request.resolver_match.url_name == 'announcement_list' %}aria-current="page"{% endif %}>
+                                <i class="bi bi-megaphone" aria-hidden="true"></i>
+                                <span>站点动态</span>
+                            </a>
+                        </li>
+                        {% if user.is_authenticated %}
+                        <li class="nav-item">
+                            <a
+                                class="nav-link{% if request.resolver_match.url_name == 'my_shares' %} active{% endif %}"
+                                href="{% url 'my_shares' %}"
+                                {% if request.resolver_match.url_name == 'my_shares' %}aria-current="page"{% endif %}>
+                                <i class="bi bi-person-circle" aria-hidden="true"></i>
+                                <span>我的内容</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        <li class="nav-item app-navbar__divider" aria-hidden="true">
+                            <span></span>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% static 'overlay/stgy.html' %}" target="_blank" rel="noopener">
+                                <i class="bi bi-file-text" aria-hidden="true"></i>
+                                <span>小抄儿</span>
+                                <i class="bi bi-box-arrow-up-right app-navbar__external-icon" aria-hidden="true"></i>
+                                <span class="visually-hidden">（在新窗口打开）</span>
+                            </a>
+                        </li>
+                    </ul>
+
+                    <div class="app-navbar__actions">
+                        <div class="dropdown app-navbar__history">
+                            <button
+                                class="btn app-navbar__quiet-action dropdown-toggle"
+                                type="button"
+                                id="historyDropdown"
+                                data-bs-toggle="dropdown"
+                                aria-label="浏览记录"
+                                aria-expanded="false">
+                                <i class="bi bi-clock-history" aria-hidden="true"></i>
+                                <span class="app-navbar__optional-label">浏览记录</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end app-history-menu" aria-labelledby="historyDropdown" id="historyList">
+                                <li><h6 class="dropdown-header">最近访问</h6></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><button class="dropdown-item text-center text-muted small" type="button" data-clear-history>清空历史记录</button></li>
+                            </ul>
+                        </div>
+
+                        <form class="app-navbar__search" action="{% url 'search' %}" method="get" role="search">
+                            <label class="visually-hidden" for="site-search">搜索分享或分享 ID</label>
+                            <div class="input-group">
+                                <input
+                                    class="form-control"
+                                    id="site-search"
+                                    type="search"
+                                    name="q"
+                                    value="{{ request.GET.q|default:'' }}"
+                                    placeholder="搜索分享或 ID"
+                                    autocomplete="off"
+                                    required>
+                                <button class="btn app-navbar__search-button" type="submit" aria-label="提交搜索">
+                                    <i class="bi bi-search" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </form>
+
+                        <a
+                            href="{% url 'create_share' %}"
+                            class="btn btn-primary app-navbar__create{% if request.resolver_match.url_name == 'create_share' %} active{% endif %}"
+                            {% if request.resolver_match.url_name == 'create_share' %}aria-current="page"{% endif %}>
+                            <i class="bi bi-plus-circle" aria-hidden="true"></i>
+                            <span>创建分享</span>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="historyDropdown" id="historyList" style="min-width: 260px; max-height: 400px; overflow-y: auto;">
-                            <li><h6 class="dropdown-header">最近访问</h6></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-center text-muted small" href="#" data-clear-history>清空历史记录</a></li>
-                        </ul>
-                    </li>
-                </ul>
 
-                <!-- 搜索框 -->
-                <form class="d-flex me-3" action="{% url 'search' %}" method="GET">
-                    <div class="input-group">
-                        <input class="form-control" type="search" name="q" placeholder="搜索分享或ID..." aria-label="Search" required>
-                        <button class="btn btn-outline-light" type="submit">
-                            <i class="bi bi-search"></i>
-                        </button>
-                    </div>
-                </form>
+                        <div class="app-navbar__account">
+                            {% if user.is_authenticated %}
+                            <div class="dropdown">
+                                <button class="btn app-navbar__user dropdown-toggle position-relative" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-person-circle" aria-hidden="true"></i>
+                                    <span class="app-navbar__user-name">
+                                        {% if user.profile.nickname %}
+                                            {{ user.profile.nickname }}
+                                        {% else %}
+                                            {{ user.username }}
+                                        {% endif %}
+                                    </span>
 
-                <div class="d-flex align-items-center">
-                    <a href="{% url 'create_share' %}" class="btn btn-primary me-2">
-                        <i class="bi bi-plus-circle"></i> 创建分享
-                    </a>
-                    {% if user.is_authenticated %}
-                    <div class="dropdown me-2">
-                        <button class="btn btn-outline-light dropdown-toggle position-relative" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-person-circle"></i> 
-                            {% if user.profile.nickname %}
-                                {{ user.profile.nickname }}
+                                    {% if has_admin_actions or has_user_notifications %}
+                                    <span class="app-navbar__notification-dot">
+                                        <span class="visually-hidden">有新的待处理事项或站内信</span>
+                                    </span>
+                                    {% endif %}
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                                    <li><a class="dropdown-item" href="{% url 'profile_edit' %}">
+                                        <i class="bi bi-person" aria-hidden="true"></i> 个人资料
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="{% url 'password_change' %}">
+                                        <i class="bi bi-key" aria-hidden="true"></i> 修改密码
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="{% url 'my_shares' %}">
+                                        <i class="bi bi-collection" aria-hidden="true"></i> 我的分享
+                                    </a></li>
+                                    <li><a class="dropdown-item d-flex justify-content-between align-items-center{% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %} active{% endif %}" href="{% url 'site_message_list' %}" {% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %}aria-current="page"{% endif %}>
+                                        <span><i class="bi bi-envelope" aria-hidden="true"></i> 站内信</span>
+                                        {% if global_unread_site_messages_count > 0 %}
+                                        <span class="badge bg-danger rounded-pill">{{ global_unread_site_messages_count }}</span>
+                                        {% endif %}
+                                    </a></li>
+
+                                    {% if user.is_staff or user.is_superuser %}
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><h6 class="dropdown-header">管理</h6></li>
+                                    <li><a class="dropdown-item" href="/admin/shares/announcement/add/" target="_blank" rel="noopener">
+                                        <i class="bi bi-megaphone" aria-hidden="true"></i> 发布动态
+                                    </a></li>
+                                    <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'admin_review_list' %}">
+                                        <span><i class="bi bi-shield-check" aria-hidden="true"></i> 审核列表</span>
+                                        {% if global_pending_reviews_count > 0 %}
+                                        <span class="badge bg-danger rounded-pill">{{ global_pending_reviews_count }}</span>
+                                        {% endif %}
+                                    </a></li>
+                                    <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'admin_report_list' %}">
+                                        <span><i class="bi bi-shield-exclamation" aria-hidden="true"></i> 举报处理</span>
+                                        {% if global_pending_reports_count > 0 %}
+                                        <span class="badge bg-danger rounded-pill">{{ global_pending_reports_count }}</span>
+                                        {% endif %}
+                                    </a></li>
+                                    {% endif %}
+
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <form method="post" action="{% url 'logout' %}">
+                                            {% csrf_token %}
+                                            <button type="submit" class="dropdown-item text-danger">
+                                                <i class="bi bi-box-arrow-right" aria-hidden="true"></i> 退出登录
+                                            </button>
+                                        </form>
+                                    </li>
+                                </ul>
+                            </div>
                             {% else %}
-                                {{ user.username }}
+                            <a href="{% url 'login' %}" class="btn app-navbar__quiet-action">登录</a>
+                            <a href="{% url 'register' %}" class="btn btn-light">注册</a>
                             {% endif %}
-                            
-                            {% if has_admin_actions or has_user_notifications %}
-                            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle">
-                                <span class="visually-hidden">New alerts</span>
-                            </span>
-                            {% endif %}
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                            <li><a class="dropdown-item" href="{% url 'profile_edit' %}">
-                                <i class="bi bi-person"></i> 个人资料
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'password_change' %}">
-                                <i class="bi bi-key"></i> 修改密码
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'my_shares' %}">
-                                <i class="bi bi-collection"></i> 我的分享
-                            </a></li>
-                            <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'site_message_list' %}">
-                                <span><i class="bi bi-envelope"></i> 站内信</span>
-                                {% if global_unread_site_messages_count > 0 %}
-                                <span class="badge bg-danger rounded-pill">{{ global_unread_site_messages_count }}</span>
-                                {% endif %}
-                            </a></li>
-                            
-                            {% if user.is_staff or user.is_superuser %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header">管理</h6></li>
-                            <li><a class="dropdown-item" href="/admin/shares/announcement/add/" target="_blank">
-                                <i class="bi bi-megaphone"></i> 发布动态
-                            </a></li>
-                            <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'admin_review_list' %}">
-                                <span><i class="bi bi-shield-check"></i> 审核列表</span>
-                                {% if global_pending_reviews_count > 0 %}
-                                <span class="badge bg-danger rounded-pill">{{ global_pending_reviews_count }}</span>
-                                {% endif %}
-                            </a></li>
-                            <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'admin_report_list' %}">
-                                <span><i class="bi bi-shield-exclamation"></i> 举报处理</span>
-                                {% if global_pending_reports_count > 0 %}
-                                <span class="badge bg-danger rounded-pill">{{ global_pending_reports_count }}</span>
-                                {% endif %}
-                            </a></li>
-                            {% endif %}
-
-                            <li><hr class="dropdown-divider"></li>
-                            <li>
-                                <form method="post" action="{% url 'logout' %}">
-                                    {% csrf_token %}
-                                    <button type="submit" class="dropdown-item text-danger">
-                                        <i class="bi bi-box-arrow-right"></i> 退出登录
-                                    </button>
-                                </form>
-                            </li>
-                        </ul>
+                        </div>
                     </div>
-                    {% else %}
-                    <a href="{% url 'login' %}" class="btn btn-outline-light me-2">登录</a>
-                    <a href="{% url 'register' %}" class="btn btn-primary">注册</a>
-                    {% endif %}
                 </div>
             </div>
-        </div>
-    </nav>
+        </nav>
+    </header>
 
     <!-- 消息提示 -->
     {% include 'shares/includes/flash_messages.html' %}
 
     <!-- 主内容 -->
-    <main class="py-4">
+    <main id="main-content" class="app-main py-4" tabindex="-1">
         {% block content %}{% endblock %}
     </main>
 
     <!-- 页脚 -->
-    <footer class="bg-dark text-light py-3 mt-auto">
-        <div class="container text-center">
-            <p class="mb-0">
-                FINAL FANTASY XIV © 2010 - 2025 SQUARE ENIX CO., LTD. All Rights Reserved. 
-            </p>
-            <p class="mb-0">
-                <button type="button" class="btn btn-link p-0 align-baseline text-light text-decoration-underline" data-copy-qq="1075777023" title="点击复制群号">交流QQ群：1075777023</button> | <a href="{% url 'about' %}" class="text-light text-decoration-underline">关于本站</a>
-            </p>
+    <footer class="app-footer">
+        <div class="container-fluid app-footer__container">
+            <div class="app-footer__inner">
+                <div class="app-footer__identity">
+                    <a class="app-footer__brand" href="{% url 'index' %}">
+                        <i class="bi bi-dice-6" aria-hidden="true"></i>
+                        <span>粘鼠板儿</span>
+                    </a>
+                    <p class="app-footer__legal mb-0">
+                        FINAL FANTASY XIV © 2010 - {% now "Y" %} SQUARE ENIX CO., LTD. All Rights Reserved.
+                    </p>
+                </div>
+                <nav class="app-footer__links" aria-label="页脚导航">
+                    <button type="button" class="app-footer__link" data-copy-qq="1075777023" title="点击复制群号">交流QQ群：1075777023</button>
+                    <a href="{% url 'about' %}" class="app-footer__link">
+                        <i class="bi bi-info-circle" aria-hidden="true"></i>
+                        <span>关于本站</span>
+                    </a>
+                </nav>
+            </div>
         </div>
     </footer>
 
