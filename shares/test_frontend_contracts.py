@@ -255,6 +255,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './bootstrap-adapter.css';",
             "@import './components.css';",
             "@import './app-shell.css';",
+            "@import './browse-page.css';",
             "@import './share-preview.css';",
             "@import './empty-state.css';",
             "@import './feedback.css';",
@@ -569,6 +570,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
     def test_home_template_delegates_announcement_and_infinite_scroll(self):
         source = self.read_template('shares/index.html')
         page_source = self.read_template('shares/includes/share_cards_page.html')
+        announcement_source = self.read_frontend('features/announcement.ts')
 
         self.assertIn('data-dismiss-announcement', source)
         self.assertIn("shares/includes/share_cards_page.html", source)
@@ -579,6 +581,31 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('data-infinite-scroll-sentinel', page_source)
         self.assertIn('hx-trigger="intersect, click"', page_source)
         self.assertNotIn('hx-trigger="revealed"', page_source)
+        self.assertIn("clone.removeAttribute('id')", announcement_source)
+        self.assertIn("clone.removeAttribute('aria-labelledby')", announcement_source)
+        self.assertIn("clone.setAttribute('aria-hidden', 'true')", announcement_source)
+
+    def test_home_uses_scoped_responsive_browse_layout_contract(self):
+        source = self.read_template('shares/index.html')
+        main_styles = self.read_frontend('styles/main.css')
+        browse_styles = self.read_frontend('styles/browse-page.css')
+
+        for hook in (
+            'data-browse-page',
+            'data-browse-toolbar',
+            'data-browse-results',
+        ):
+            self.assertIn(hook, source)
+
+        self.assertIn('aria-labelledby="browse-toolbar-title"', source)
+        self.assertIn('aria-labelledby="browse-results-title"', source)
+        self.assertIn('aria-label="内容可见性筛选"', source)
+        self.assertIn('aria-label="浏览模式"', source)
+        self.assertIn('aria-pressed="{% if feed_mode ==', source)
+        self.assertIn("@import './browse-page.css';", main_styles)
+        self.assertIn('.browse-toolbar__controls', browse_styles)
+        self.assertIn('min-width: 0;', browse_styles)
+        self.assertIn('@media (max-width: 575.98px)', browse_styles)
 
     def test_detail_basic_interactions_use_module_contract(self):
         source = self.read_template('shares/detail.html')

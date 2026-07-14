@@ -3,6 +3,7 @@
 @import './bootstrap-adapter.css';
 @import './components.css';
 @import './app-shell.css';
+@import './browse-page.css';
 @import './share-preview.css';
 @import './empty-state.css';
 @import './feedback.css';

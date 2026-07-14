@@ -27,6 +27,10 @@ function dismissAnnouncement(banner: HTMLElement): void {
 
   if (isNavLinkVisible) {
     const clone = banner.cloneNode(true) as HTMLElement
+    clone.removeAttribute('id')
+    clone.removeAttribute('aria-labelledby')
+    clone.setAttribute('aria-hidden', 'true')
+    clone.querySelector('#browse-announcement-title')?.removeAttribute('id')
     const rect = banner.getBoundingClientRect()
     const targetRect = navLink.getBoundingClientRect()
     clone.style.position = 'fixed'

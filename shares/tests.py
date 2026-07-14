@@ -25,6 +25,11 @@ class HomeFeedModeTests(TestCase):
         self.assertContains(response, '瀑布')
         self.assertContains(response, 'id="infinite-scroll-sentinel"')
         self.assertContains(response, 'hx-trigger="intersect, click"')
+        self.assertContains(response, 'data-browse-page')
+        self.assertContains(response, 'data-browse-toolbar')
+        self.assertContains(response, 'data-browse-results')
+        self.assertContains(response, 'aria-pressed="true"')
+        self.assertContains(response, 'aria-pressed="false"')
         self.assertContains(response, '<script type="module" src="/static/app/assets/main-')
         self.assertIn(
             'shares/includes/share_cards.html',
