@@ -135,6 +135,56 @@ class ShareForm(forms.ModelForm):
         return normalize_strategy_code(self.cleaned_data['strategy_code'])
 
 
+class CreateShareForm(ShareForm):
+    """创建分享表单，包含按当前用户收敛的可选合集。"""
+
+    collection_id = forms.ModelChoiceField(
+        label='添加到合集',
+        queryset=Collection.objects.none(),
+        required=False,
+        empty_label='-- 不添加到合集 --',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+        if user is not None and user.is_authenticated:
+            collections = Collection.objects.filter(author=user).order_by('-updated_at', '-pk')
+            self.fields['collection_id'].queryset = collections
+            self.show_collection_field = bool(
+                collections.exists()
+                or (self.is_bound and self.data.get('collection_id'))
+            )
+        else:
+            self.fields.pop('collection_id')
+            self.fields['visibility'].initial = Share.Visibility.UNLISTED
+            self.show_collection_field = False
+
+    def clean_visibility(self):
+        if self.user is None or not self.user.is_authenticated:
+            return Share.Visibility.UNLISTED
+        return self.cleaned_data['visibility']
+
+
+class EditShareForm(ShareForm):
+    """编辑分享表单，携带页面加载时的版本用于并发保护。"""
+
+    version = forms.DateTimeField(
+        required=True,
+        widget=forms.HiddenInput(),
+        error_messages={
+            'required': '编辑页面缺少版本信息，请刷新后重新提交。',
+            'invalid': '编辑页面版本无效，请刷新后重新提交。',
+        },
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['version'].initial = self.instance.updated_at
+
+
 class UserProfileForm(forms.ModelForm):
     """用户资料编辑表单"""
     bio = forms.CharField(

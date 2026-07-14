@@ -1,11 +1,12 @@
 from urllib.parse import parse_qs, urlsplit
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Collection, CollectionItem, Report, Share, UserProfile
+from .models import Collection, CollectionItem, Report, Share, ShareLog, UserProfile
 
 
 class ShareWriteWorkflowTests(TestCase):
@@ -35,6 +36,18 @@ class ShareWriteWorkflowTests(TestCase):
         }
         data.update(overrides)
         return Share.objects.create(**data)
+
+    def edit_form_data(self, share, **overrides):
+        data = self.share_form_data(
+            title=share.title,
+            strategy_code=share.strategy_code,
+            description=share.description,
+            category=share.category,
+            visibility=share.visibility,
+            version=share.updated_at.isoformat(),
+        )
+        data.update(overrides)
+        return data
 
     def test_anonymous_create_forces_unlisted_approved_share(self):
         response = self.client.post(reverse('create_share'), self.share_form_data())
@@ -79,6 +92,79 @@ class ShareWriteWorkflowTests(TestCase):
         self.assertEqual(share.visibility, Share.Visibility.UNLISTED)
         self.assertEqual(share.status, Share.Status.APPROVED)
 
+    def test_create_adds_share_to_owned_collection_with_stable_next_order(self):
+        collection = Collection.objects.create(title='目标合集', author=self.author)
+        existing = self.create_share(title='合集已有分享')
+        CollectionItem.objects.create(collection=collection, share=existing, order=7)
+        self.client.force_login(self.author)
+
+        response = self.client.post(
+            reverse('create_share'),
+            self.share_form_data(
+                title='新合集分享',
+                collection_id=str(collection.pk),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created = Share.objects.get(title='新合集分享')
+        self.assertTrue(CollectionItem.objects.filter(
+            collection=collection,
+            share=created,
+            order=8,
+        ).exists())
+
+    def test_create_rejects_malformed_missing_or_foreign_collection(self):
+        foreign_collection = Collection.objects.create(
+            title='他人的合集',
+            author=self.other_user,
+        )
+        self.client.force_login(self.author)
+
+        for collection_id in ('not-a-number', '999999', str(foreign_collection.pk)):
+            with self.subTest(collection_id=collection_id):
+                response = self.client.post(
+                    reverse('create_share'),
+                    self.share_form_data(collection_id=collection_id),
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, '选择一个有效的选项')
+                self.assertFalse(Share.objects.exists())
+
+    def test_create_form_preserves_selected_collection_after_other_field_error(self):
+        collection = Collection.objects.create(title='保留选择的合集', author=self.author)
+        self.client.force_login(self.author)
+
+        response = self.client.post(
+            reverse('create_share'),
+            self.share_form_data(
+                strategy_code='invalid-code',
+                collection_id=str(collection.pk),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'<option value="{collection.pk}" selected>保留选择的合集</option>',
+            html=True,
+        )
+        self.assertFalse(Share.objects.exists())
+
+    def test_create_rolls_back_share_when_audit_log_fails(self):
+        self.client.force_login(self.author)
+
+        with patch(
+            'shares.services.shares.log_share_action',
+            side_effect=RuntimeError('injected audit failure'),
+        ):
+            with self.assertRaisesRegex(RuntimeError, 'injected audit failure'):
+                self.client.post(reverse('create_share'), self.share_form_data())
+
+        self.assertFalse(Share.objects.exists())
+        self.assertFalse(ShareLog.objects.exists())
+
     def test_editing_public_share_restarts_review_and_clears_old_feedback(self):
         share = self.create_share(
             review_feedback='旧反馈',
@@ -89,7 +175,7 @@ class ShareWriteWorkflowTests(TestCase):
 
         response = self.client.post(
             reverse('edit_share', args=[share.share_id]),
-            self.share_form_data(title='修改后的分享'),
+            self.edit_form_data(share, title='修改后的分享'),
         )
 
         self.assertEqual(response.status_code, 302)
@@ -99,6 +185,157 @@ class ShareWriteWorkflowTests(TestCase):
         self.assertEqual(share.review_feedback, '')
         self.assertIsNone(share.reviewed_at)
         self.assertIsNone(share.reviewed_by)
+
+    def test_no_change_edit_preserves_review_state_and_timestamp(self):
+        reviewed_at = timezone.now()
+        share = self.create_share(
+            description='<p>原描述</p>',
+            review_feedback='保留的审核说明',
+            reviewed_at=reviewed_at,
+            reviewed_by=self.admin,
+        )
+        original_updated_at = share.updated_at
+        self.client.force_login(self.author)
+
+        response = self.client.post(
+            reverse('edit_share', args=[share.share_id]),
+            self.edit_form_data(share),
+        )
+
+        self.assertRedirects(response, reverse('share_detail', args=[share.share_id]))
+        share.refresh_from_db()
+        self.assertEqual(share.status, Share.Status.APPROVED)
+        self.assertEqual(share.review_feedback, '保留的审核说明')
+        self.assertEqual(share.reviewed_at, reviewed_at)
+        self.assertEqual(share.reviewed_by, self.admin)
+        self.assertEqual(share.updated_at, original_updated_at)
+        self.assertFalse(ShareLog.objects.filter(
+            share=share,
+            action=ShareLog.ActionType.EDIT,
+        ).exists())
+
+    def test_normalized_equivalent_input_is_not_logged_as_an_edit(self):
+        share = self.create_share()
+        original_updated_at = share.updated_at
+        self.client.force_login(self.author)
+
+        response = self.client.post(
+            reverse('edit_share', args=[share.share_id]),
+            self.edit_form_data(
+                share,
+                strategy_code=f'导出内容：{share.strategy_code} 请复制',
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        share.refresh_from_db()
+        self.assertEqual(share.status, Share.Status.APPROVED)
+        self.assertEqual(share.updated_at, original_updated_at)
+        self.assertFalse(ShareLog.objects.filter(
+            share=share,
+            action=ShareLog.ActionType.EDIT,
+        ).exists())
+
+    def test_title_edit_does_not_rewrite_unchanged_legacy_description(self):
+        share = self.create_share()
+        legacy_description = '<p data-legacy="kept">旧版 <strong>描述</strong></p>'
+        Share.objects.filter(pk=share.pk).update(description=legacy_description)
+        share.refresh_from_db()
+        self.client.force_login(self.author)
+
+        response = self.client.post(
+            reverse('edit_share', args=[share.share_id]),
+            self.edit_form_data(
+                share,
+                title='只修改标题',
+                description=legacy_description,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        share.refresh_from_db()
+        self.assertEqual(share.title, '只修改标题')
+        self.assertEqual(share.description, legacy_description)
+
+    def test_edit_rolls_back_all_fields_when_audit_log_fails(self):
+        share = self.create_share(
+            review_feedback='旧反馈',
+            reviewed_at=timezone.now(),
+            reviewed_by=self.admin,
+        )
+        self.client.force_login(self.author)
+
+        with patch(
+            'shares.services.shares.log_share_action',
+            side_effect=RuntimeError('injected audit failure'),
+        ):
+            with self.assertRaisesRegex(RuntimeError, 'injected audit failure'):
+                self.client.post(
+                    reverse('edit_share', args=[share.share_id]),
+                    self.edit_form_data(share, title='不应保存的标题'),
+                )
+
+        share.refresh_from_db()
+        self.assertEqual(share.title, '已有分享')
+        self.assertEqual(share.status, Share.Status.APPROVED)
+        self.assertEqual(share.review_feedback, '旧反馈')
+        self.assertEqual(share.reviewed_by, self.admin)
+
+    def test_stale_editor_cannot_overwrite_newer_moderation_state(self):
+        share = self.create_share()
+        self.client.force_login(self.author)
+        page = self.client.get(reverse('edit_share', args=[share.share_id]))
+        editor_version = page.context['form']['version'].value()
+        moderated_at = timezone.now()
+        Share.objects.filter(pk=share.pk).update(
+            status=Share.Status.REJECTED,
+            visibility=Share.Visibility.PRIVATE,
+            review_feedback='并发审核结果',
+            reviewed_at=moderated_at,
+            reviewed_by=self.admin,
+            updated_at=moderated_at,
+        )
+
+        response = self.client.post(
+            reverse('edit_share', args=[share.share_id]),
+            self.share_form_data(
+                title='过期页面的修改',
+                version=editor_version,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '该分享已被其他操作更新')
+        share.refresh_from_db()
+        self.assertEqual(share.title, '已有分享')
+        self.assertEqual(share.status, Share.Status.REJECTED)
+        self.assertEqual(share.visibility, Share.Visibility.PRIVATE)
+        self.assertEqual(share.review_feedback, '并发审核结果')
+
+    def test_missing_or_invalid_edit_version_cannot_write(self):
+        share = self.create_share()
+        self.client.force_login(self.author)
+
+        for version, expected_error in (
+            (None, '编辑页面缺少版本信息'),
+            ('not-a-version', '编辑页面版本无效'),
+        ):
+            with self.subTest(version=version):
+                data = self.edit_form_data(share, title='不应保存的修改')
+                if version is None:
+                    data.pop('version')
+                else:
+                    data['version'] = version
+
+                response = self.client.post(
+                    reverse('edit_share', args=[share.share_id]),
+                    data,
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, expected_error)
+                share.refresh_from_db()
+                self.assertEqual(share.title, '已有分享')
 
     def test_non_owner_cannot_delete_share(self):
         share = self.create_share()

@@ -1,16 +1,20 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db import transaction
-from django.db.models import Count, Max
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 
-from shares.forms import ShareForm
-from shares.models import Collection, CollectionItem, Share, ShareLog
+from shares.forms import CreateShareForm, EditShareForm
+from shares.models import Collection, Share
 from shares.policies import can_view_share, is_moderator, viewable_share_queryset
 from shares.rate_limits import consume_rate_limit, request_identity
 from shares.selectors import annotate_share_cards, related_collection_summaries
-from shares.services.audit import log_share_action
+from shares.services.shares import (
+    CollectionUnavailableError,
+    ShareEditConflictError,
+    create_share_from_form,
+    update_share_from_form,
+)
 
 
 _MY_CONTENT_TABS = {'my_shares', 'collections', 'likes', 'favorites'}
@@ -48,59 +52,27 @@ def share_detail(request, share_id):
 def create_share(request):
     response_status = 200
     if request.method == 'POST':
-        form = ShareForm(request.POST)
+        form = CreateShareForm(request.POST, user=request.user)
         rule_name = 'authenticated_create_user' if request.user.is_authenticated else 'anonymous_create_ip'
         rate_limit = consume_rate_limit(rule_name, request_identity(request))
         if not rate_limit.allowed:
             messages.error(request, '创建请求过于频繁，请稍后再试。')
             response_status = 429
         elif form.is_valid():
-            share = form.save(commit=False)
-            if request.user.is_authenticated:
-                share.author = request.user
-                if share.visibility == Share.Visibility.PUBLIC and not is_moderator(request.user):
-                    share.status = Share.Status.PENDING
+            try:
+                result = create_share_from_form(form=form, actor=request.user)
+            except CollectionUnavailableError:
+                form.add_error('collection_id', '所选合集已不存在，请重新选择。')
+            else:
+                if result.requires_review:
                     messages.info(request, '您的分享已提交，审核通过后将显示在公开列表中。在此期间，您可以通过链接分享给他人。')
                 else:
-                    share.status = Share.Status.APPROVED
-            else:
-                share.author = None
-                share.visibility = Share.Visibility.UNLISTED
-                share.status = Share.Status.APPROVED
-            with transaction.atomic():
-                share.save()
-                if request.user.is_authenticated:
-                    log_share_action(request.user, share, ShareLog.ActionType.CREATE, '用户创建分享')
-                collection_id = request.POST.get('collection_id')
-                if collection_id and request.user.is_authenticated:
-                    try:
-                        collection = Collection.objects.select_for_update().get(
-                            id=collection_id,
-                            author=request.user,
-                        )
-                        max_order = CollectionItem.objects.filter(
-                            collection=collection,
-                        ).aggregate(Max('order'))['order__max']
-                        CollectionItem.objects.create(
-                            collection=collection,
-                            share=share,
-                            order=(max_order or 0) + 1,
-                        )
-                    except Collection.DoesNotExist:
-                        pass
-            if share.status == Share.Status.APPROVED:
-                messages.success(request, '分享创建成功！')
-            return redirect('share_detail', share_id=share.share_id)
+                    messages.success(request, '分享创建成功！')
+                return redirect('share_detail', share_id=result.share.share_id)
     else:
-        form = ShareForm()
-    user_collections = (
-        Collection.objects.filter(author=request.user).order_by('-updated_at')
-        if request.user.is_authenticated
-        else []
-    )
+        form = CreateShareForm(user=request.user)
     return render(request, 'shares/create.html', {
         'form': form,
-        'user_collections': user_collections,
     }, status=response_status)
 
 
@@ -108,36 +80,23 @@ def create_share(request):
 def edit_share(request, share_id):
     share = get_object_or_404(Share, share_id=share_id, author=request.user)
     if request.method == 'POST':
-        form = ShareForm(request.POST, instance=share)
+        form = EditShareForm(request.POST, instance=share)
         if form.is_valid():
-            updated_share = form.save(commit=False)
-            updated_share.status = (
-                Share.Status.PENDING
-                if updated_share.visibility == Share.Visibility.PUBLIC and not is_moderator(request.user)
-                else Share.Status.APPROVED
-            )
-            if updated_share.status == Share.Status.PENDING:
-                messages.info(request, '修改已保存，需要重新审核后才能在公开列表中显示。')
-            updated_share.review_feedback = ''
-            updated_share.reviewed_at = None
-            updated_share.reviewed_by = None
-            labels = (
-                ('title', '标题'),
-                ('strategy_code', '战术板代码'),
-                ('description', '描述'),
-                ('category', '分类'),
-                ('visibility', '可见性'),
-            )
-            changes = [label for name, label in labels if name in form.changed_data]
-            details = f"用户编辑内容: {', '.join(changes)}" if changes else '用户编辑分享'
-            with transaction.atomic():
-                updated_share.save()
-                log_share_action(request.user, updated_share, ShareLog.ActionType.EDIT, details)
-            if updated_share.status == Share.Status.APPROVED:
-                messages.success(request, '分享更新成功！')
-            return redirect('share_detail', share_id=share.share_id)
+            try:
+                result = update_share_from_form(form=form, actor=request.user)
+            except ShareEditConflictError:
+                form.add_error(None, '该分享已被其他操作更新。请刷新页面后重新编辑，当前提交未保存。')
+                share.refresh_from_db()
+            else:
+                if not result.changed:
+                    messages.info(request, '没有检测到需要保存的修改。')
+                elif result.requires_review:
+                    messages.info(request, '修改已保存，需要重新审核后才能在公开列表中显示。')
+                else:
+                    messages.success(request, '分享更新成功！')
+                return redirect('share_detail', share_id=result.share.share_id)
     else:
-        form = ShareForm(instance=share)
+        form = EditShareForm(instance=share)
     return render(request, 'shares/edit.html', {'form': form, 'share': share})
 
 
