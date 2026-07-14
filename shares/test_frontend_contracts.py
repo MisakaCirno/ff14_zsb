@@ -408,6 +408,15 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
         self.assertNotIn('href="?page=', my_shares_source)
 
+        public_profile_source = self.read_template('shares/user_public_profile.html')
+        self.assertIn(
+            "{% include 'shares/includes/pagination.html' with page_obj=shares",
+            public_profile_source,
+        )
+        self.assertIn("aria_label='用户公开分享分页'", public_profile_source)
+        self.assertNotIn('shares.paginator.page_range', public_profile_source)
+        self.assertNotIn('href="?page=', public_profile_source)
+
     def test_common_template_events_use_data_contracts(self):
         preview_template = self.read_template('shares/includes/share_preview.html')
         self.assertIn('data-preview-frame', preview_template)

@@ -202,6 +202,22 @@ class ShareAccessContractTests(TestCase):
             '?q=pagination+%26+keyword&amp;feed=paginated&amp;page=2',
         )
 
+    def test_public_profile_pagination_preserves_query_parameters(self):
+        for index in range(13):
+            self.create_share(title=f'profile pagination {index}')
+
+        response = self.client.get(
+            reverse('user_public_profile', args=[self.author.username]),
+            {'source': 'profile & link'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'aria-label="用户公开分享分页"')
+        self.assertContains(
+            response,
+            '?source=profile+%26+link&amp;page=2',
+        )
+
     def test_hx_text_search_returns_cards_only(self):
         visible = self.create_share(title='局部搜索结果')
 

@@ -180,7 +180,10 @@ def search(request):
 def user_public_profile(request, username):
     author = get_object_or_404(User, username=username)
     shares = Paginator(
-        public_share_queryset(Share.objects.filter(author=author)).order_by('-created_at'),
+        public_share_queryset(Share.objects.filter(author=author)).order_by(
+            '-created_at',
+            '-pk',
+        ),
         12,
     ).get_page(request.GET.get('page'))
     collections = Collection.objects.filter(
