@@ -306,6 +306,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './browse-page.css';",
             "@import './share-preview.css';",
             "@import './share-card.css';",
+            "@import './public-profile.css';",
             "@import './empty-state.css';",
             "@import './feedback.css';",
             "@import './pagination.css';",
@@ -475,6 +476,29 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn("aria_label='用户公开分享分页'", public_profile_source)
         self.assertNotIn('shares.paginator.page_range', public_profile_source)
         self.assertNotIn('href="?page=', public_profile_source)
+
+    def test_public_profile_uses_semantic_server_navigation(self):
+        source = self.read_template('shares/user_public_profile.html')
+        main_styles = self.read_frontend('styles/main.css')
+        profile_styles = self.read_frontend('styles/public-profile.css')
+
+        self.assertIn('data-public-profile-page', source)
+        self.assertIn('<h1 class="public-profile-hero__name">', source)
+        self.assertIn('aria-label="用户主页内容"', source)
+        self.assertIn("{% querystring tab='shares' page=None %}", source)
+        self.assertIn("{% querystring tab='collections' page=None %}", source)
+        self.assertIn('aria-current="page"', source)
+        self.assertIn('data-public-profile-shares', source)
+        self.assertIn('data-public-profile-collections', source)
+        self.assertNotIn('data-bs-toggle="tab"', source)
+        self.assertNotIn('role="tablist"', source)
+        self.assertNotIn('role="tabpanel"', source)
+        self.assertNotIn('style="', source)
+
+        self.assertIn("@import './public-profile.css';", main_styles)
+        self.assertIn('.public-profile-hero', profile_styles)
+        self.assertIn('.public-profile-tabs', profile_styles)
+        self.assertIn('@media (max-width: 575.98px)', profile_styles)
 
     def test_common_template_events_use_data_contracts(self):
         preview_template = self.read_template('shares/includes/share_preview.html')

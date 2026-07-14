@@ -208,18 +208,115 @@ class ShareAccessContractTests(TestCase):
 
         response = self.client.get(
             reverse('user_public_profile', args=[self.author.username]),
-            {'source': 'profile & link'},
+            {'tab': 'shares', 'source': 'profile & link'},
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'aria-label="用户公开分享分页"')
         self.assertContains(
             response,
-            '?source=profile+%26+link&amp;page=2',
+            '?tab=shares&amp;source=profile+%26+link&amp;page=2',
+        )
+        self.assertContains(
+            response,
+            '?tab=collections&amp;source=profile+%26+link',
         )
         self.assertContains(response, 'data-share-card')
         self.assertContains(response, 'data-copy-strategy')
         self.assertNotContains(response, '?fragment=card')
+
+    def test_public_profile_renders_selected_server_tab(self):
+        share = self.create_share(title='profile selected share')
+        collection = Collection.objects.create(
+            title='profile selected collection',
+            author=self.author,
+            is_public=True,
+        )
+        CollectionItem.objects.create(collection=collection, share=share, order=1)
+        url = reverse('user_public_profile', args=[self.author.username])
+
+        shares_response = self.client.get(url, {'tab': 'shares'})
+        self.assertEqual(shares_response.status_code, 200)
+        self.assertEqual(shares_response.context['current_tab'], 'shares')
+        self.assertContains(shares_response, 'aria-current="page"', count=1)
+        self.assertContains(shares_response, 'data-public-profile-shares')
+        self.assertContains(shares_response, share.title)
+        self.assertNotContains(shares_response, 'data-public-profile-collections')
+        self.assertNotContains(shares_response, collection.title)
+
+        collections_response = self.client.get(url, {'tab': 'collections'})
+        self.assertEqual(collections_response.status_code, 200)
+        self.assertEqual(collections_response.context['current_tab'], 'collections')
+        self.assertContains(collections_response, 'aria-current="page"', count=1)
+        self.assertContains(collections_response, 'data-public-profile-collections')
+        self.assertContains(collections_response, 'data-public-collection')
+        self.assertContains(collections_response, collection.title)
+        self.assertContains(collections_response, '1 个内容')
+        self.assertNotContains(collections_response, 'data-public-profile-shares')
+        self.assertNotContains(collections_response, 'data-share-card')
+
+    def test_public_profile_invalid_tab_falls_back_to_shares(self):
+        visible = self.create_share(title='profile fallback share')
+
+        response = self.client.get(
+            reverse('user_public_profile', args=[self.author.username]),
+            {'tab': 'unknown'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['current_tab'], 'shares')
+        self.assertContains(response, visible.title)
+        self.assertContains(response, 'data-public-profile-shares')
+        self.assertNotContains(response, 'data-public-profile-collections')
+
+    def test_public_profile_only_exposes_public_data_to_every_viewer(self):
+        visible = self.create_share(title='profile visible share')
+        self.create_share(
+            title='profile unlisted share',
+            visibility=Share.Visibility.UNLISTED,
+        )
+        self.create_share(
+            title='profile private share',
+            visibility=Share.Visibility.PRIVATE,
+        )
+        self.create_share(
+            title='profile pending share',
+            status=Share.Status.PENDING,
+        )
+        self.create_share(
+            title='profile rejected share',
+            status=Share.Status.REJECTED,
+        )
+        public_collection = Collection.objects.create(
+            title='profile public collection',
+            author=self.author,
+            is_public=True,
+        )
+        Collection.objects.create(
+            title='profile private collection',
+            author=self.author,
+            is_public=False,
+        )
+        url = reverse('user_public_profile', args=[self.author.username])
+
+        for viewer in (None, self.author, self.admin):
+            with self.subTest(viewer=getattr(viewer, 'username', 'anonymous')):
+                if viewer is None:
+                    self.client.logout()
+                else:
+                    self.client.force_login(viewer)
+
+                shares_response = self.client.get(url, {'tab': 'shares'})
+                self.assertEqual(
+                    list(shares_response.context['shares'].object_list),
+                    [visible],
+                )
+
+                collections_response = self.client.get(url, {'tab': 'collections'})
+                self.assertEqual(
+                    list(collections_response.context['collections']),
+                    [public_collection],
+                )
 
     def test_hx_text_search_returns_cards_only(self):
         visible = self.create_share(title='局部搜索结果')

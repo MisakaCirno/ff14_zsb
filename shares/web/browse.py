@@ -31,6 +31,7 @@ _BROWSE_CATEGORIES = {
     Share.Category.ENTERTAINMENT,
     Share.Category.COMBAT,
 }
+_PUBLIC_PROFILE_TABS = {'shares', 'collections'}
 _BROWSE_ORDERINGS = {
     'latest': ('-created_at', '-pk'),
     'likes': ('-likes_count', '-created_at', '-pk'),
@@ -178,22 +179,29 @@ def search(request):
 
 
 def user_public_profile(request, username):
-    author = get_object_or_404(User, username=username)
+    author = get_object_or_404(
+        User.objects.select_related('profile'),
+        username=username,
+    )
+    current_tab = request.GET.get('tab', 'shares')
+    if current_tab not in _PUBLIC_PROFILE_TABS:
+        current_tab = 'shares'
     shares = Paginator(
         public_share_queryset(Share.objects.filter(author=author)).order_by(
             '-created_at',
             '-pk',
         ),
         12,
-    ).get_page(request.GET.get('page'))
+    ).get_page(request.GET.get('page') if current_tab == 'shares' else None)
     collections = Collection.objects.filter(
         author=author,
         is_public=True,
-    ).annotate(item_count=Count('collectionitem')).order_by('-updated_at')
+    ).annotate(item_count=Count('collectionitem')).order_by('-updated_at', '-pk')
     return render(request, 'shares/user_public_profile.html', {
         'author': author,
         'shares': shares,
         'collections': collections,
+        'current_tab': current_tab,
     })
 
 

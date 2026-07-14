@@ -3,116 +3,102 @@
 {% block title %}{{ author.profile.get_display_name }} 的个人主页 - 粘鼠板儿{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card border-0 shadow-sm bg-light mb-4">
-                <div class="card-body py-3 px-4">
-                    <div class="d-flex flex-wrap align-items-center gap-3">
-                        <!-- 头像 -->
-                        <div class="flex-shrink-0">
-                            <i class="bi bi-person-circle fs-2 text-primary"></i>
-                        </div>
-                        
-                        <!-- 名字和ID -->
-                        <div class="d-flex align-items-baseline">
-                            <span class="fw-bold fs-5">{{ author.profile.get_display_name }}</span>
-                            <small class="text-muted ms-2">@{{ author.username }}</small>
-                        </div>
+<div class="container-fluid public-profile-page" data-public-profile-page>
+    <header class="public-profile-hero">
+        <div class="public-profile-hero__avatar" aria-hidden="true">
+            <i class="bi bi-person-circle"></i>
+        </div>
 
-                        <!-- 分隔符 (仅在大屏显示) -->
-                        <div class="vr d-none d-md-block mx-1 text-muted opacity-25"></div>
+        <div class="public-profile-hero__identity">
+            <p class="public-profile-hero__eyebrow">公开主页</p>
+            <h1 class="public-profile-hero__name">{{ author.profile.get_display_name }}</h1>
+            <p class="public-profile-hero__username">@{{ author.username }}</p>
+            <p class="public-profile-hero__bio">
+                {% if author.profile.bio %}
+                {{ author.profile.bio }}
+                {% else %}
+                <span class="public-profile-hero__empty-bio">这位用户还没有填写简介。</span>
+                {% endif %}
+            </p>
+        </div>
 
-                        <!-- 简介 -->
-                        <div class="text-muted small flex-grow-1 text-truncate" style="max-width: 600px;">
-                            {% if author.profile.bio %}
-                                <span title="{{ author.profile.bio }}">{{ author.profile.bio }}</span>
-                            {% else %}
-                                <span class="fst-italic opacity-50">暂无简介</span>
-                            {% endif %}
-                        </div>
+        <dl class="public-profile-stats">
+            <div class="public-profile-stats__item">
+                <dt><i class="bi bi-collection-fill" aria-hidden="true"></i> 公开分享</dt>
+                <dd>{{ shares.paginator.count }}</dd>
+            </div>
+            <div class="public-profile-stats__item">
+                <dt><i class="bi bi-calendar3" aria-hidden="true"></i> 加入时间</dt>
+                <dd><time datetime="{{ author.date_joined|date:'Y-m-d' }}">{{ author.date_joined|date:"Y-m-d" }}</time></dd>
+            </div>
+        </dl>
+    </header>
 
-                        <!-- 统计信息 (右对齐) -->
-                        <div class="ms-auto d-flex gap-2">
-                            <span class="badge bg-white text-dark border" title="分享数量">
-                                <i class="bi bi-collection-fill text-primary me-1"></i> {{ shares.paginator.count }}
+    <nav class="public-profile-tabs" aria-label="用户主页内容">
+        <a href="{% querystring tab='shares' page=None %}"
+           class="public-profile-tabs__link{% if current_tab == 'shares' %} active{% endif %}"
+           {% if current_tab == 'shares' %}aria-current="page"{% endif %}>
+            <i class="bi bi-grid-3x3" aria-hidden="true"></i>
+            <span>公开分享</span>
+            <span class="badge rounded-pill">{{ shares.paginator.count }}</span>
+        </a>
+        <a href="{% querystring tab='collections' page=None %}"
+           class="public-profile-tabs__link{% if current_tab == 'collections' %} active{% endif %}"
+           {% if current_tab == 'collections' %}aria-current="page"{% endif %}>
+            <i class="bi bi-folder" aria-hidden="true"></i>
+            <span>公开合集</span>
+        </a>
+    </nav>
+
+    {% if current_tab == 'shares' %}
+    <section class="public-profile-content" aria-labelledby="public-profile-shares-title" data-public-profile-shares>
+        <h2 class="visually-hidden" id="public-profile-shares-title">{{ author.profile.get_display_name }} 的公开分享</h2>
+        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
+            {% for share in shares %}
+            {% include 'shares/includes/share_card.html' with share=share card_variant='profile' viewer=user only %}
+            {% empty %}
+            <div class="col-12">
+                {% include 'shares/includes/empty_state.html' with icon='bi-inbox' title='暂无公开分享' message='该用户暂时没有发布公开的战术板分享。' only %}
+            </div>
+            {% endfor %}
+        </div>
+
+        {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='用户公开分享分页' nav_class='mt-5' pagination_class='pagination-lg' %}
+    </section>
+    {% else %}
+    <section class="public-profile-content" aria-labelledby="public-profile-collections-title" data-public-profile-collections>
+        <h2 class="visually-hidden" id="public-profile-collections-title">{{ author.profile.get_display_name }} 的公开合集</h2>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+            {% for collection in collections %}
+            <div class="col">
+                <article class="card h-100 card-hover public-collection-card" data-public-collection>
+                    <div class="card-body public-collection-card__body">
+                        <div class="public-collection-card__heading">
+                            <span class="public-collection-card__icon" aria-hidden="true">
+                                <i class="bi bi-folder2-open"></i>
                             </span>
-                            <span class="badge bg-white text-dark border" title="加入时间">
-                                <i class="bi bi-calendar3 text-secondary me-1"></i> {{ author.date_joined|date:"Y-m-d" }}
-                            </span>
+                            <h3 class="public-collection-card__title">
+                                <a href="{% url 'collection_detail' collection.id %}">{{ collection.title }}</a>
+                            </h3>
+                            <span class="badge rounded-pill public-collection-card__count">{{ collection.item_count }} 个内容</span>
                         </div>
+                        <p class="public-collection-card__description">
+                            {{ collection.description|default:"暂无描述"|truncatechars:120 }}
+                        </p>
                     </div>
-                </div>
+                    <footer class="card-footer public-collection-card__footer">
+                        <i class="bi bi-clock" aria-hidden="true"></i>
+                        <span>更新于 <time datetime="{{ collection.updated_at|date:'Y-m-d' }}">{{ collection.updated_at|date:"Y-m-d" }}</time></span>
+                    </footer>
+                </article>
             </div>
-        </div>
-    </div>
-
-    <!-- 选项卡导航 -->
-    <ul class="nav nav-tabs mb-4" id="profileTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="shares-tab" data-bs-toggle="tab" data-bs-target="#shares" type="button" role="tab" aria-controls="shares" aria-selected="true">
-                <i class="bi bi-grid-3x3"></i> 所有分享
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="collections-tab" data-bs-toggle="tab" data-bs-target="#collections" type="button" role="tab" aria-controls="collections" aria-selected="false">
-                <i class="bi bi-folder"></i> 合集列表
-            </button>
-        </li>
-    </ul>
-
-    <div class="tab-content" id="profileTabsContent">
-        <!-- 分享列表 -->
-        <div class="tab-pane fade show active" id="shares" role="tabpanel" aria-labelledby="shares-tab">
-            <!-- 瀑布流布局 -->
-            <div id="app">
-                <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
-                    {% for share in shares %}
-                    {% include 'shares/includes/share_card.html' with share=share card_variant='profile' viewer=user only %}
-                    {% empty %}
-                    <div class="col-12">
-                        {% include 'shares/includes/empty_state.html' with icon='bi-inbox' title='暂无公开分享' message='该用户暂时没有发布公开的战术板分享。' only %}
-                    </div>
-                    {% endfor %}
-                </div>
-
-                {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='用户公开分享分页' nav_class='mt-5' pagination_class='pagination-lg' %}
+            {% empty %}
+            <div class="col-12">
+                {% include 'shares/includes/empty_state.html' with icon='bi-folder2-open' title='暂无公开合集' message='该用户暂时没有创建公开的合集。' only %}
             </div>
+            {% endfor %}
         </div>
-
-        <!-- 合集列表 -->
-        <div class="tab-pane fade" id="collections" role="tabpanel" aria-labelledby="collections-tab">
-            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-                {% for collection in collections %}
-                <div class="col">
-                    <div class="card h-100 card-hover">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <h5 class="card-title fw-bold mb-0">
-                                    <a href="{% url 'collection_detail' collection.id %}" class="text-decoration-none text-dark stretched-link">
-                                        {{ collection.title }}
-                                    </a>
-                                </h5>
-                                <span class="badge bg-primary rounded-pill">{{ collection.item_count }}</span>
-                            </div>
-                            <p class="card-text text-muted small mb-3">
-                                {{ collection.description|default:"暂无描述"|truncatechars:100 }}
-                            </p>
-                            <div class="text-muted small">
-                                <i class="bi bi-clock"></i> 更新于 {{ collection.updated_at|date:"Y-m-d" }}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% empty %}
-                <div class="col-12">
-                    {% include 'shares/includes/empty_state.html' with icon='bi-folder2-open' title='暂无公开合集' message='该用户暂时没有创建公开的合集。' only %}
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+    </section>
+    {% endif %}
 </div>
 {% endblock %}
-
-
