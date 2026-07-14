@@ -7,10 +7,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from shares.forms import ShareForm
 from shares.models import Collection, CollectionItem, Share, ShareLog
-from shares.policies import can_view_share, is_moderator
+from shares.policies import can_view_share, is_moderator, viewable_share_queryset
 from shares.rate_limits import consume_rate_limit, request_identity
 from shares.selectors import related_collection_summaries
 from shares.services.audit import log_share_action
+
+
+_MY_CONTENT_TABS = {'my_shares', 'collections', 'likes', 'favorites'}
 
 
 def share_detail(request, share_id):
@@ -155,11 +158,19 @@ def delete_share(request, share_id):
 @login_required
 def my_shares(request):
     tab = request.GET.get('tab', 'my_shares')
+    if tab not in _MY_CONTENT_TABS:
+        tab = 'my_shares'
     if tab == 'likes':
-        queryset = request.user.liked_shares.all()
+        queryset = viewable_share_queryset(
+            request.user,
+            request.user.liked_shares.all(),
+        )
         ordering = '-created_at'
     elif tab == 'favorites':
-        queryset = request.user.favorited_shares.all()
+        queryset = viewable_share_queryset(
+            request.user,
+            request.user.favorited_shares.all(),
+        )
         ordering = '-created_at'
     else:
         queryset = Share.objects.filter(author=request.user)

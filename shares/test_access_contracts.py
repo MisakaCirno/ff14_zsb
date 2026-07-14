@@ -318,6 +318,68 @@ class ShareAccessContractTests(TestCase):
                     [public_collection],
                 )
 
+    def test_my_interaction_tabs_hide_shares_that_are_no_longer_viewable(self):
+        visible = self.create_share(title='interaction visible')
+        unlisted = self.create_share(
+            title='interaction unlisted',
+            visibility=Share.Visibility.UNLISTED,
+        )
+        pending = self.create_share(
+            title='interaction pending',
+            status=Share.Status.PENDING,
+        )
+        private = self.create_share(
+            title='interaction private',
+            visibility=Share.Visibility.PRIVATE,
+            code='[stgy:private-interaction]',
+        )
+        rejected = self.create_share(
+            title='interaction rejected',
+            status=Share.Status.REJECTED,
+            code='[stgy:rejected-interaction]',
+        )
+        interacted = [visible, unlisted, pending, private, rejected]
+        self.other_user.liked_shares.add(*interacted)
+        self.other_user.favorited_shares.add(*interacted)
+        self.client.force_login(self.other_user)
+
+        for tab in ('likes', 'favorites'):
+            with self.subTest(tab=tab):
+                response = self.client.get(reverse('my_shares'), {'tab': tab})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['current_tab'], tab)
+                self.assertCountEqual(
+                    [share.pk for share in response.context['shares']],
+                    [visible.pk, unlisted.pk, pending.pk],
+                )
+                self.assertNotContains(response, private.title)
+                self.assertNotContains(response, rejected.title)
+                self.assertNotContains(response, private.strategy_code)
+                self.assertNotContains(response, rejected.strategy_code)
+
+        self.assertTrue(private.likes.filter(pk=self.other_user.pk).exists())
+        self.assertTrue(private.favorites.filter(pk=self.other_user.pk).exists())
+        self.assertTrue(rejected.likes.filter(pk=self.other_user.pk).exists())
+        self.assertTrue(rejected.favorites.filter(pk=self.other_user.pk).exists())
+
+    def test_my_content_invalid_tab_falls_back_to_owned_shares(self):
+        owned = self.create_share(title='owned fallback share')
+        external = self.create_share(
+            title='external fallback share',
+            author=self.other_user,
+        )
+        self.author.liked_shares.add(external)
+        self.client.force_login(self.author)
+
+        response = self.client.get(reverse('my_shares'), {'tab': 'unknown'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['current_tab'], 'my_shares')
+        self.assertEqual(list(response.context['shares'].object_list), [owned])
+        self.assertContains(response, owned.title)
+        self.assertNotContains(response, external.title)
+
     def test_hx_text_search_returns_cards_only(self):
         visible = self.create_share(title='局部搜索结果')
 
