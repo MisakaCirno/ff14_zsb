@@ -421,7 +421,42 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('--bs-alert-bg:', adapter_source)
         self.assertIn('.app-navbar__actions', app_shell_source)
         self.assertIn('.app-footer__inner', app_shell_source)
+        self.assertIn('container-name: app-navbar;', app_shell_source)
+        self.assertIn('container-type: inline-size;', app_shell_source)
+        self.assertIn('@container app-navbar (max-width: 74rem)', app_shell_source)
+        self.assertRegex(
+            app_shell_source,
+            re.compile(
+                r'\.app-navbar\.navbar-expand-xl > \.app-navbar__container\s*'
+                r'\{\s*flex-wrap:\s*wrap;',
+            ),
+        )
+        self.assertRegex(
+            app_shell_source,
+            re.compile(
+                r'\.app-navbar\.navbar-expand-xl \.navbar-collapse\s*\{\s*'
+                r'width:\s*100%;\s*flex-basis:\s*100%;',
+            ),
+        )
+        self.assertIn(
+            '.app-navbar.navbar-expand-xl .navbar-collapse:not(.show)',
+            app_shell_source,
+        )
+        self.assertRegex(
+            app_shell_source,
+            re.compile(
+                r'\.app-navbar\.navbar-expand-xl '
+                r'\.navbar-collapse\.collapsing,\s*'
+                r'\.app-navbar\.navbar-expand-xl '
+                r'\.navbar-collapse\.show\s*\{\s*'
+                r'display:\s*block\s*!important;',
+            ),
+        )
         self.assertIn('@media (max-width: 1199.98px)', app_shell_source)
+        self.assertLess(
+            app_shell_source.index('@media (max-width: 1199.98px)'),
+            app_shell_source.index('@container app-navbar (max-width: 74rem)'),
+        )
         self.assertIn('@media (prefers-reduced-motion: reduce)', app_shell_source)
         self.assertNotIn('style="min-width: 260px;', self.read_template('base.html'))
         self.assertIn(

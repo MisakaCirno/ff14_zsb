@@ -22,6 +22,8 @@
 }
 
 .app-navbar {
+  container-name: app-navbar;
+  container-type: inline-size;
   min-height: 4.25rem;
   padding-block: var(--app-space-2);
   color: var(--app-color-shell-text);
@@ -304,6 +306,106 @@
 }
 
 @media (max-width: 1199.98px) {
+  .app-navbar__container {
+    padding-inline: var(--app-space-4);
+  }
+
+  .app-navbar__collapse {
+    padding-top: var(--app-space-3);
+  }
+
+  .app-navbar__primary {
+    min-width: 0;
+    padding-block: var(--app-space-3);
+    border-top: 1px solid var(--app-color-shell-border);
+  }
+
+  .app-navbar .nav-link {
+    display: flex;
+    width: 100%;
+    padding-inline: var(--app-space-3);
+  }
+
+  .app-navbar__divider {
+    display: none;
+  }
+
+  .app-navbar__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--app-space-3);
+    padding-top: var(--app-space-3);
+    border-top: 1px solid var(--app-color-shell-border);
+  }
+
+  .app-navbar__history {
+    grid-column: 1 / -1;
+  }
+
+  .app-navbar__history > .btn,
+  .app-navbar__search {
+    width: 100%;
+  }
+
+  .app-navbar__history .dropdown-menu {
+    position: static !important;
+    width: 100%;
+    margin-top: var(--app-space-2);
+    transform: none !important;
+  }
+
+  .app-navbar__search {
+    grid-column: 1 / -1;
+  }
+
+  .app-navbar__create {
+    justify-content: center;
+  }
+
+  .app-navbar__account {
+    justify-content: flex-end;
+  }
+}
+
+/*
+ * Bootstrap's xl navbar breakpoint follows the viewport, while browser text
+ * scaling changes how much content fits inside the shell. Keep the viewport
+ * fallback above, then opt into the same collapsed layout when the navbar's
+ * own readable width drops below the desktop design threshold.
+ */
+@container app-navbar (max-width: 74rem) {
+  .app-navbar.navbar-expand-xl > .app-navbar__container {
+    flex-wrap: wrap;
+  }
+
+  .app-navbar.navbar-expand-xl .navbar-toggler {
+    display: block;
+  }
+
+  .app-navbar.navbar-expand-xl .navbar-collapse {
+    width: 100%;
+    flex-basis: 100%;
+    flex-grow: 1;
+    align-items: center;
+  }
+
+  .app-navbar.navbar-expand-xl .navbar-collapse:not(.show) {
+    display: none !important;
+  }
+
+  .app-navbar.navbar-expand-xl .navbar-collapse.collapsing,
+  .app-navbar.navbar-expand-xl .navbar-collapse.show {
+    display: block !important;
+  }
+
+  .app-navbar.navbar-expand-xl .navbar-nav {
+    flex-direction: column;
+  }
+
+  .app-navbar__optional-label {
+    display: inline;
+  }
+
   .app-navbar__container {
     padding-inline: var(--app-space-4);
   }
