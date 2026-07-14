@@ -1,4 +1,4 @@
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 
 from .models import Collection, Share
 
@@ -29,6 +29,23 @@ def can_view_share(user, share):
     if share.visibility not in {Share.Visibility.PUBLIC, Share.Visibility.UNLISTED}:
         return False
     return share.status in {Share.Status.APPROVED, Share.Status.PENDING}
+
+
+def viewable_share_queryset(user, queryset=None):
+    """Apply the direct-link visibility policy to a share queryset."""
+    queryset = queryset if queryset is not None else Share.objects.all()
+    if not isinstance(queryset, QuerySet):
+        raise TypeError('queryset must be a Django QuerySet')
+    if is_moderator(user):
+        return queryset
+
+    visibility_filter = Q(
+        visibility__in={Share.Visibility.PUBLIC, Share.Visibility.UNLISTED},
+        status__in={Share.Status.APPROVED, Share.Status.PENDING},
+    )
+    if user and user.is_authenticated and user.pk is not None:
+        visibility_filter |= Q(author_id=user.pk)
+    return queryset.filter(visibility_filter)
 
 
 def can_view_collection(user, collection):

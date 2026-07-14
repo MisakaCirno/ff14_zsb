@@ -1,6 +1,79 @@
-from django.db.models import Count, Exists, OuterRef, Q
+from dataclasses import dataclass
 
-from .models import Report, Share, SiteMessage
+from django.db.models import Count, Exists, F, OuterRef, Q, Window
+from django.db.models.functions import RowNumber
+
+from .models import Collection, CollectionItem, Report, Share, SiteMessage
+from .policies import can_view_collection, viewable_share_queryset
+
+
+@dataclass(frozen=True, slots=True)
+class RelatedCollectionSummary:
+    collection: Collection
+    visible_items: tuple[CollectionItem, ...]
+    visible_item_count: int
+
+
+def related_collection_summaries(share, user):
+    """Build permission-filtered collection previews for a share detail page."""
+    visible_share_ids = viewable_share_queryset(user).order_by().values('pk')
+    contains_share = CollectionItem.objects.filter(
+        collection_id=OuterRef('pk'),
+        share=share,
+    )
+    collections = [
+        collection
+        for collection in Collection.objects.select_related(
+            'author',
+            'author__profile',
+        ).annotate(
+            contains_share=Exists(contains_share),
+            visible_item_count=Count(
+                'collectionitem',
+                filter=Q(collectionitem__share_id__in=visible_share_ids),
+            ),
+        ).filter(contains_share=True).order_by('-updated_at')
+        if can_view_collection(user, collection)
+    ]
+    if not collections:
+        return []
+
+    visible_items_by_collection = {
+        collection.pk: []
+        for collection in collections
+    }
+    collection_items = CollectionItem.objects.filter(
+        collection_id__in=visible_items_by_collection,
+        share_id__in=visible_share_ids,
+    ).annotate(
+        visible_position=Window(
+            expression=RowNumber(),
+            partition_by=[F('collection_id')],
+            order_by=(
+                F('order').asc(),
+                F('added_at').asc(),
+                F('pk').asc(),
+            ),
+        ),
+    ).filter(
+        visible_position__lte=5,
+    ).select_related(
+        'share',
+        'share__author',
+        'share__author__profile',
+    ).order_by('collection_id', 'order', 'added_at', 'pk')
+    for item in collection_items:
+        visible_items_by_collection[item.collection_id].append(item)
+
+    summaries = []
+    for collection in collections:
+        visible_items = visible_items_by_collection[collection.pk]
+        summaries.append(RelatedCollectionSummary(
+            collection=collection,
+            visible_items=tuple(visible_items),
+            visible_item_count=collection.visible_item_count,
+        ))
+    return summaries
 
 
 def annotate_share_cards(queryset, user):

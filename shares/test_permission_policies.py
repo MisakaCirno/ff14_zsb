@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.contrib.auth.models import AnonymousUser, User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import Collection, CollectionItem, Share
 from .policies import (
@@ -9,6 +12,7 @@ from .policies import (
     is_moderator,
     public_share_queryset,
     share_api_denial_status,
+    viewable_share_queryset,
 )
 
 
@@ -46,8 +50,18 @@ class SharePermissionPolicyTests(TestCase):
             for user in (self.anonymous, self.other):
                 with self.subTest(visibility=visibility, status=status, user=str(user)):
                     self.assertEqual(can_view_share(user, share), visitor_can_view)
+                    self.assertEqual(
+                        viewable_share_queryset(user).filter(pk=share.pk).exists(),
+                        visitor_can_view,
+                    )
             self.assertTrue(can_view_share(self.author, share))
             self.assertTrue(can_view_share(self.staff, share))
+            self.assertTrue(
+                viewable_share_queryset(self.author).filter(pk=share.pk).exists(),
+            )
+            self.assertTrue(
+                viewable_share_queryset(self.staff).filter(pk=share.pk).exists(),
+            )
 
     def test_only_public_approved_shares_enter_public_querysets(self):
         public = self.make_share(
@@ -192,6 +206,90 @@ class PermissionEnforcementTests(TestCase):
             {'title': unlisted.title, 'code': unlisted.strategy_code},
             {'title': pending.title, 'code': pending.strategy_code},
         ])
+
+    def test_share_detail_collection_preview_filters_hidden_items_and_count(self):
+        current = self.make_share('current', visibility=Share.Visibility.PUBLIC)
+        private = self.make_share('related private', visibility=Share.Visibility.PRIVATE)
+        rejected = self.make_share(
+            'related rejected',
+            visibility=Share.Visibility.PUBLIC,
+            status=Share.Status.REJECTED,
+        )
+        visible = [
+            current,
+            self.make_share('related visible 2', visibility=Share.Visibility.PUBLIC),
+            self.make_share('related visible 3', visibility=Share.Visibility.UNLISTED),
+            self.make_share('related visible 4', visibility=Share.Visibility.PUBLIC),
+            self.make_share('related visible 5', visibility=Share.Visibility.PUBLIC),
+        ]
+        collection = Collection.objects.create(
+            title='related collection',
+            author=self.author,
+            is_public=True,
+        )
+        ordered_shares = [
+            current,
+            private,
+            rejected,
+            *visible[1:],
+        ]
+        for order, share in enumerate(ordered_shares, start=1):
+            CollectionItem.objects.create(
+                collection=collection,
+                share=share,
+                order=order,
+            )
+        newer_collection = Collection.objects.create(
+            title='newer related collection',
+            author=self.author,
+            is_public=True,
+        )
+        CollectionItem.objects.create(
+            collection=newer_collection,
+            share=current,
+            order=1,
+        )
+        Collection.objects.filter(pk=collection.pk).update(
+            updated_at=timezone.now() - timedelta(days=1),
+        )
+
+        response = self.client.get(reverse('share_detail', args=[current.share_id]))
+
+        self.assertEqual(response.status_code, 200)
+        summaries = response.context['related_collections']
+        self.assertEqual(
+            [summary.collection for summary in summaries],
+            [newer_collection, collection],
+        )
+        summary = next(
+            summary
+            for summary in summaries
+            if summary.collection == collection
+        )
+        self.assertEqual(summary.collection, collection)
+        self.assertEqual(summary.visible_item_count, 5)
+        self.assertEqual(
+            [item.share for item in summary.visible_items],
+            visible,
+        )
+        self.assertNotContains(response, private.title)
+        self.assertNotContains(response, rejected.title)
+        self.assertNotContains(response, '查看全部')
+
+        self.client.force_login(self.author)
+        owner_response = self.client.get(
+            reverse('share_detail', args=[current.share_id]),
+        )
+        owner_summary = next(
+            summary
+            for summary in owner_response.context['related_collections']
+            if summary.collection == collection
+        )
+        self.assertEqual(owner_summary.visible_item_count, 7)
+        self.assertEqual(len(owner_summary.visible_items), 5)
+        self.assertContains(owner_response, private.title)
+        self.assertContains(owner_response, rejected.title)
+        self.assertContains(owner_response, '查看全部 7 个内容')
 
     def test_staff_can_inspect_private_collection_and_share_api(self):
         private_share = self.make_share('private', visibility=Share.Visibility.PRIVATE)

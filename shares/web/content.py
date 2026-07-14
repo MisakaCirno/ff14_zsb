@@ -7,8 +7,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from shares.forms import ShareForm
 from shares.models import Collection, CollectionItem, Share, ShareLog
-from shares.policies import can_view_collection, can_view_share, is_moderator
+from shares.policies import can_view_share, is_moderator
 from shares.rate_limits import consume_rate_limit, request_identity
+from shares.selectors import related_collection_summaries
 from shares.services.audit import log_share_action
 
 
@@ -20,11 +21,7 @@ def share_detail(request, share_id):
     if not can_view_share(request.user, share):
         messages.error(request, '该分享不存在或您没有权限访问')
         return redirect('index')
-    related_collections = [
-        collection
-        for collection in Collection.objects.filter(collectionitem__share=share).distinct()
-        if can_view_collection(request.user, collection)
-    ]
+    related_collections = related_collection_summaries(share, request.user)
     share_logs = (
         share.logs.select_related('user').order_by('-created_at')
         if is_moderator(request.user)

@@ -313,7 +313,8 @@
                     <h5 class="mb-0"><i class="bi bi-collection"></i> 所属合集</h5>
                 </div>
                 <div class="list-group list-group-flush">
-                    {% for collection in related_collections %}
+                    {% for related in related_collections %}
+                    {% with collection=related.collection %}
                     <div class="list-group-item">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h6 class="mb-0 fw-bold">
@@ -330,7 +331,7 @@
                                 <i class="bi bi-person"></i> {{ collection.author.profile.get_display_name }}
                             </div>
                             <div class="list-group list-group-flush border-top">
-                                {% for item in collection.collectionitem_set.all|slice:":5" %}
+                                {% for item in related.visible_items %}
                                 {% if item.share.share_id == share.share_id %}
                                 <div class="list-group-item px-0 py-2 border-0 active text-white bg-primary rounded px-2">
                                     <div class="d-flex w-100 justify-content-between">
@@ -346,14 +347,15 @@
                                 </a>
                                 {% endif %}
                                 {% endfor %}
-                                {% if collection.collectionitem_set.count > 5 %}
+                                {% if related.visible_item_count > 5 %}
                                 <a href="{% url 'collection_detail' collection.id %}" class="list-group-item list-group-item-action px-0 py-2 border-0 text-center text-primary">
-                                    查看全部 {{ collection.collectionitem_set.count }} 个内容
+                                    查看全部 {{ related.visible_item_count }} 个内容
                                 </a>
                                 {% endif %}
                             </div>
                         </div>
                     </div>
+                    {% endwith %}
                     {% endfor %}
                 </div>
             </div>
