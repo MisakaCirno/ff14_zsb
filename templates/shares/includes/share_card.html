@@ -1,7 +1,11 @@
 <div class="col">
-    <article class="card h-100 share-card card-hover browse-card" aria-labelledby="share-card-title-{{ share.share_id }}" data-share-card>
+    <article class="card h-100 share-card card-hover browse-card browse-card--{{ card_variant }}" aria-labelledby="share-card-title-{{ share.share_id }}" data-share-card data-share-card-variant="{{ card_variant }}"{% if card_variant == 'management' %} data-managed-share{% endif %}>
         <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link" aria-label="查看《{{ share.title }}》详情">
+            {% if card_variant == 'management' %}
+            {% include 'shares/includes/share_preview.html' with share=share preview_variant='management' only %}
+            {% else %}
             {% include 'shares/includes/share_preview.html' with share=share preview_variant='standard' only %}
+            {% endif %}
         </a>
 
         <div class="card-body browse-card__body">
@@ -10,7 +14,7 @@
                 <a href="{% url 'share_detail' share.share_id %}" class="browse-card__title-link">{{ share.title }}</a>
             </h3>
             <div class="browse-card__meta">
-                {% if card_variant != 'profile' %}
+                {% if card_variant == 'browse' %}
                     {% if share.author %}
                     <span class="browse-card__meta-item browse-card__author-wrap">
                         <i class="bi bi-person-circle" aria-hidden="true"></i>
@@ -27,8 +31,18 @@
                 {% endif %}
                 <span class="browse-card__meta-item">
                     <i class="bi bi-calendar3" aria-hidden="true"></i>
-                    <time datetime="{{ share.created_at|date:'c' }}">{{ share.created_at|date:"m-d" }}</time>
+                    <time datetime="{{ share.created_at|date:'c' }}">{% if card_variant == 'management' %}{{ share.created_at|date:"Y-m-d H:i" }}{% else %}{{ share.created_at|date:"m-d" }}{% endif %}</time>
                 </span>
+                {% if card_variant == 'management' %}
+                <span class="browse-card__meta-item management-card__stat" aria-label="{{ share.likes_count }} 个点赞">
+                    <i class="bi bi-heart-fill text-danger" aria-hidden="true"></i>
+                    {{ share.likes_count }}
+                </span>
+                <span class="browse-card__meta-item management-card__stat" aria-label="{{ share.favorites_count }} 个收藏">
+                    <i class="bi bi-star-fill text-warning" aria-hidden="true"></i>
+                    {{ share.favorites_count }}
+                </span>
+                {% endif %}
             </div>
             <p class="card-text browse-card__description">
                 {% if share.description %}
@@ -37,10 +51,31 @@
                 <em>暂无描述</em>
                 {% endif %}
             </p>
+            {% if card_variant == 'management' and share.status == 'rejected' and share.review_feedback %}
+            <div class="management-card__feedback" role="note">
+                <strong>审核反馈：</strong>
+                <span>{{ share.review_feedback|truncatechars:80 }}</span>
+            </div>
+            {% endif %}
         </div>
 
         <footer class="card-footer browse-card__footer">
-            {% if card_variant == 'profile' %}
+            {% if card_variant == 'management' %}
+            <div class="management-card__actions" role="group" aria-label="管理《{{ share.title }}》">
+                <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
+                    <span>查看</span>
+                </a>
+                <a href="{% url 'edit_share' share.share_id %}" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-pencil" aria-hidden="true"></i>
+                    <span>编辑</span>
+                </a>
+                <a href="{% url 'delete_share' share.share_id %}" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                    <span>删除</span>
+                </a>
+            </div>
+            {% elif card_variant == 'profile' %}
             <div class="btn-group browse-card__action-group browse-card__action-group--profile" role="group" aria-label="分享操作">
                 <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift" aria-label="查看《{{ share.title }}》详情">
                     <i class="bi bi-arrow-right-circle" aria-hidden="true"></i>
@@ -51,7 +86,7 @@
                     <span>复制码</span>
                 </button>
             </div>
-            {% else %}
+            {% elif card_variant == 'browse' %}
             <div class="browse-card__actions">
                 <div class="btn-group browse-card__action-group" role="group" aria-label="分享操作">
                     <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift" aria-label="查看《{{ share.title }}》详情">
