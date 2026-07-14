@@ -70,28 +70,7 @@
         <h2 class="visually-hidden" id="public-profile-collections-title">{{ author.profile.get_display_name }} 的公开合集</h2>
         <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
             {% for collection in collections %}
-            <div class="col">
-                <article class="card h-100 card-hover public-collection-card" data-public-collection>
-                    <div class="card-body public-collection-card__body">
-                        <div class="public-collection-card__heading">
-                            <span class="public-collection-card__icon" aria-hidden="true">
-                                <i class="bi bi-folder2-open"></i>
-                            </span>
-                            <h3 class="public-collection-card__title">
-                                <a href="{% url 'collection_detail' collection.id %}">{{ collection.title }}</a>
-                            </h3>
-                            <span class="badge rounded-pill public-collection-card__count">{{ collection.item_count }} 个内容</span>
-                        </div>
-                        <p class="public-collection-card__description">
-                            {{ collection.description|default:"暂无描述"|truncatechars:120 }}
-                        </p>
-                    </div>
-                    <footer class="card-footer public-collection-card__footer">
-                        <i class="bi bi-clock" aria-hidden="true"></i>
-                        <span>更新于 <time datetime="{{ collection.updated_at|date:'Y-m-d' }}">{{ collection.updated_at|date:"Y-m-d" }}</time></span>
-                    </footer>
-                </article>
-            </div>
+            {% include 'shares/includes/collection_card.html' with collection=collection card_variant='public' only %}
             {% empty %}
             <div class="col-12">
                 {% include 'shares/includes/empty_state.html' with icon='bi-folder2-open' title='暂无公开合集' message='该用户暂时没有创建公开的合集。' only %}

@@ -306,6 +306,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './browse-page.css';",
             "@import './share-preview.css';",
             "@import './share-card.css';",
+            "@import './collection-card.css';",
             "@import './public-profile.css';",
             "@import './collection-page.css';",
             "@import './empty-state.css';",
@@ -500,6 +501,38 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('.public-profile-hero', profile_styles)
         self.assertIn('.public-profile-tabs', profile_styles)
         self.assertIn('@media (max-width: 575.98px)', profile_styles)
+
+    def test_collection_card_variants_are_shared(self):
+        public_profile_source = self.read_template('shares/user_public_profile.html')
+        my_content_source = self.read_template('shares/my_shares.html')
+        component_source = self.read_template('shares/includes/collection_card.html')
+        card_styles = self.read_frontend('styles/collection-card.css')
+
+        self.assertIn(
+            "{% include 'shares/includes/collection_card.html' with "
+            "collection=collection card_variant='public' only %}",
+            public_profile_source,
+        )
+        self.assertIn(
+            "{% include 'shares/includes/collection_card.html' with "
+            "collection=collection card_variant='management' only %}",
+            my_content_source,
+        )
+        self.assertIn('<article class="card h-100', component_source)
+        self.assertIn('aria-labelledby="collection-card-title-', component_source)
+        self.assertIn("{% if card_variant == 'public' %}", component_source)
+        self.assertIn("{% if card_variant == 'management' %}", component_source)
+        self.assertIn('data-public-collection', component_source)
+        self.assertIn('data-managed-collection', component_source)
+        self.assertIn("{% url 'collection_detail' collection.id %}", component_source)
+        self.assertIn("{% url 'edit_collection' collection.id %}", component_source)
+        self.assertIn("{% url 'delete_collection' collection.id %}", component_source)
+        self.assertIn('<time datetime=', component_source)
+        self.assertNotIn('style="', component_source)
+
+        self.assertIn('.collection-card {', card_styles)
+        self.assertIn('@container collection-card', card_styles)
+        self.assertIn('@media (prefers-reduced-motion: reduce)', card_styles)
 
     def test_collection_detail_uses_semantic_paginated_components(self):
         source = self.read_template('shares/collection_detail.html')

@@ -138,32 +138,7 @@
         <div class="tab-pane fade {% if current_tab == 'collections' %}show active{% endif %}" id="collections" role="tabpanel">
             <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
                 {% for collection in collections %}
-                <div class="col">
-                    <div class="card h-100 shadow-sm">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-start mb-3">
-                                <h5 class="card-title fw-bold mb-0 text-truncate">{{ collection.title }}</h5>
-                                {% if collection.is_public %}
-                                <span class="badge bg-success">公开</span>
-                                {% else %}
-                                <span class="badge bg-secondary">私有</span>
-                                {% endif %}
-                            </div>
-                            <p class="card-text text-muted small mb-3" style="min-height: 40px;">
-                                {{ collection.description|default:"暂无描述"|truncatechars:60 }}
-                            </p>
-                            <div class="d-flex justify-content-between align-items-center text-muted small mb-3">
-                                <span><i class="bi bi-collection"></i> {{ collection.item_count }} 个内容</span>
-                                <span><i class="bi bi-clock"></i> {{ collection.updated_at|date:"m-d" }}</span>
-                            </div>
-                            <div class="btn-group w-100">
-                                <a href="{% url 'collection_detail' collection.id %}" class="btn btn-sm btn-outline-primary">管理内容</a>
-                                <a href="{% url 'edit_collection' collection.id %}" class="btn btn-sm btn-outline-secondary">编辑信息</a>
-                                <a href="{% url 'delete_collection' collection.id %}" class="btn btn-sm btn-outline-danger">删除</a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                {% include 'shares/includes/collection_card.html' with collection=collection card_variant='management' only %}
                 {% empty %}
                 <div class="col-12">
                     <div class="alert alert-info text-center">

@@ -1,0 +1,68 @@
+<div class="col">
+    <article class="card h-100 card-hover collection-card collection-card--{{ card_variant }}" aria-labelledby="collection-card-title-{{ collection.id }}-{{ card_variant }}" data-collection-card data-collection-card-variant="{{ card_variant }}"{% if card_variant == 'public' %} data-public-collection{% else %} data-managed-collection{% endif %}>
+        <div class="card-body collection-card__body">
+            <div class="collection-card__heading">
+                <span class="collection-card__icon" aria-hidden="true">
+                    <i class="bi bi-folder2-open"></i>
+                </span>
+                <h3 class="collection-card__title" id="collection-card-title-{{ collection.id }}-{{ card_variant }}">
+                    <a href="{% url 'collection_detail' collection.id %}">{{ collection.title }}</a>
+                </h3>
+                {% if card_variant == 'public' %}
+                <span class="badge rounded-pill collection-card__count">{{ collection.item_count }} 个内容</span>
+                {% elif collection.is_public %}
+                <span class="badge text-bg-success collection-card__visibility">
+                    <i class="bi bi-globe2" aria-hidden="true"></i>
+                    公开
+                </span>
+                {% else %}
+                <span class="badge text-bg-secondary collection-card__visibility">
+                    <i class="bi bi-lock-fill" aria-hidden="true"></i>
+                    私有
+                </span>
+                {% endif %}
+            </div>
+
+            <p class="collection-card__description">
+                {{ collection.description|default:"暂无描述"|truncatechars:120 }}
+            </p>
+
+            {% if card_variant == 'management' %}
+            <div class="collection-card__meta">
+                <span>
+                    <i class="bi bi-collection" aria-hidden="true"></i>
+                    {{ collection.item_count }} 个内容
+                </span>
+                <span>
+                    <i class="bi bi-clock" aria-hidden="true"></i>
+                    更新于 <time datetime="{{ collection.updated_at|date:'c' }}">{{ collection.updated_at|date:"Y-m-d" }}</time>
+                </span>
+            </div>
+            {% endif %}
+        </div>
+
+        <footer class="card-footer collection-card__footer">
+            {% if card_variant == 'management' %}
+            <div class="collection-card__actions" role="group" aria-label="合集管理">
+                <a href="{% url 'collection_detail' collection.id %}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-list-check" aria-hidden="true"></i>
+                    管理内容
+                </a>
+                <a href="{% url 'edit_collection' collection.id %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-pencil" aria-hidden="true"></i>
+                    编辑信息
+                </a>
+                <a href="{% url 'delete_collection' collection.id %}" class="btn btn-sm btn-outline-danger">
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                    删除
+                </a>
+            </div>
+            {% else %}
+            <span class="collection-card__updated">
+                <i class="bi bi-clock" aria-hidden="true"></i>
+                更新于 <time datetime="{{ collection.updated_at|date:'c' }}">{{ collection.updated_at|date:"Y-m-d" }}</time>
+            </span>
+            {% endif %}
+        </footer>
+    </article>
+</div>

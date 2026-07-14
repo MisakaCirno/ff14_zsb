@@ -151,92 +151,6 @@
   min-width: 0;
 }
 
-.public-collection-card {
-  overflow: hidden;
-  border-color: var(--app-color-border);
-  box-shadow: var(--app-shadow-sm);
-}
-
-.public-collection-card:focus-within {
-  transform: translateY(-5px);
-  box-shadow: var(--app-shadow-hover);
-}
-
-.public-collection-card__body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-4);
-  min-width: 0;
-  padding: var(--app-space-5);
-}
-
-.public-collection-card__heading {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--app-space-3);
-  align-items: center;
-  min-width: 0;
-}
-
-.public-collection-card__icon {
-  display: inline-grid;
-  width: 2.5rem;
-  height: 2.5rem;
-  place-items: center;
-  color: var(--app-color-primary);
-  background: var(--app-color-primary-soft);
-  border-radius: var(--app-radius-md);
-}
-
-.public-collection-card__title {
-  min-width: 0;
-  margin: 0;
-  font-size: var(--app-text-lg);
-}
-
-.public-collection-card__title a {
-  display: block;
-  overflow: hidden;
-  color: var(--app-color-text);
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.public-collection-card__title a:hover,
-.public-collection-card__title a:focus-visible {
-  color: var(--app-color-primary);
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
-}
-
-.public-collection-card__count {
-  color: var(--app-color-primary);
-  background: var(--app-color-primary-soft);
-  white-space: nowrap;
-}
-
-.public-collection-card__description {
-  flex: 1 1 auto;
-  min-block-size: 3rem;
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--app-color-text-muted);
-  font-size: var(--app-text-sm);
-  line-height: var(--app-line-height-relaxed);
-}
-
-.public-collection-card__footer {
-  display: flex;
-  gap: var(--app-space-2);
-  align-items: center;
-  padding: var(--app-space-3) var(--app-space-5);
-  color: var(--app-color-text-muted);
-  font-size: var(--app-text-xs);
-  background: var(--app-color-surface-muted);
-  border-color: var(--app-color-border);
-}
-
 @media (max-width: 767.98px) {
   .public-profile-hero {
     grid-template-columns: auto minmax(0, 1fr);
@@ -283,22 +197,4 @@
     padding-inline: var(--app-space-2);
   }
 
-  .public-collection-card__body {
-    padding: var(--app-space-4);
-  }
-
-  .public-collection-card__heading {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .public-collection-card__count {
-    grid-column: 1 / -1;
-    width: fit-content;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .public-collection-card:focus-within {
-    transform: none;
-  }
 }
