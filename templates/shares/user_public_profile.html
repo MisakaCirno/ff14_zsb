@@ -68,44 +68,7 @@
             <div id="app">
                 <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
                     {% for share in shares %}
-                    <div class="col">
-                        <div class="card h-100 share-card card-hover">
-                            <!-- 预览区域 -->
-                            <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link">
-                                {% include 'shares/includes/share_preview.html' with share=share preview_variant='standard' only %}
-                            </a>
-                            
-                            <div class="card-body d-flex flex-column">
-                                <h5 class="card-title text-truncate mb-2" title="{{ share.title }}">
-                                    <i class="bi bi-bookmark-fill text-primary"></i> {{ share.title }}
-                                </h5>
-                                <div class="mb-2">
-                                    <small class="text-muted">
-                                        <i class="bi bi-calendar3"></i> {{ share.created_at|date:"m-d" }}
-                                    </small>
-                                </div>
-                                {% if share.description %}
-                                <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
-                                    {{ share.description|striptags|truncatechars:60 }}
-                                </p>
-                                {% else %}
-                                <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
-                                    <em>暂无描述</em>
-                                </p>
-                                {% endif %}
-                            </div>
-                            <div class="card-footer bg-transparent border-0 pt-0">
-                                <div class="btn-group w-100 shadow-sm" role="group">
-                                    <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift" style="width: 66%;">
-                                        <i class="bi bi-arrow-right-circle"></i> 查看详情
-                                    </a>
-                                    <button type="button" class="btn btn-sm btn-outline-primary hover-lift" style="width: 34%;" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" title="复制分享码">
-                                        <i class="bi bi-clipboard"></i> 复制码
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    {% include 'shares/includes/share_card.html' with share=share card_variant='profile' viewer=user only %}
                     {% empty %}
                     <div class="col-12">
                         {% include 'shares/includes/empty_state.html' with icon='bi-inbox' title='暂无公开分享' message='该用户暂时没有发布公开的战术板分享。' only %}

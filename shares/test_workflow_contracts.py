@@ -164,6 +164,8 @@ class InteractionWorkflowTests(TestCase):
         self.assertContains(response, 'btn-danger')
         self.assertContains(response, 'bi-heart-fill')
         self.assertContains(response, 'hx-post=')
+        self.assertContains(response, 'aria-label="点赞，当前 1 个点赞"')
+        self.assertContains(response, 'aria-pressed="true"')
         self.assertContains(response, '>1</span>')
         self.assertIn('HX-Request', response.headers['Vary'])
         self.assertIn('no-store', response.headers['Cache-Control'])
@@ -210,6 +212,8 @@ class InteractionWorkflowTests(TestCase):
         self.assertContains(response, 'btn-warning')
         self.assertContains(response, 'bi-star-fill')
         self.assertContains(response, 'hx-post=')
+        self.assertContains(response, 'aria-label="收藏，当前 1 个收藏"')
+        self.assertContains(response, 'aria-pressed="true"')
         self.assertContains(response, '>1</span>')
         self.assertTrue(self.share.favorites.filter(pk=self.user.pk).exists())
 

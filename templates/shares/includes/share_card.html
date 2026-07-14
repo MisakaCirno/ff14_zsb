@@ -1,0 +1,84 @@
+<div class="col">
+    <article class="card h-100 share-card card-hover browse-card" aria-labelledby="share-card-title-{{ share.share_id }}" data-share-card>
+        <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link" aria-label="查看《{{ share.title }}》详情">
+            {% include 'shares/includes/share_preview.html' with share=share preview_variant='standard' only %}
+        </a>
+
+        <div class="card-body browse-card__body">
+            <h3 class="card-title h5 browse-card__title" id="share-card-title-{{ share.share_id }}" title="{{ share.title }}">
+                <i class="bi bi-bookmark-fill text-primary" aria-hidden="true"></i>
+                <a href="{% url 'share_detail' share.share_id %}" class="browse-card__title-link">{{ share.title }}</a>
+            </h3>
+            <div class="browse-card__meta">
+                {% if card_variant != 'profile' %}
+                    {% if share.author %}
+                    <span class="browse-card__meta-item browse-card__author-wrap">
+                        <i class="bi bi-person-circle" aria-hidden="true"></i>
+                        <a href="{% url 'user_public_profile' share.author.username %}" class="browse-card__author">
+                            {{ share.author.profile.get_display_name }}
+                        </a>
+                    </span>
+                    {% else %}
+                    <span class="browse-card__meta-item">
+                        <i class="bi bi-person-circle" aria-hidden="true"></i>
+                        <span>匿名用户</span>
+                    </span>
+                    {% endif %}
+                {% endif %}
+                <span class="browse-card__meta-item">
+                    <i class="bi bi-calendar3" aria-hidden="true"></i>
+                    <time datetime="{{ share.created_at|date:'c' }}">{{ share.created_at|date:"m-d" }}</time>
+                </span>
+            </div>
+            <p class="card-text browse-card__description">
+                {% if share.description %}
+                {{ share.description|striptags|truncatechars:60 }}
+                {% else %}
+                <em>暂无描述</em>
+                {% endif %}
+            </p>
+        </div>
+
+        <footer class="card-footer browse-card__footer">
+            {% if card_variant == 'profile' %}
+            <div class="btn-group browse-card__action-group browse-card__action-group--profile" role="group" aria-label="分享操作">
+                <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift" aria-label="查看《{{ share.title }}》详情">
+                    <i class="bi bi-arrow-right-circle" aria-hidden="true"></i>
+                    <span>查看详情</span>
+                </a>
+                <button type="button" class="btn btn-sm btn-outline-primary hover-lift" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" aria-label="复制《{{ share.title }}》的分享码">
+                    <i class="bi bi-clipboard" aria-hidden="true"></i>
+                    <span>复制码</span>
+                </button>
+            </div>
+            {% else %}
+            <div class="browse-card__actions">
+                <div class="btn-group browse-card__action-group" role="group" aria-label="分享操作">
+                    <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift" aria-label="查看《{{ share.title }}》详情">
+                        <i class="bi bi-arrow-right-circle" aria-hidden="true"></i>
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-primary hover-lift" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" aria-label="复制《{{ share.title }}》的分享码">
+                        <i class="bi bi-clipboard" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <div class="btn-group browse-card__action-group" role="group" aria-label="互动操作">
+                    {% if viewer.is_authenticated %}
+                    {% include 'shares/includes/like_button.html' with is_liked=share.is_liked likes_count=share.likes_count %}
+                    {% include 'shares/includes/favorite_button.html' with is_favorited=share.is_favorited favorites_count=share.favorites_count %}
+                    {% else %}
+                    <a href="{% url 'login' %}?next={{ login_return_url|urlencode }}" class="btn btn-sm btn-outline-danger hover-lift" title="登录后点赞" aria-label="登录后点赞《{{ share.title }}》，当前 {{ share.likes_count }} 个点赞">
+                        <i class="bi bi-heart" aria-hidden="true"></i>
+                        <span>{{ share.likes_count }}</span>
+                    </a>
+                    <a href="{% url 'login' %}?next={{ login_return_url|urlencode }}" class="btn btn-sm btn-outline-secondary hover-lift" title="登录后收藏" aria-label="登录后收藏《{{ share.title }}》，当前 {{ share.favorites_count }} 个收藏">
+                        <i class="bi bi-star" aria-hidden="true"></i>
+                        <span>{{ share.favorites_count }}</span>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </footer>
+    </article>
+</div>

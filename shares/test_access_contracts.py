@@ -217,6 +217,9 @@ class ShareAccessContractTests(TestCase):
             response,
             '?source=profile+%26+link&amp;page=2',
         )
+        self.assertContains(response, 'data-share-card')
+        self.assertContains(response, 'data-copy-strategy')
+        self.assertNotContains(response, '?fragment=card')
 
     def test_hx_text_search_returns_cards_only(self):
         visible = self.create_share(title='局部搜索结果')

@@ -116,6 +116,10 @@ class FrontendShellContractTests(TestCase):
             f'hx-post="/share/{self.share.share_id}/favorite/?fragment=card"',
             content,
         )
+        self.assertIn('data-share-card', content)
+        self.assertIn('aria-label="点赞，当前 0 个点赞"', content)
+        self.assertIn('aria-label="收藏，当前 0 个收藏"', content)
+        self.assertGreaterEqual(content.count('aria-pressed="false"'), 2)
         self.assertNotIn('toggleIndexLike(', content)
         self.assertNotIn('toggleIndexFavorite(', content)
 
@@ -189,9 +193,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
     def test_shared_copy_buttons_do_not_use_inline_handlers(self):
         template_paths = (
-            'shares/includes/share_cards.html',
+            'shares/includes/share_card.html',
             'shares/my_shares.html',
-            'shares/user_public_profile.html',
         )
 
         for template_path in template_paths:
@@ -199,6 +202,51 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 source = self.read_template(template_path)
                 self.assertIn('data-copy-strategy', source)
                 self.assertNotIn('copyStrategyCode(', source)
+
+        for template_path in (
+            'shares/includes/share_cards.html',
+            'shares/user_public_profile.html',
+        ):
+            with self.subTest(template=template_path):
+                source = self.read_template(template_path)
+                self.assertIn(
+                    "{% include 'shares/includes/share_card.html' with ",
+                    source,
+                )
+                self.assertNotIn('copyStrategyCode(', source)
+
+    def test_public_share_cards_use_explicit_accessible_variants(self):
+        card_source = self.read_template('shares/includes/share_card.html')
+        list_source = self.read_template('shares/includes/share_cards.html')
+        profile_source = self.read_template('shares/user_public_profile.html')
+        like_source = self.read_template('shares/includes/like_button.html')
+        favorite_source = self.read_template('shares/includes/favorite_button.html')
+        card_styles = self.read_frontend('styles/share-card.css')
+        action_source = self.read_frontend('features/share-actions.ts')
+
+        self.assertIn("card_variant='browse' viewer=user", list_source)
+        self.assertIn('login_return_url=share_cards_return_url only', list_source)
+        self.assertIn("card_variant='profile' viewer=user only", profile_source)
+        self.assertIn('<article class="card h-100 share-card card-hover browse-card"', card_source)
+        self.assertIn('aria-labelledby="share-card-title-', card_source)
+        self.assertIn('data-share-card', card_source)
+        self.assertIn("{% if card_variant == 'profile' %}", card_source)
+        self.assertIn('aria-label="分享操作"', card_source)
+        self.assertIn('aria-label="互动操作"', card_source)
+        self.assertNotIn('style="', card_source)
+
+        for source, label in (
+            (like_source, '点赞，当前'),
+            (favorite_source, '收藏，当前'),
+        ):
+            self.assertIn(f'aria-label="{label}', source)
+            self.assertIn('aria-pressed="{% if ', source)
+            self.assertIn('aria-hidden="true"', source)
+
+        self.assertIn('.browse-card:focus-within', card_styles)
+        self.assertIn('.browse-card__actions', card_styles)
+        self.assertIn('@container browse-card (max-width: 18rem)', card_styles)
+        self.assertIn("icon.setAttribute('aria-hidden', 'true')", action_source)
 
     def test_base_template_has_no_classic_business_script(self):
         source = self.read_template('base.html')
@@ -257,6 +305,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './app-shell.css';",
             "@import './browse-page.css';",
             "@import './share-preview.css';",
+            "@import './share-card.css';",
             "@import './empty-state.css';",
             "@import './feedback.css';",
             "@import './pagination.css';",
@@ -315,9 +364,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
 
         for template_path in (
-            'shares/includes/share_cards.html',
+            'shares/includes/share_card.html',
             'shares/my_shares.html',
-            'shares/user_public_profile.html',
             'shares/collection_detail.html',
             'shares/admin_review_list.html',
         ):
@@ -329,6 +377,16 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                     re.compile(
                         r'class="[^"]*(?:card-hover[^"]*shadow-sm|shadow-sm[^"]*card-hover)',
                     ),
+                )
+
+        for template_path in (
+            'shares/includes/share_cards.html',
+            'shares/user_public_profile.html',
+        ):
+            with self.subTest(template=template_path):
+                self.assertIn(
+                    "{% include 'shares/includes/share_card.html' with ",
+                    self.read_template(template_path),
                 )
 
         base_source = self.read_template('base.html')
@@ -435,9 +493,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
 
         call_sites = (
-            ('shares/includes/share_cards.html', "share=share preview_variant='standard'"),
+            ('shares/includes/share_card.html', "share=share preview_variant='standard'"),
             ('shares/my_shares.html', "share=share preview_variant='management'"),
-            ('shares/user_public_profile.html', "share=share preview_variant='standard'"),
             ('shares/collection_detail.html', "share=item.share preview_variant='standard'"),
             ('shares/admin_review_list.html', "share=share preview_variant='review'"),
         )

@@ -5,8 +5,10 @@
         hx-post="{% url 'toggle_like' share.share_id %}?fragment={{ fragment }}"
         hx-target="this"
         hx-swap="outerHTML"
+        aria-label="点赞，当前 {{ likes_count }} 个点赞"
+        aria-pressed="{% if is_liked %}true{% else %}false{% endif %}"
         title="{% if is_liked %}取消点赞{% else %}点赞{% endif %}">
-    <i class="bi {% if is_liked %}bi-heart-fill{% else %}bi-heart{% endif %}"></i>
+    <i class="bi {% if is_liked %}bi-heart-fill{% else %}bi-heart{% endif %}" aria-hidden="true"></i>
     <span id="likes-count-{{ share.share_id }}"{% if fragment == 'detail' %} class="ms-1"{% endif %}>{{ likes_count }}</span>
 </button>
 {% endwith %}

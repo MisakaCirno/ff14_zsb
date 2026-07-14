@@ -22,6 +22,7 @@ function showCopiedButton(button: HTMLButtonElement): void {
   const originalChildren = Array.from(button.childNodes, (node) => node.cloneNode(true))
   const icon = document.createElement('i')
   icon.className = 'bi bi-check'
+  icon.setAttribute('aria-hidden', 'true')
   button.replaceChildren(icon)
   button.classList.remove('btn-outline-primary')
   button.classList.add('btn-success')
