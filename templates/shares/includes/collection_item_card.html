@@ -1,0 +1,59 @@
+<li class="col collection-detail-item">
+    <article class="card h-100 share-card card-hover collection-item-card" aria-labelledby="collection-item-title-{{ item.share.share_id }}" data-collection-item-card data-collection-item-position="{{ position }}">
+        <a href="{% url 'share_detail' item.share.share_id %}?collection_id={{ collection.id }}" class="text-decoration-none share-preview__link" aria-label="查看《{{ item.share.title }}》详情">
+            {% include 'shares/includes/share_preview.html' with share=item.share preview_variant='standard' only %}
+        </a>
+
+        <div class="card-body collection-item-card__body">
+            <div class="collection-item-card__heading">
+                <span class="collection-item-card__position">
+                    <span class="visually-hidden">第 </span>{{ position }}<span class="visually-hidden"> 项</span>
+                </span>
+                <h3 class="card-title collection-item-card__title" id="collection-item-title-{{ item.share.share_id }}" title="{{ item.share.title }}">
+                    <a href="{% url 'share_detail' item.share.share_id %}?collection_id={{ collection.id }}">{{ item.share.title }}</a>
+                </h3>
+            </div>
+
+            <div class="collection-item-card__meta">
+                <span class="collection-item-card__meta-item">
+                    <i class="bi bi-person-circle" aria-hidden="true"></i>
+                    {% if item.share.author %}
+                    <a href="{% url 'user_public_profile' item.share.author.username %}">{{ item.share.author.profile.get_display_name }}</a>
+                    {% else %}
+                    <span>匿名用户</span>
+                    {% endif %}
+                </span>
+                <span class="collection-item-card__meta-item">
+                    <i class="bi bi-calendar3" aria-hidden="true"></i>
+                    <time datetime="{{ item.added_at|date:'c' }}">加入于 {{ item.added_at|date:"Y-m-d" }}</time>
+                </span>
+            </div>
+
+            <p class="card-text collection-item-card__description">
+                {% if item.share.description %}
+                {{ item.share.description|striptags|truncatechars:80 }}
+                {% else %}
+                <em>暂无描述</em>
+                {% endif %}
+            </p>
+        </div>
+
+        <footer class="card-footer collection-item-card__footer">
+            <div class="collection-item-card__actions">
+                <a href="{% url 'share_detail' item.share.share_id %}?collection_id={{ collection.id }}" class="btn btn-sm btn-outline-primary hover-lift" aria-label="查看《{{ item.share.title }}》详情">
+                    <i class="bi bi-arrow-right-circle" aria-hidden="true"></i>
+                    <span>查看详情</span>
+                </a>
+                {% if can_manage_collection %}
+                <form action="{% url 'remove_share_from_collection' collection.id item.share.share_id %}" method="post" data-confirm-message="确定要从合集中移除吗？" data-remove-from-collection>
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger hover-lift" aria-label="从合集中移除《{{ item.share.title }}》">
+                        <i class="bi bi-trash" aria-hidden="true"></i>
+                        <span>移出合集</span>
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </footer>
+    </article>
+</li>

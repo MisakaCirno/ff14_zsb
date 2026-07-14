@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Max
 from django.shortcuts import get_object_or_404, redirect, render
@@ -8,7 +9,11 @@ from django.views.decorators.http import require_POST
 
 from shares.forms import CollectionForm
 from shares.models import Collection, CollectionItem, Share, ShareLog
-from shares.policies import can_view_collection, can_view_share
+from shares.policies import (
+    can_view_collection,
+    is_owner,
+    viewable_share_queryset,
+)
 from shares.services.audit import log_share_action
 
 
@@ -62,24 +67,27 @@ def delete_collection(request, collection_id):
 
 
 def collection_detail(request, collection_id):
-    collection = get_object_or_404(Collection, id=collection_id)
+    collection = get_object_or_404(
+        Collection.objects.select_related('author', 'author__profile'),
+        id=collection_id,
+    )
     if not can_view_collection(request.user, collection):
         messages.error(request, '该合集不存在或您没有权限访问')
         return redirect('index')
+    visible_share_ids = viewable_share_queryset(request.user).order_by().values('pk')
     collection_items = CollectionItem.objects.filter(
         collection=collection,
+        share_id__in=visible_share_ids,
     ).select_related(
         'share',
         'share__author',
         'share__author__profile',
-    ).order_by('order', 'added_at')
-    visible_items = [
-        item for item in collection_items
-        if can_view_share(request.user, item.share)
-    ]
+    ).order_by('order', 'added_at', 'pk')
+    items = Paginator(collection_items, 12).get_page(request.GET.get('page'))
     return render(request, 'shares/collection_detail.html', {
         'collection': collection,
-        'items': visible_items,
+        'items': items,
+        'can_manage_collection': is_owner(request.user, collection),
     })
 
 

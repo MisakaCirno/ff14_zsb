@@ -196,6 +196,11 @@ class PermissionEnforcementTests(TestCase):
         page = self.client.get(reverse('collection_detail', args=[collection.pk]))
         api = self.client.get(reverse('get_collection_codes', args=[collection.pk]))
 
+        self.assertEqual(page.context['items'].paginator.count, 3)
+        self.assertEqual(
+            [item.share for item in page.context['items']],
+            [public, unlisted, pending],
+        )
         self.assertContains(page, public.title)
         self.assertContains(page, unlisted.title)
         self.assertContains(page, pending.title)
@@ -206,6 +211,111 @@ class PermissionEnforcementTests(TestCase):
             {'title': unlisted.title, 'code': unlisted.strategy_code},
             {'title': pending.title, 'code': pending.strategy_code},
         ])
+
+    def test_collection_detail_paginates_only_visible_items_in_stable_order(self):
+        visible = [
+            self.make_share(
+                f'page visible {index:02}',
+                visibility=Share.Visibility.PUBLIC,
+            )
+            for index in range(13)
+        ]
+        private = self.make_share(
+            'page hidden private',
+            visibility=Share.Visibility.PRIVATE,
+        )
+        rejected = self.make_share(
+            'page hidden rejected',
+            visibility=Share.Visibility.PUBLIC,
+            status=Share.Status.REJECTED,
+        )
+        collection = Collection.objects.create(
+            title='paginated collection',
+            author=self.author,
+            is_public=True,
+        )
+        ordered_shares = [
+            visible[0],
+            private,
+            *visible[1:7],
+            rejected,
+            *visible[7:],
+        ]
+        for order, share in enumerate(ordered_shares, start=1):
+            CollectionItem.objects.create(
+                collection=collection,
+                share=share,
+                order=order,
+            )
+        url = reverse('collection_detail', args=[collection.pk])
+
+        first_page = self.client.get(url, {'source': 'collection & link'})
+        first_items = first_page.context['items']
+        self.assertEqual(first_items.paginator.count, 13)
+        self.assertEqual(first_items.number, 1)
+        self.assertEqual(
+            [item.share for item in first_items],
+            visible[:12],
+        )
+        self.assertContains(
+            first_page,
+            '?source=collection+%26+link&amp;page=2',
+        )
+        self.assertNotContains(first_page, private.title)
+        self.assertNotContains(first_page, rejected.title)
+
+        second_page = self.client.get(
+            url,
+            {'source': 'collection & link', 'page': 2},
+        )
+        self.assertEqual(
+            [item.share for item in second_page.context['items']],
+            visible[12:],
+        )
+        self.assertNotContains(second_page, private.title)
+        self.assertNotContains(second_page, rejected.title)
+
+        overflow_page = self.client.get(url, {'page': 999})
+        self.assertEqual(overflow_page.context['items'].number, 2)
+
+    def test_collection_detail_management_controls_are_owner_only(self):
+        share = self.make_share(
+            'managed collection share',
+            visibility=Share.Visibility.PUBLIC,
+        )
+        collection = Collection.objects.create(
+            title='managed collection',
+            author=self.author,
+            is_public=True,
+        )
+        CollectionItem.objects.create(collection=collection, share=share, order=1)
+        url = reverse('collection_detail', args=[collection.pk])
+
+        for viewer, can_manage in (
+            (None, False),
+            (self.other, False),
+            (self.staff, False),
+            (self.author, True),
+        ):
+            with self.subTest(viewer=getattr(viewer, 'username', 'anonymous')):
+                if viewer is None:
+                    self.client.logout()
+                else:
+                    self.client.force_login(viewer)
+
+                response = self.client.get(url)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(
+                    response.context['can_manage_collection'],
+                    can_manage,
+                )
+                if can_manage:
+                    self.assertContains(response, 'data-collection-manage-actions')
+                    self.assertContains(response, 'data-remove-from-collection')
+                else:
+                    self.assertNotContains(response, 'data-collection-manage-actions')
+                    self.assertNotContains(response, 'data-remove-from-collection')
 
     def test_share_detail_collection_preview_filters_hidden_items_and_count(self):
         current = self.make_share('current', visibility=Share.Visibility.PUBLIC)

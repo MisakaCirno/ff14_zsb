@@ -307,6 +307,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './share-preview.css';",
             "@import './share-card.css';",
             "@import './public-profile.css';",
+            "@import './collection-page.css';",
             "@import './empty-state.css';",
             "@import './feedback.css';",
             "@import './pagination.css';",
@@ -367,7 +368,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         for template_path in (
             'shares/includes/share_card.html',
             'shares/my_shares.html',
-            'shares/collection_detail.html',
+            'shares/includes/collection_item_card.html',
             'shares/admin_review_list.html',
         ):
             with self.subTest(template=template_path):
@@ -500,6 +501,48 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('.public-profile-tabs', profile_styles)
         self.assertIn('@media (max-width: 575.98px)', profile_styles)
 
+    def test_collection_detail_uses_semantic_paginated_components(self):
+        source = self.read_template('shares/collection_detail.html')
+        item_source = self.read_template('shares/includes/collection_item_card.html')
+        main_styles = self.read_frontend('styles/main.css')
+        collection_styles = self.read_frontend('styles/collection-page.css')
+
+        self.assertIn('data-collection-detail-page', source)
+        self.assertIn('<h1 class="collection-detail-hero__title"', source)
+        self.assertIn('<ol class="row ', source)
+        self.assertIn('data-collection-items', source)
+        self.assertIn(
+            "{% include 'shares/includes/collection_item_card.html' with ",
+            source,
+        )
+        self.assertIn(
+            "{% include 'shares/includes/pagination.html' with page_obj=items ",
+            source,
+        )
+        self.assertIn('data-collection-manage-actions', source)
+        self.assertIn('暂无可见内容', source)
+        self.assertNotIn('style="', source)
+        self.assertNotIn('collectionitem_set', source)
+
+        self.assertIn('data-collection-item-card', item_source)
+        self.assertEqual(
+            item_source.count('?collection_id={{ collection.id }}'),
+            3,
+        )
+        self.assertIn("method=\"post\"", item_source)
+        self.assertIn('{% csrf_token %}', item_source)
+        self.assertIn('data-confirm-message=', item_source)
+        self.assertIn('data-remove-from-collection', item_source)
+        self.assertIn('aria-label="从合集中移除《{{ item.share.title }}》"', item_source)
+        self.assertNotIn('style="', item_source)
+
+        self.assertIn("@import './collection-page.css';", main_styles)
+        self.assertIn('.collection-detail-page', collection_styles)
+        self.assertIn('.collection-item-card', collection_styles)
+        self.assertIn('@container collection-item-card', collection_styles)
+        self.assertIn('@media (max-width: 575.98px)', collection_styles)
+        self.assertIn('@media (prefers-reduced-motion: reduce)', collection_styles)
+
     def test_common_template_events_use_data_contracts(self):
         preview_template = self.read_template('shares/includes/share_preview.html')
         self.assertIn('data-preview-frame', preview_template)
@@ -519,7 +562,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         call_sites = (
             ('shares/includes/share_card.html', "share=share preview_variant='standard'"),
             ('shares/my_shares.html', "share=share preview_variant='management'"),
-            ('shares/collection_detail.html', "share=item.share preview_variant='standard'"),
+            ('shares/includes/collection_item_card.html', "share=item.share preview_variant='standard'"),
             ('shares/admin_review_list.html', "share=share preview_variant='review'"),
         )
         for template_path, contract in call_sites:
@@ -532,7 +575,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 )
                 self.assertNotIn('data-preview-frame', source)
 
-        collection_source = self.read_template('shares/collection_detail.html')
+        collection_source = self.read_template('shares/includes/collection_item_card.html')
         review_source = self.read_template('shares/admin_review_list.html')
         self.assertIn('?collection_id={{ collection.id }}', collection_source)
         self.assertNotIn('share-preview__link', review_source)
@@ -543,7 +586,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
         self.assertIn(
             'data-confirm-message',
-            self.read_template('shares/collection_detail.html'),
+            self.read_template('shares/includes/collection_item_card.html'),
         )
         preview_source = self.read_frontend('features/preview-images.ts')
         preview_styles = self.read_frontend('styles/share-preview.css')
