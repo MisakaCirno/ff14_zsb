@@ -45,6 +45,16 @@ class HomeFeedModeTests(TestCase):
         self.assertEqual(self.user.profile.home_feed_mode, UserProfile.HomeFeedMode.PAGINATED)
         self.assertContains(response, 'id="infinite-scroll-sentinel"')
 
+    def test_paginated_home_preserves_feed_mode_in_shared_pagination(self):
+        response = self.client.get(reverse('index'), {
+            'feed': UserProfile.HomeFeedMode.PAGINATED,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'aria-label="首页分享分页"')
+        self.assertContains(response, '?feed=paginated&amp;page=2')
+        self.assertNotContains(response, 'id="infinite-scroll-sentinel"')
+
     def test_post_feed_mode_choice_is_saved(self):
         self.client.login(username='alice', password='password123')
         self.user.profile.home_feed_mode = UserProfile.HomeFeedMode.PAGINATED

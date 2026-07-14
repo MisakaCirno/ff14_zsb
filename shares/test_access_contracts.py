@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import Collection, CollectionItem, Share
+from .models import Collection, CollectionItem, Share, UserProfile
 
 
 class ShareAccessContractTests(TestCase):
@@ -19,6 +19,10 @@ class ShareAccessContractTests(TestCase):
         status=Share.Status.APPROVED,
         author=None,
         code='[stgy:test-code]',
+        category=Share.Category.ENTERTAINMENT,
+        is_spoiler=False,
+        is_nsfw=False,
+        views=0,
     ):
         return Share.objects.create(
             title=title,
@@ -26,6 +30,10 @@ class ShareAccessContractTests(TestCase):
             author=author if author is not None else self.author,
             visibility=visibility,
             status=status,
+            category=category,
+            is_spoiler=is_spoiler,
+            is_nsfw=is_nsfw,
+            views=views,
         )
 
     def test_public_approved_share_is_visible_anonymously(self):
@@ -90,6 +98,109 @@ class ShareAccessContractTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['shares'].object_list), [visible])
+
+    def test_text_search_applies_shared_content_filters(self):
+        visible = self.create_share(
+            title='filter-keyword visible',
+            category=Share.Category.COMBAT,
+        )
+        self.create_share(
+            title='filter-keyword entertainment',
+            category=Share.Category.ENTERTAINMENT,
+        )
+        self.create_share(
+            title='filter-keyword spoiler',
+            category=Share.Category.COMBAT,
+            is_spoiler=True,
+        )
+        self.create_share(
+            title='filter-keyword nsfw',
+            category=Share.Category.COMBAT,
+            is_nsfw=True,
+        )
+
+        response = self.client.get(reverse('search'), {
+            'q': 'filter-keyword',
+            'category': Share.Category.COMBAT,
+            'hide_spoiler': 'on',
+            'hide_nsfw': 'on',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['shares'].object_list), [visible])
+        self.assertEqual(response.context['current_category'], Share.Category.COMBAT)
+        self.assertTrue(response.context['hide_spoiler'])
+        self.assertTrue(response.context['hide_nsfw'])
+
+    def test_text_search_applies_shared_sorting(self):
+        quiet = self.create_share(title='sort-keyword quiet', views=1)
+        popular = self.create_share(title='sort-keyword popular', views=20)
+
+        response = self.client.get(reverse('search'), {
+            'q': 'sort-keyword',
+            'sort': 'views',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(response.context['shares'].object_list),
+            [popular, quiet],
+        )
+        self.assertEqual(response.context['sort_by'], 'views')
+
+    def test_search_filter_controls_preserve_search_state(self):
+        self.create_share(title='state & keyword result')
+
+        response = self.client.get(reverse('search'), {
+            'q': 'state & keyword',
+            'category': Share.Category.COMBAT,
+            'hide_spoiler': 'on',
+            'feed': UserProfile.HomeFeedMode.PAGINATED,
+        })
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            '?q=state+%26+keyword&amp;category=entertainment&amp;'
+            'hide_spoiler=on&amp;feed=paginated',
+            content,
+        )
+        self.assertIn(
+            '?q=state+%26+keyword&amp;category=combat&amp;hide_spoiler=on&amp;'
+            'feed=paginated&amp;sort=likes',
+            content,
+        )
+        self.assertIn('method="get" action="/search/"', content)
+        self.assertIn('name="q" value="state &amp; keyword"', content)
+
+    def test_invalid_search_browse_options_are_normalized(self):
+        self.create_share(title='normalized-keyword result')
+
+        response = self.client.get(reverse('search'), {
+            'q': 'normalized-keyword',
+            'category': 'unknown',
+            'sort': 'unknown',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['current_category'])
+        self.assertEqual(response.context['sort_by'], 'latest')
+
+    def test_search_pagination_preserves_encoded_query_and_feed_mode(self):
+        for index in range(13):
+            self.create_share(title=f'pagination & keyword {index}')
+
+        response = self.client.get(reverse('search'), {
+            'q': 'pagination & keyword',
+            'feed': UserProfile.HomeFeedMode.PAGINATED,
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'aria-label="首页分享分页"')
+        self.assertContains(
+            response,
+            '?q=pagination+%26+keyword&amp;feed=paginated&amp;page=2',
+        )
 
     def test_hx_text_search_returns_cards_only(self):
         visible = self.create_share(title='局部搜索结果')

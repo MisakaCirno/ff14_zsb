@@ -66,24 +66,30 @@
                 <div class="card-body py-3">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                         <!-- 分类切换 -->
-                        <div class="btn-group" role="group">
-                            <a href="?category={% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}&feed={{ feed_mode }}"
-                               class="btn btn-outline-primary {% if not current_category %}active{% endif %}">
+                        <div class="btn-group" role="group" aria-label="分享分类">
+                            <a href="{% querystring category=None feed=feed_mode page=None partial=None continuation=None %}"
+                               class="btn btn-outline-primary {% if not current_category %}active{% endif %}"
+                               {% if not current_category %}aria-current="true"{% endif %}>
                                 全部
                             </a>
-                            <a href="?category=entertainment{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}&feed={{ feed_mode }}"
-                               class="btn btn-outline-success {% if current_category == 'entertainment' %}active{% endif %}">
+                            <a href="{% querystring category='entertainment' feed=feed_mode page=None partial=None continuation=None %}"
+                               class="btn btn-outline-success {% if current_category == 'entertainment' %}active{% endif %}"
+                               {% if current_category == 'entertainment' %}aria-current="true"{% endif %}>
                                 娱乐
                             </a>
-                            <a href="?category=combat{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}&feed={{ feed_mode }}"
-                               class="btn btn-outline-danger {% if current_category == 'combat' %}active{% endif %}">
+                            <a href="{% querystring category='combat' feed=feed_mode page=None partial=None continuation=None %}"
+                               class="btn btn-outline-danger {% if current_category == 'combat' %}active{% endif %}"
+                               {% if current_category == 'combat' %}aria-current="true"{% endif %}>
                                 战斗
                             </a>
                         </div>
 
                         <!-- 过滤选项 -->
                         <div class="d-flex gap-3 align-items-center">
-                            <form method="get" action="{% url 'index' %}" class="d-flex gap-3 align-items-center m-0">
+                            <form method="get" action="{{ request.path }}" class="d-flex gap-3 align-items-center m-0">
+                                {% if search_query %}
+                                <input type="hidden" name="q" value="{{ search_query }}">
+                                {% endif %}
                                 {% if current_category %}
                                 <input type="hidden" name="category" value="{{ current_category }}">
                                 {% endif %}
@@ -110,11 +116,11 @@
                                     {% if sort_by == 'latest' %}最新发布{% elif sort_by == 'likes' %}最多点赞{% elif sort_by == 'views' %}最多查看{% elif sort_by == 'favorites' %}最多收藏{% elif sort_by == 'copies' %}最多复制{% else %}排序{% endif %}
                                 </button>
                                 <ul class="dropdown-menu" aria-labelledby="sortDropdown">
-                                    <li><a class="dropdown-item {% if sort_by == 'latest' %}active{% endif %}" href="?sort=latest{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最新发布</a></li>
-                                    <li><a class="dropdown-item {% if sort_by == 'likes' %}active{% endif %}" href="?sort=likes{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最多点赞</a></li>
-                                    <li><a class="dropdown-item {% if sort_by == 'views' %}active{% endif %}" href="?sort=views{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最多查看</a></li>
-                                    <li><a class="dropdown-item {% if sort_by == 'favorites' %}active{% endif %}" href="?sort=favorites{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最多收藏</a></li>
-                                    <li><a class="dropdown-item {% if sort_by == 'copies' %}active{% endif %}" href="?sort=copies{% if current_category %}&category={{ current_category }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}&feed={{ feed_mode }}">最多复制</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'latest' %}active{% endif %}" href="{% querystring sort='latest' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'latest' %}aria-current="true"{% endif %}>最新发布</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'likes' %}active{% endif %}" href="{% querystring sort='likes' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'likes' %}aria-current="true"{% endif %}>最多点赞</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'views' %}active{% endif %}" href="{% querystring sort='views' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'views' %}aria-current="true"{% endif %}>最多查看</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'favorites' %}active{% endif %}" href="{% querystring sort='favorites' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'favorites' %}aria-current="true"{% endif %}>最多收藏</a></li>
+                                    <li><a class="dropdown-item {% if sort_by == 'copies' %}active{% endif %}" href="{% querystring sort='copies' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'copies' %}aria-current="true"{% endif %}>最多复制</a></li>
                                 </ul>
                             </div>
 
@@ -153,74 +159,8 @@
             {% endif %}
         </div>
 
-        <!-- 分页 -->
-        {% if shares.has_other_pages and feed_mode == 'paginated' %}
-        <nav class="mt-5" aria-label="分页导航">
-            <ul class="pagination pagination-lg justify-content-center">
-                {% if shares.has_previous %}
-                <li class="page-item">
-                    <a class="page-link" href="?page=1{% if search_query %}&q={{ search_query }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" aria-label="首页">
-                        <i class="bi bi-chevron-bar-left"></i>
-                    </a>
-                </li>
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ shares.previous_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" aria-label="上一页">
-                        <i class="bi bi-chevron-left"></i> 上一页
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled">
-                    <span class="page-link">
-                        <i class="bi bi-chevron-bar-left"></i>
-                    </span>
-                </li>
-                <li class="page-item disabled">
-                    <span class="page-link">
-                        <i class="bi bi-chevron-left"></i> 上一页
-                    </span>
-                </li>
-                {% endif %}
-                
-                <li class="page-item dropdown">
-                    <a class="page-link dropdown-toggle" href="#" id="pageDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        第 {{ shares.number }} / {{ shares.paginator.num_pages }} 页
-                    </a>
-                    <ul class="dropdown-menu" aria-labelledby="pageDropdown" style="max-height: 300px; overflow-y: auto;">
-                        {% for page_num in shares.paginator.page_range %}
-                        <li>
-                            <a class="dropdown-item {% if page_num == shares.number %}active{% endif %}" href="?page={{ page_num }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}">
-                                第 {{ page_num }} 页
-                            </a>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                </li>
-                
-                {% if shares.has_next %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ shares.next_page_number }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" aria-label="下一页">
-                        下一页 <i class="bi bi-chevron-right"></i>
-                    </a>
-                </li>
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ shares.paginator.num_pages }}{% if search_query %}&q={{ search_query }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}{% if sort_by %}&sort={{ sort_by }}{% endif %}{% if hide_spoiler %}&hide_spoiler=on{% endif %}{% if hide_nsfw %}&hide_nsfw=on{% endif %}" aria-label="末页">
-                        <i class="bi bi-chevron-bar-right"></i>
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled">
-                    <span class="page-link">
-                        下一页 <i class="bi bi-chevron-right"></i>
-                    </span>
-                </li>
-                <li class="page-item disabled">
-                    <span class="page-link">
-                        <i class="bi bi-chevron-bar-right"></i>
-                    </span>
-                </li>
-                {% endif %}
-            </ul>
-        </nav>
+        {% if feed_mode == 'paginated' %}
+        {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='首页分享分页' nav_class='mt-5' pagination_class='pagination-lg' %}
         {% endif %}
 
     </div>

@@ -27,6 +27,47 @@ from shares.selectors import annotate_share_cards
 from shares.validation import SEARCH_QUERY_MAX_LENGTH
 
 
+_BROWSE_CATEGORIES = {
+    Share.Category.ENTERTAINMENT,
+    Share.Category.COMBAT,
+}
+_BROWSE_ORDERINGS = {
+    'latest': ('-created_at', '-pk'),
+    'likes': ('-likes_count', '-created_at', '-pk'),
+    'views': ('-views', '-created_at', '-pk'),
+    'favorites': ('-favorites_count', '-created_at', '-pk'),
+    'copies': ('-copies', '-created_at', '-pk'),
+}
+
+
+def _prepare_browse_shares(request, queryset):
+    category = request.GET.get('category')
+    if category not in _BROWSE_CATEGORIES:
+        category = None
+    if category:
+        queryset = queryset.filter(category=category)
+
+    hide_spoiler = request.GET.get('hide_spoiler') == 'on'
+    hide_nsfw = request.GET.get('hide_nsfw') == 'on'
+    if hide_spoiler:
+        queryset = queryset.filter(is_spoiler=False)
+    if hide_nsfw:
+        queryset = queryset.filter(is_nsfw=False)
+
+    sort_by = request.GET.get('sort', 'latest')
+    if sort_by not in _BROWSE_ORDERINGS:
+        sort_by = 'latest'
+    queryset = annotate_share_cards(queryset, request.user).order_by(
+        *_BROWSE_ORDERINGS[sort_by]
+    )
+    return queryset, {
+        'current_category': category,
+        'sort_by': sort_by,
+        'hide_spoiler': hide_spoiler,
+        'hide_nsfw': hide_nsfw,
+    }
+
+
 @require_POST
 def set_home_feed_mode(request):
     requested_mode = request.POST.get('feed')
@@ -57,34 +98,17 @@ def set_home_feed_mode(request):
 @vary_on_headers('HX-Request', 'Cookie')
 @require_safe
 def index(request):
-    queryset = public_share_queryset()
-    category = request.GET.get('category')
-    if category in {Share.Category.ENTERTAINMENT, Share.Category.COMBAT}:
-        queryset = queryset.filter(category=category)
-    hide_spoiler = request.GET.get('hide_spoiler') == 'on'
-    hide_nsfw = request.GET.get('hide_nsfw') == 'on'
-    if hide_spoiler:
-        queryset = queryset.filter(is_spoiler=False)
-    if hide_nsfw:
-        queryset = queryset.filter(is_nsfw=False)
-    sort_by = request.GET.get('sort', 'latest')
-    queryset = annotate_share_cards(queryset, request.user)
-    ordering = {
-        'likes': ('-likes_count', '-created_at'),
-        'views': ('-views', '-created_at'),
-        'favorites': ('-favorites_count', '-created_at'),
-        'copies': ('-copies', '-created_at'),
-    }.get(sort_by, ('-created_at',))
-    shares = Paginator(queryset.order_by(*ordering), 12).get_page(request.GET.get('page'))
+    queryset, browse_options = _prepare_browse_shares(
+        request,
+        public_share_queryset(),
+    )
+    shares = Paginator(queryset, 12).get_page(request.GET.get('page'))
     if is_htmx_request(request) or request.GET.get('partial') == 'shares':
         return render_share_cards_response(request, shares)
     feed_mode = get_home_feed_mode(request)
     return render(request, 'shares/index.html', {
         'shares': shares,
-        'current_category': category,
-        'sort_by': sort_by,
-        'hide_spoiler': hide_spoiler,
-        'hide_nsfw': hide_nsfw,
+        **browse_options,
         'latest_announcement': Announcement.objects.filter(
             is_active=True,
         ).order_by('-created_at').first(),
@@ -127,16 +151,14 @@ def search(request):
         | Q(author__profile__nickname__icontains=query)
         | Q(author__username__icontains=query)
     ).distinct()
-    shares = Paginator(
-        annotate_share_cards(queryset, request.user).order_by('-created_at'),
-        12,
-    ).get_page(request.GET.get('page'))
+    queryset, browse_options = _prepare_browse_shares(request, queryset)
+    shares = Paginator(queryset, 12).get_page(request.GET.get('page'))
     if is_htmx_request(request) or request.GET.get('partial') == 'shares':
         return render_share_cards_response(request, shares)
     return render(request, 'shares/index.html', {
         'shares': shares,
         'search_query': query,
-        'sort_by': 'latest',
+        **browse_options,
         'feed_mode': get_home_feed_mode(request),
         'paginated_query': build_query_string(
             request,

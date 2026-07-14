@@ -378,6 +378,15 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('省略部分页码', large_page_content)
         self.assertLessEqual(large_page_content.count('class="page-item'), 11)
 
+    def test_home_uses_shared_bounded_pagination(self):
+        source = self.read_template('shares/index.html')
+
+        self.assertIn("shares/includes/pagination.html", source)
+        self.assertIn("aria_label='首页分享分页'", source)
+        self.assertNotIn('shares.paginator.page_range', source)
+        self.assertNotIn('id="pageDropdown"', source)
+        self.assertNotIn('href="?page=', source)
+
     def test_admin_log_pages_use_shared_pagination_component(self):
         for template_path in (
             'shares/admin_log_list.html',
