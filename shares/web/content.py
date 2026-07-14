@@ -2,14 +2,14 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Exists, Max, OuterRef
+from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404, redirect, render
 
 from shares.forms import ShareForm
 from shares.models import Collection, CollectionItem, Share, ShareLog
 from shares.policies import can_view_share, is_moderator, viewable_share_queryset
 from shares.rate_limits import consume_rate_limit, request_identity
-from shares.selectors import related_collection_summaries
+from shares.selectors import annotate_share_cards, related_collection_summaries
 from shares.services.audit import log_share_action
 
 
@@ -160,37 +160,35 @@ def my_shares(request):
     tab = request.GET.get('tab', 'my_shares')
     if tab not in _MY_CONTENT_TABS:
         tab = 'my_shares'
+
+    context = {'current_tab': tab}
+    page_number = request.GET.get('page')
+    if tab == 'collections':
+        queryset = Collection.objects.filter(author=request.user).annotate(
+            item_count=Count('collectionitem'),
+        ).order_by('-updated_at', '-pk')
+        context['collections'] = Paginator(queryset, 12).get_page(page_number)
+        return render(request, 'shares/my_shares.html', context)
+
     if tab == 'likes':
         queryset = viewable_share_queryset(
             request.user,
             request.user.liked_shares.all(),
         )
-        ordering = '-created_at'
+        ordering = ('-created_at', '-pk')
     elif tab == 'favorites':
         queryset = viewable_share_queryset(
             request.user,
             request.user.favorited_shares.all(),
         )
-        ordering = '-created_at'
+        ordering = ('-created_at', '-pk')
     else:
         queryset = Share.objects.filter(author=request.user)
-        ordering = 'created_at' if request.GET.get('order') == 'desc' else '-created_at'
-    queryset = queryset.annotate(
-        likes_count=Count('likes', distinct=True),
-        favorites_count=Count('favorites', distinct=True),
-        is_liked=Exists(Share.likes.through.objects.filter(
-            share_id=OuterRef('pk'), user_id=request.user.id,
-        )),
-        is_favorited=Exists(Share.favorites.through.objects.filter(
-            share_id=OuterRef('pk'), user_id=request.user.id,
-        )),
-    )
-    shares = Paginator(queryset.order_by(ordering), 12).get_page(request.GET.get('page'))
-    collections = Collection.objects.filter(author=request.user).annotate(
-        item_count=Count('collectionitem'),
-    ).order_by('-updated_at')
-    return render(request, 'shares/my_shares.html', {
-        'shares': shares,
-        'collections': collections,
-        'current_tab': tab,
-    })
+        ordering = (
+            ('created_at', 'pk')
+            if request.GET.get('order') == 'desc'
+            else ('-created_at', '-pk')
+        )
+    queryset = annotate_share_cards(queryset, request.user).order_by(*ordering)
+    context['shares'] = Paginator(queryset, 12).get_page(page_number)
+    return render(request, 'shares/my_shares.html', context)

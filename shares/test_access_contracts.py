@@ -1,6 +1,9 @@
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import Collection, CollectionItem, Share, UserProfile
 
@@ -379,6 +382,175 @@ class ShareAccessContractTests(TestCase):
         self.assertEqual(list(response.context['shares'].object_list), [owned])
         self.assertContains(response, owned.title)
         self.assertNotContains(response, external.title)
+
+    def test_my_content_only_queries_and_provides_selected_partition(self):
+        owned = self.create_share(title='selected owned share')
+        liked = self.create_share(
+            title='selected liked share',
+            author=self.other_user,
+        )
+        favorited = self.create_share(
+            title='selected favorite share',
+            author=self.other_user,
+        )
+        collection = Collection.objects.create(
+            title='selected owned collection',
+            author=self.author,
+        )
+        self.author.liked_shares.add(liked)
+        self.author.favorited_shares.add(favorited)
+        self.client.force_login(self.author)
+
+        share_cases = (
+            ('my_shares', owned.title),
+            ('likes', liked.title),
+            ('favorites', favorited.title),
+        )
+        for tab, selected_title in share_cases:
+            with self.subTest(tab=tab), CaptureQueriesContext(connection) as captured:
+                response = self.client.get(reverse('my_shares'), {'tab': tab})
+
+            context_keys = self.response_context_keys(response)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context['current_tab'], tab)
+            self.assertIn('shares', context_keys)
+            self.assertNotIn('collections', context_keys)
+            self.assertContains(response, selected_title)
+            self.assertNotContains(response, collection.title)
+            self.assertEqual(
+                self.my_content_navigation(response).count('aria-current="page"'),
+                1,
+            )
+            self.assertContains(response, f'data-my-content-section="{tab}"')
+            self.assertNotContains(response, 'data-my-content-collections')
+            self.assert_model_query_state(captured, Share, expected=True)
+            self.assert_model_query_state(captured, Collection, expected=False)
+
+        with CaptureQueriesContext(connection) as captured:
+            response = self.client.get(reverse('my_shares'), {'tab': 'collections'})
+
+        context_keys = self.response_context_keys(response)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['current_tab'], 'collections')
+        self.assertIn('collections', context_keys)
+        self.assertNotIn('shares', context_keys)
+        self.assertContains(response, collection.title)
+        self.assertNotContains(response, owned.title)
+        self.assertEqual(
+            self.my_content_navigation(response).count('aria-current="page"'),
+            1,
+        )
+        self.assertContains(response, 'data-my-content-collections')
+        self.assertNotContains(response, 'data-my-content-shares')
+        self.assert_model_query_state(captured, Collection, expected=True)
+        self.assert_model_query_state(captured, Share, expected=False)
+
+    def test_my_content_navigation_resets_partition_state_and_preserves_source(self):
+        self.client.force_login(self.author)
+        url = (
+            f"{reverse('my_shares')}?tab=likes&page=9&order=desc"
+            '&source=profile+%26+link'
+        )
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            '?tab=my_shares&amp;order=desc&amp;source=profile+%26+link',
+        )
+        for tab in ('collections', 'likes', 'favorites'):
+            self.assertContains(
+                response,
+                f'?tab={tab}&amp;source=profile+%26+link',
+            )
+
+    def test_my_collections_are_paginated_with_stable_order(self):
+        collections = [
+            Collection.objects.create(
+                title=f'pagination collection {index:02d}',
+                author=self.author,
+            )
+            for index in range(13)
+        ]
+        Collection.objects.filter(
+            pk__in=[collection.pk for collection in collections],
+        ).update(updated_at=timezone.now())
+        self.client.force_login(self.author)
+
+        response = self.client.get(
+            reverse('my_shares'),
+            {'tab': 'collections', 'source': 'my & content'},
+        )
+
+        page = response.context['collections']
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(page.paginator.count, 13)
+        self.assertEqual(len(page.object_list), 12)
+        self.assertEqual(
+            [collection.pk for collection in page.object_list],
+            sorted((collection.pk for collection in collections), reverse=True)[:12],
+        )
+        self.assertContains(response, 'aria-label="我的合集分页"')
+        self.assertContains(
+            response,
+            '?tab=collections&amp;source=my+%26+content&amp;page=2',
+        )
+
+        second_page = self.client.get(
+            reverse('my_shares'),
+            {'tab': 'collections', 'source': 'my & content', 'page': 2},
+        ).context['collections']
+        self.assertEqual(
+            [collection.pk for collection in second_page.object_list],
+            [min(collection.pk for collection in collections)],
+        )
+
+    def test_my_shares_keep_legacy_order_with_stable_ties(self):
+        shares = [
+            self.create_share(title=f'ordered owned share {index}')
+            for index in range(3)
+        ]
+        Share.objects.filter(pk__in=[share.pk for share in shares]).update(
+            created_at=timezone.now(),
+        )
+        self.client.force_login(self.author)
+
+        newest_first = self.client.get(reverse('my_shares')).context['shares']
+        oldest_first = self.client.get(
+            reverse('my_shares'),
+            {'order': 'desc'},
+        ).context['shares']
+
+        expected = sorted(share.pk for share in shares)
+        self.assertEqual(
+            [share.pk for share in newest_first.object_list],
+            list(reversed(expected)),
+        )
+        self.assertEqual(
+            [share.pk for share in oldest_first.object_list],
+            expected,
+        )
+
+    def assert_model_query_state(self, captured, model, *, expected):
+        table = connection.ops.quote_name(model._meta.db_table)
+        patterns = (f'FROM {table}', f'JOIN {table}')
+        was_queried = any(
+            any(pattern in query['sql'] for pattern in patterns)
+            for query in captured.captured_queries
+        )
+        self.assertEqual(was_queried, expected)
+
+    def response_context_keys(self, response):
+        return {
+            key
+            for template_context in response.context
+            for key in template_context.flatten()
+        }
+
+    def my_content_navigation(self, response):
+        content = response.content.decode()
+        return content.split('data-my-content-nav>', 1)[1].split('</nav>', 1)[0]
 
     def test_hx_text_search_returns_cards_only(self):
         visible = self.create_share(title='局部搜索结果')

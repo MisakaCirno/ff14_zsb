@@ -502,6 +502,39 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('.public-profile-tabs', profile_styles)
         self.assertIn('@media (max-width: 575.98px)', profile_styles)
 
+    def test_my_content_uses_semantic_server_navigation(self):
+        source = self.read_template('shares/my_shares.html')
+
+        self.assertIn('data-my-content-page', source)
+        self.assertIn('<h1 class="h2">', source)
+        self.assertIn('aria-label="我的内容分区"', source)
+        self.assertIn("{% querystring tab='my_shares' page=None %}", source)
+        for tab in ('collections', 'likes', 'favorites'):
+            self.assertIn(
+                f"{{% querystring tab='{tab}' page=None order=None %}}",
+                source,
+            )
+        self.assertIn('aria-current="page"', source)
+        self.assertIn("{% if current_tab != 'collections' %}", source)
+        self.assertIn('data-my-content-shares', source)
+        self.assertIn('data-my-content-collections', source)
+        self.assertIn(
+            "{% include 'shares/includes/pagination.html' with page_obj=shares",
+            source,
+        )
+        self.assertIn(
+            "{% include 'shares/includes/pagination.html' with page_obj=collections",
+            source,
+        )
+        self.assertIn(
+            "collection=collection card_variant='management' only",
+            source,
+        )
+        self.assertNotIn('role="tablist"', source)
+        self.assertNotIn('role="tabpanel"', source)
+        self.assertNotIn('tab-pane', source)
+        self.assertNotIn('data-bs-toggle', source)
+
     def test_collection_card_variants_are_shared(self):
         public_profile_source = self.read_template('shares/user_public_profile.html')
         my_content_source = self.read_template('shares/my_shares.html')

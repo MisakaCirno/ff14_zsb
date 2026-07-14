@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 
-{% block title %}我的分享{% endblock %}
+{% block title %}我的内容{% endblock %}
 
 {% block content %}
-<div class="container">
+<div class="container" data-my-content-page>
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="bi bi-person-workspace"></i> 我的内容</h2>
+        <h1 class="h2"><i class="bi bi-person-workspace" aria-hidden="true"></i> 我的内容</h1>
         <div class="btn-group">
             <a href="{% url 'create_share' %}" class="btn btn-primary">
                 <i class="bi bi-plus-circle"></i> 创建分享
@@ -16,24 +16,26 @@
         </div>
     </div>
 
-    <ul class="nav nav-tabs mb-4" id="myTab" role="tablist">
-        <li class="nav-item">
-            <a class="nav-link {% if current_tab == 'my_shares' %}active{% endif %}" href="?tab=my_shares">我的分享</a>
-        </li>
-        <li class="nav-item">
-             <a class="nav-link {% if current_tab == 'collections' %}active{% endif %}" href="?tab=collections">我的合集</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link {% if current_tab == 'likes' %}active{% endif %}" href="?tab=likes">我的点赞</a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link {% if current_tab == 'favorites' %}active{% endif %}" href="?tab=favorites">我的收藏</a>
-        </li>
-    </ul>
+    <nav aria-label="我的内容分区" data-my-content-nav>
+        <ul class="nav nav-tabs mb-4">
+            <li class="nav-item">
+                <a class="nav-link {% if current_tab == 'my_shares' %}active{% endif %}" href="{% querystring tab='my_shares' page=None %}"{% if current_tab == 'my_shares' %} aria-current="page"{% endif %}>我的分享</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if current_tab == 'collections' %}active{% endif %}" href="{% querystring tab='collections' page=None order=None %}"{% if current_tab == 'collections' %} aria-current="page"{% endif %}>我的合集</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if current_tab == 'likes' %}active{% endif %}" href="{% querystring tab='likes' page=None order=None %}"{% if current_tab == 'likes' %} aria-current="page"{% endif %}>我的点赞</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if current_tab == 'favorites' %}active{% endif %}" href="{% querystring tab='favorites' page=None order=None %}"{% if current_tab == 'favorites' %} aria-current="page"{% endif %}>我的收藏</a>
+            </li>
+        </ul>
+    </nav>
 
-    <div class="tab-content" id="myTabContent">
+    {% if current_tab != 'collections' %}
         <!-- 分享列表 -->
-        <div class="tab-pane fade {% if current_tab != 'collections' %}show active{% endif %}" id="shares" role="tabpanel">
+        <section data-my-content-shares data-my-content-section="{{ current_tab }}">
             <!-- 统计信息 -->
             <div class="row mb-4">
                 <div class="col-md-12">
@@ -132,10 +134,10 @@
 
             <!-- 分页 -->
             {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='我的内容分页' nav_class='mt-5' pagination_class='pagination-lg' %}
-        </div>
-
+        </section>
+    {% else %}
         <!-- 合集列表 -->
-        <div class="tab-pane fade {% if current_tab == 'collections' %}show active{% endif %}" id="collections" role="tabpanel">
+        <section data-my-content-collections>
             <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
                 {% for collection in collections %}
                 {% include 'shares/includes/collection_card.html' with collection=collection card_variant='management' only %}
@@ -147,7 +149,8 @@
                 </div>
                 {% endfor %}
             </div>
-        </div>
-    </div>
+            {% include 'shares/includes/pagination.html' with page_obj=collections aria_label='我的合集分页' nav_class='mt-5' pagination_class='pagination-lg' %}
+        </section>
+    {% endif %}
 </div>
 {% endblock %}
