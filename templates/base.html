@@ -127,7 +127,7 @@
                         <div class="app-navbar__account">
                             {% if user.is_authenticated %}
                             <div class="dropdown">
-                                <button class="btn app-navbar__user dropdown-toggle position-relative" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <button class="btn app-navbar__user dropdown-toggle position-relative{% if request.resolver_match.url_name == 'profile_edit' or request.resolver_match.url_name == 'password_change' or request.resolver_match.url_name == 'my_shares' %} active{% endif %}" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     <i class="bi bi-person-circle" aria-hidden="true"></i>
                                     <span class="app-navbar__user-name">
                                         {{ user|user_display_name }}
@@ -140,14 +140,14 @@
                                     {% endif %}
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                                    <li><a class="dropdown-item" href="{% url 'profile_edit' %}">
+                                    <li><a class="dropdown-item{% if request.resolver_match.url_name == 'profile_edit' %} active{% endif %}" href="{% url 'profile_edit' %}" {% if request.resolver_match.url_name == 'profile_edit' %}aria-current="page"{% endif %}>
                                         <i class="bi bi-person" aria-hidden="true"></i> 个人资料
                                     </a></li>
-                                    <li><a class="dropdown-item" href="{% url 'password_change' %}">
+                                    <li><a class="dropdown-item{% if request.resolver_match.url_name == 'password_change' %} active{% endif %}" href="{% url 'password_change' %}" {% if request.resolver_match.url_name == 'password_change' %}aria-current="page"{% endif %}>
                                         <i class="bi bi-key" aria-hidden="true"></i> 修改密码
                                     </a></li>
-                                    <li><a class="dropdown-item" href="{% url 'my_shares' %}">
-                                        <i class="bi bi-collection" aria-hidden="true"></i> 我的分享
+                                    <li><a class="dropdown-item{% if request.resolver_match.url_name == 'my_shares' %} active{% endif %}" href="{% url 'my_shares' %}" {% if request.resolver_match.url_name == 'my_shares' %}aria-current="page"{% endif %}>
+                                        <i class="bi bi-collection" aria-hidden="true"></i> 我的内容
                                     </a></li>
                                     <li><a class="dropdown-item d-flex justify-content-between align-items-center{% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %} active{% endif %}" href="{% url 'site_message_list' %}" {% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %}aria-current="page"{% endif %}>
                                         <span><i class="bi bi-envelope" aria-hidden="true"></i> 站内信</span>
@@ -196,6 +196,27 @@
                 </div>
             </div>
         </nav>
+        <noscript>
+            <nav class="app-noscript-account" aria-label="无脚本账户导航" data-noscript-account-nav>
+                <div class="container-fluid app-noscript-account__inner">
+                    <span class="app-noscript-account__status">JavaScript 已停用，账户功能仍可通过以下链接使用。</span>
+                    <div class="app-noscript-account__actions">
+                        {% if user.is_authenticated %}
+                        <a href="{% url 'profile_edit' %}">个人资料</a>
+                        <a href="{% url 'password_change' %}">修改密码</a>
+                        <a href="{% url 'my_shares' %}">我的内容</a>
+                        <form method="post" action="{% url 'logout' %}">
+                            {% csrf_token %}
+                            <button type="submit">退出登录</button>
+                        </form>
+                        {% else %}
+                        <a href="{% url 'login' %}">登录</a>
+                        <a href="{% url 'register' %}">注册</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </nav>
+        </noscript>
     </header>
 
     <!-- 消息提示 -->

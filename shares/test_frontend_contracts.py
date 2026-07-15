@@ -405,6 +405,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './collection-card.css';",
             "@import './public-profile.css';",
             "@import './my-content-page.css';",
+            "@import './account-page.css';",
             "@import './collection-page.css';",
             "@import './empty-state.css';",
             "@import './feedback.css';",
@@ -427,8 +428,24 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
         components_source = self.read_frontend('styles/components.css')
         app_shell_source = self.read_frontend('styles/app-shell.css')
+        account_page_source = self.read_frontend('styles/account-page.css')
         adapter_source = self.read_frontend('styles/bootstrap-adapter.css')
-        self.assertIn('.registration-form #id_username', components_source)
+        for shared_selector in (
+            '.auth-page {',
+            '.account-form {',
+            '.account-field {',
+            '.account-error-summary {',
+            '.account-settings-page {',
+            '.account-settings-nav {',
+        ):
+            self.assertIn(shared_selector, account_page_source)
+        self.assertIn('container-type: inline-size;', account_page_source)
+        self.assertIn('@container (max-width: 48rem)', account_page_source)
+        self.assertIn(
+            '@media (prefers-reduced-motion: reduce)',
+            account_page_source,
+        )
+        self.assertNotIn('#id_', account_page_source)
         self.assertIn('.admin-tabs .nav-link', components_source)
         self.assertIn('.share-card {', components_source)
         self.assertIn('box-shadow: var(--app-shadow-sm);', components_source)
@@ -485,10 +502,58 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
         self.assertIn('@media (prefers-reduced-motion: reduce)', app_shell_source)
         self.assertNotIn('style="min-width: 260px;', self.read_template('base.html'))
+        login_source = self.read_template('shares/login.html')
+        register_source = self.read_template('shares/register.html')
+        profile_source = self.read_template('shares/profile_edit.html')
+        password_source = self.read_template('shares/password_change.html')
+        for page_name, source in (
+            ('login', login_source),
+            ('register', register_source),
+        ):
+            with self.subTest(account_page=page_name):
+                self.assertIn(f'data-auth-page="{page_name}"', source)
+                self.assertIn('data-account-form', source)
+                self.assertIn(
+                    'shares/includes/account_form_field.html',
+                    source,
+                )
+
+        for page_name, source in (
+            ('profile', profile_source),
+            ('password', password_source),
+        ):
+            with self.subTest(account_page=page_name):
+                self.assertIn(
+                    f'data-account-settings-page="{page_name}"',
+                    source,
+                )
+                self.assertIn('data-account-form', source)
+                self.assertIn(
+                    'shares/includes/account_settings_nav.html',
+                    source,
+                )
+                self.assertIn(
+                    'shares/includes/account_form_field.html',
+                    source,
+                )
+
         self.assertIn(
-            'class="registration-form"',
-            self.read_template('shares/register.html'),
+            'data-account-field=',
+            self.read_template('shares/includes/account_form_field.html'),
         )
+        self.assertIn(
+            'data-account-error-summary',
+            self.read_template('shares/includes/account_error_summary.html'),
+        )
+        self.assertIn(
+            'data-account-settings-nav',
+            self.read_template('shares/includes/account_settings_nav.html'),
+        )
+
+        account_feature_source = self.read_frontend('features/account-forms.ts')
+        main_entry_source = self.read_frontend('main.ts')
+        self.assertIn("'[data-account-error-summary]'", account_feature_source)
+        self.assertIn('initializeAccountForms()', main_entry_source)
         self.assertIn(
             'admin-tabs',
             self.read_template('shares/includes/admin_tabs.html'),

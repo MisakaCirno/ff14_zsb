@@ -125,6 +125,50 @@
   align-items: center;
 }
 
+.app-noscript-account {
+  color: var(--app-color-shell-text);
+  background: var(--app-color-shell-raised);
+  border-top: 1px solid var(--app-color-shell-border);
+}
+
+.app-noscript-account__inner,
+.app-noscript-account__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-3);
+  align-items: center;
+}
+
+.app-noscript-account__inner {
+  justify-content: space-between;
+  padding-block: var(--app-space-3);
+}
+
+.app-noscript-account__status {
+  color: var(--app-color-shell-text-muted);
+  font-size: var(--app-text-sm);
+}
+
+.app-noscript-account__actions a,
+.app-noscript-account__actions button {
+  color: var(--app-color-shell-text);
+  font: inherit;
+  font-weight: var(--app-font-medium);
+  background: transparent;
+  border: 0;
+}
+
+.app-noscript-account__actions a:hover,
+.app-noscript-account__actions a:focus-visible,
+.app-noscript-account__actions button:hover,
+.app-noscript-account__actions button:focus-visible {
+  color: #ffffff;
+}
+
+.app-noscript-account__actions form {
+  margin: 0;
+}
+
 .app-navbar__quiet-action,
 .app-navbar__user {
   display: inline-flex;

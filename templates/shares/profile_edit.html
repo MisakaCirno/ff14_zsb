@@ -1,132 +1,98 @@
 {% extends 'base.html' %}
 
-{% block title %}个人资料 - 设置{% endblock %}
+{% block title %}个人资料 - 粘鼠板儿{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row">
-        <div class="col-lg-3 mb-4">
-            <!-- 侧边栏 -->
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="bi bi-gear"></i> 账户设置</h5>
-                </div>
-                <div class="list-group list-group-flush">
-                    <a href="{% url 'profile_edit' %}" class="list-group-item list-group-item-action active">
-                        <i class="bi bi-person"></i> 个人资料
-                    </a>
-                    <a href="{% url 'password_change' %}" class="list-group-item list-group-item-action">
-                        <i class="bi bi-key"></i> 修改密码
-                    </a>
-                    <a href="{% url 'my_shares' %}" class="list-group-item list-group-item-action">
-                        <i class="bi bi-collection"></i> 我的分享
-                    </a>
-                </div>
-            </div>
+<div class="account-settings-page" data-account-settings-page="profile">
+    <header class="account-settings-hero">
+        <div>
+            <p class="account-settings-hero__eyebrow">账户设置</p>
+            <h1 class="account-settings-hero__title">
+                <i class="bi bi-person-circle" aria-hidden="true"></i>
+                个人资料
+            </h1>
+            <p class="account-settings-hero__description">管理其他用户看到的昵称和简介，以及你的主页浏览偏好。</p>
         </div>
+        <a class="btn btn-outline-primary" href="{% url 'user_public_profile' user.username %}">
+            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+            查看公开主页
+        </a>
+    </header>
 
-        <div class="col-lg-9">
-            <div class="card">
-                <div class="card-header">
-                    <h4 class="mb-0"><i class="bi bi-person-circle"></i> 编辑个人资料</h4>
-                </div>
-                <div class="card-body">
-                    <form method="post">
+    <div class="account-settings-layout">
+        <aside class="account-settings-sidebar">
+            {% include 'shares/includes/account_settings_nav.html' with current_account_section='profile' only %}
+        </aside>
+
+        <div class="account-settings-content">
+            <section class="account-panel" aria-labelledby="profile-form-title">
+                <header class="account-panel__header">
+                    <div>
+                        <p class="account-panel__eyebrow">公开信息与偏好</p>
+                        <h2 class="account-panel__title" id="profile-form-title">编辑资料</h2>
+                    </div>
+                </header>
+
+                <div class="account-panel__body">
+                    {% if form.errors %}
+                        {% if profile_conflict %}
+                            {% url 'profile_edit' as profile_reload_url %}
+                            {% include 'shares/includes/account_error_summary.html' with form=form summary_title='资料未保存' reload_url=profile_reload_url only %}
+                        {% else %}
+                            {% include 'shares/includes/account_error_summary.html' with form=form summary_title='资料未保存' only %}
+                        {% endif %}
+                    {% endif %}
+
+                    <div class="account-readonly-field">
+                        <span class="account-readonly-field__label">登录用户名</span>
+                        <strong class="account-readonly-field__value">{{ user.username }}</strong>
+                        <span class="account-readonly-field__help">用户名用于登录，当前不可修改。</span>
+                    </div>
+
+                    <form method="post" class="account-form" data-account-form novalidate>
                         {% csrf_token %}
                         {{ form.version }}
 
-                        {% if form.version.errors %}
-                        <div class="alert alert-warning" role="alert">
-                            {{ form.version.errors }}
-                        </div>
-                        {% endif %}
+                        {% include 'shares/includes/account_form_field.html' with field=form.nickname only %}
+                        {% include 'shares/includes/account_form_field.html' with field=form.bio only %}
+                        {% include 'shares/includes/account_form_field.html' with field=form.home_feed_mode only %}
 
-                        {% if form.non_field_errors %}
-                        <div class="alert alert-warning" role="alert">
-                            {{ form.non_field_errors }}
-                        </div>
-                        {% endif %}
-                        
-                        <div class="mb-3">
-                            <label class="form-label"><strong>用户名</strong></label>
-                            <input type="text" class="form-control" value="{{ user.username }}" disabled>
-                            <div class="form-text">用户名不可修改</div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="{{ form.nickname.id_for_label }}" class="form-label">
-                                {{ form.nickname.label }}
-                            </label>
-                            {{ form.nickname }}
-                            <div class="form-text">
-                                设置昵称后，其他人在分享页面会看到你的昵称而不是用户名
-                            </div>
-                            {% if form.nickname.errors %}
-                            <div class="text-danger small">{{ form.nickname.errors }}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="{{ form.bio.id_for_label }}" class="form-label">
-                                {{ form.bio.label }}
-                            </label>
-                            {{ form.bio }}
-                            <div class="form-text">
-                                简单介绍一下自己
-                            </div>
-                            {% if form.bio.errors %}
-                            <div class="text-danger small">{{ form.bio.errors }}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="{{ form.home_feed_mode.id_for_label }}" class="form-label">
-                                {{ form.home_feed_mode.label }}
-                            </label>
-                            {{ form.home_feed_mode }}
-                            <div class="form-text">
-                                选择主页默认使用传统分页，还是瀑布式自动加载内容
-                            </div>
-                            {% if form.home_feed_mode.errors %}
-                            <div class="text-danger small">{{ form.home_feed_mode.errors }}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="d-grid gap-2">
+                        <div class="account-form__actions">
                             <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-check-circle"></i> 保存修改
+                                <i class="bi bi-check-circle" aria-hidden="true"></i>
+                                保存修改
                             </button>
                         </div>
                     </form>
                 </div>
-            </div>
+            </section>
 
-            <!-- 账户信息 -->
-            <div class="card mt-4">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> 账户信息</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <strong>注册时间：</strong>
-                            <span class="text-muted">{{ user.date_joined|date:"Y-m-d H:i" }}</span>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <strong>最后登录：</strong>
-                            <span class="text-muted">{{ user.last_login|date:"Y-m-d H:i" }}</span>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <strong>邮箱：</strong>
-                            <span class="text-muted">{{ user.email|default:"未设置" }}</span>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <strong>分享数量：</strong>
-                            <span class="text-muted">{{ user.shares.count }} 个</span>
-                        </div>
+            <section class="account-panel" aria-labelledby="account-facts-title">
+                <header class="account-panel__header">
+                    <div>
+                        <p class="account-panel__eyebrow">只读信息</p>
+                        <h2 class="account-panel__title" id="account-facts-title">账户概况</h2>
                     </div>
-                </div>
-            </div>
+                </header>
+                <dl class="account-facts" data-account-facts>
+                    <div class="account-facts__item">
+                        <dt>注册时间</dt>
+                        <dd>{{ user.date_joined|date:"Y-m-d H:i" }}</dd>
+                    </div>
+                    <div class="account-facts__item">
+                        <dt>最后登录</dt>
+                        <dd>{% if user.last_login %}{{ user.last_login|date:"Y-m-d H:i" }}{% else %}暂无记录{% endif %}</dd>
+                    </div>
+                    <div class="account-facts__item">
+                        <dt>邮箱</dt>
+                        <dd>{{ user.email|default:"未设置" }}</dd>
+                    </div>
+                    <div class="account-facts__item">
+                        <dt>分享数量</dt>
+                        <dd>{{ user.shares.count }} 个</dd>
+                    </div>
+                </dl>
+            </section>
         </div>
     </div>
 </div>

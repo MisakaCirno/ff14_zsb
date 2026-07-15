@@ -78,24 +78,6 @@
   background: var(--app-color-overlay-hover);
 }
 
-.registration-form #id_username,
-.registration-form #id_password1,
-.registration-form #id_password2 {
-  display: block;
-  width: 100%;
-  padding: 0.375rem 0.75rem;
-  font-size: var(--app-text-base);
-  font-weight: var(--app-font-regular);
-  line-height: var(--app-line-height-normal);
-  color: var(--app-color-text);
-  background-color: var(--app-color-surface);
-  background-clip: padding-box;
-  border: 1px solid var(--app-color-border-strong);
-  appearance: none;
-  border-radius: var(--app-radius-sm);
-  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-}
-
 .admin-tabs .nav-link {
   position: relative;
 }

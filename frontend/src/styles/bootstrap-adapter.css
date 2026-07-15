@@ -56,10 +56,7 @@
 
 .form-control:focus,
 .form-select:focus,
-.form-check-input:focus,
-.registration-form #id_username:focus,
-.registration-form #id_password1:focus,
-.registration-form #id_password2:focus {
+.form-check-input:focus {
   border-color: var(--app-color-focus-border);
   outline: 0;
   box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-focus-ring-color);

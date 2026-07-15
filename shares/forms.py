@@ -246,6 +246,7 @@ class UserProfileVersionField(forms.DateTimeField):
 class UserProfileForm(forms.ModelForm):
     """用户资料编辑表单"""
     version = UserProfileVersionField(
+        label='资料版本',
         required=True,
         widget=forms.HiddenInput(),
         error_messages={
@@ -257,6 +258,7 @@ class UserProfileForm(forms.ModelForm):
         label='个人简介',
         required=False,
         strip=False,
+        help_text='简单介绍一下自己；留空也可以。',
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '介绍一下自己（可选）'}),
     )
 
@@ -272,6 +274,10 @@ class UserProfileForm(forms.ModelForm):
             'nickname': '昵称',
             'bio': '个人简介',
             'home_feed_mode': '主页浏览模式',
+        }
+        help_texts = {
+            'nickname': '设置后，其他用户会优先看到昵称而不是登录用户名。',
+            'home_feed_mode': '选择主页默认使用传统分页，还是瀑布式自动加载内容。',
         }
 
     def __init__(self, *args, **kwargs):

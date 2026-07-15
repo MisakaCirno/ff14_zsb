@@ -2,6 +2,7 @@ import Alpine from 'alpinejs'
 import htmx from 'htmx.org'
 
 import { getCsrfToken } from './core/csrf'
+import { initializeAccountForms } from './features/account-forms'
 import { initializeAnnouncement } from './features/announcement'
 import { initializeFormControls } from './features/form-controls'
 import { initializeInfiniteScrollStatus } from './features/infinite-scroll'
@@ -40,6 +41,7 @@ window.htmx = htmx
 htmx.config.allowEval = false
 
 initializeFormControls()
+initializeAccountForms()
 initializePreviewImages()
 initializeVisitHistory()
 initializeShareActions()

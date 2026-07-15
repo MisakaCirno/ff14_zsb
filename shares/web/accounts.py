@@ -76,8 +76,12 @@ def _rate_limited_response(request, template_name, context, message, *rate_limit
         for rate_limit in rate_limits
         if not rate_limit.allowed or rate_limit.count >= rate_limit.limit
     )
-    messages.error(request, message)
-    response = render(request, template_name, context, status=429)
+    response = render(
+        request,
+        template_name,
+        {**context, 'account_error_message': message},
+        status=429,
+    )
     response.headers['Retry-After'] = str(max(
         rate_limit.retry_after
         for rate_limit in exhausted_limits
@@ -199,6 +203,7 @@ def profile_edit(request):
     if profile is None:
         profile = UserProfile(user=request.user)
     response_status = 200
+    profile_conflict = False
 
     if request.method == 'POST':
         form = UserProfileForm(request.POST, instance=profile)
@@ -212,12 +217,14 @@ def profile_edit(request):
                 form.add_error('bio', '个人简介过长，请缩短后重新提交。')
             except ProfileEditConflictError:
                 response_status = 409
+                profile_conflict = True
                 form.add_error(
                     None,
                     '个人资料已在此页面打开后发生变化，请刷新后重新编辑。',
                 )
             except ProfileUnavailableError:
                 response_status = 409
+                profile_conflict = True
                 form.add_error(
                     None,
                     '个人资料暂时不可用，请刷新后重试。',
@@ -231,12 +238,17 @@ def profile_edit(request):
                 return redirect('profile_edit')
         elif 'version' in form.errors:
             response_status = 409
+            profile_conflict = True
     else:
         form = UserProfileForm(instance=profile)
     return render(
         request,
         'shares/profile_edit.html',
-        {'form': form, 'profile': profile},
+        {
+            'form': form,
+            'profile': profile,
+            'profile_conflict': profile_conflict,
+        },
         status=response_status,
     )
 

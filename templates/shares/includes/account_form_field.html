@@ -1,0 +1,24 @@
+<div
+    class="account-field{% if field.errors %} account-field--invalid{% endif %}"
+    data-account-field="{{ field.name }}">
+    <label class="account-field__label" for="{{ field.id_for_label }}">
+        <span>{{ field.label }}</span>
+        {% if field.field.required %}
+        <span class="account-field__required" aria-hidden="true">*</span>
+        <span class="visually-hidden">（必填）</span>
+        {% else %}
+        <span class="account-field__optional">可选</span>
+        {% endif %}
+    </label>
+    {{ field }}
+    {% if field.help_text %}
+    <div class="account-field__help" id="{{ field.auto_id }}_helptext">
+        {{ field.help_text|safe }}
+    </div>
+    {% endif %}
+    {% if field.errors %}
+    <div class="account-field__errors">
+        {{ field.errors }}
+    </div>
+    {% endif %}
+</div>
