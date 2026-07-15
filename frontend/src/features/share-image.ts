@@ -339,7 +339,10 @@ async function generateShareImage(elements: ShareImageElements): Promise<void> {
       previewHeight * scale,
     )
 
-    const cleanUrl = `${window.location.origin}${window.location.pathname}`
+    const cleanUrl = elements.root.dataset.shareUrl
+    if (!cleanUrl) {
+      throw new Error('分享链接缺失')
+    }
     qrContainer = createQrContainer(cleanUrl)
     const qrImage = await getQrImage(qrContainer)
     const qrPosition = drawQrCode(context, elements.canvas, qrImage)

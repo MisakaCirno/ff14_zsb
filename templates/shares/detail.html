@@ -3,12 +3,17 @@
 
 {% block title %}{{ share.title }} - 详情{% endblock %}
 
+{% block extra_head %}
+<link rel="canonical" href="{{ canonical_share_url }}">
+{% endblock %}
+
 {% block content %}
 <div class="container"
      data-share-detail
      data-share-id="{{ share.share_id }}"
      data-share-title="{{ share.title }}"
      data-share-author="{% if share.author %}{{ share.author.profile.get_display_name }}{% else %}匿名用户{% endif %}"
+     data-share-url="{{ canonical_share_url }}"
      data-record-view-url="{% url 'record_view' share.share_id %}"
      data-record-copy-url="{% url 'record_copy' share.share_id %}">
     {% if share.status == 'pending' and share.visibility == 'public' %}
@@ -35,10 +40,10 @@
                             {% include 'shares/includes/like_button.html' with is_liked=is_liked likes_count=share.likes.count interaction_fragment='detail' %}
                             {% include 'shares/includes/favorite_button.html' with is_favorited=is_favorited favorites_count=share.favorites.count interaction_fragment='detail' %}
                         {% else %}
-                            <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-sm btn-outline-danger me-2" title="登录后点赞">
+                            <a href="{% url 'login' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-sm btn-outline-danger me-2" title="登录后点赞">
                                 <i class="bi bi-heart"></i> <span class="ms-1">{{ share.likes.count }}</span>
                             </a>
-                            <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-sm btn-outline-secondary" title="登录后收藏">
+                            <a href="{% url 'login' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-sm btn-outline-secondary" title="登录后收藏">
                                 <i class="bi bi-star"></i> <span class="ms-1">{{ share.favorites.count }}</span>
                             </a>
                         {% endif %}
@@ -125,7 +130,7 @@
                             <div>
                                 <h6 class="fw-bold">分享链接</h6>
                                 <div class="input-group">
-                                    <input type="text" class="form-control" data-share-url readonly>
+                                    <input type="text" class="form-control" data-share-url-input value="{{ canonical_share_url }}" readonly>
                                     <button class="btn btn-outline-secondary" type="button" data-copy-share-url>
                                         <i class="bi bi-link-45deg"></i> 复制链接
                                     </button>
@@ -335,14 +340,14 @@
                                 {% if item.share.share_id == share.share_id %}
                                 <div class="list-group-item px-0 py-2 border-0 active text-white bg-primary rounded px-2">
                                     <div class="d-flex w-100 justify-content-between">
-                                        <span class="text-truncate" style="max-width: 200px;">{{ forloop.counter }}. {{ item.share.title }}</span>
+                                        <span class="text-truncate" style="max-width: 200px;">{{ item.visible_position }}. {{ item.share.title }}</span>
                                         <span class="badge bg-light text-primary rounded-pill" style="font-size: 0.7em;">当前</span>
                                     </div>
                                 </div>
                                 {% else %}
                                 <a href="{% url 'share_detail' item.share.share_id %}?collection_id={{ collection.id }}" class="list-group-item list-group-item-action px-0 py-2 border-0">
                                     <div class="d-flex w-100 justify-content-between">
-                                        <span class="text-truncate" style="max-width: 200px;">{{ forloop.counter }}. {{ item.share.title }}</span>
+                                        <span class="text-truncate" style="max-width: 200px;">{{ item.visible_position }}. {{ item.share.title }}</span>
                                     </div>
                                 </a>
                                 {% endif %}
@@ -390,14 +395,14 @@
                     </div>
                 </form>
                 <div class="text-center mt-3 pt-3 border-top">
-                    <a href="{% url 'create_collection' %}?next={{ request.path }}" class="btn btn-outline-primary btn-sm">
+                    <a href="{% url 'create_collection' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-plus-lg"></i> 创建新合集
                     </a>
                 </div>
                 {% else %}
                 <div class="text-center py-3">
                     <p class="text-muted">您还没有创建任何合集</p>
-                    <a href="{% url 'create_collection' %}?next={{ request.path }}" class="btn btn-outline-primary btn-sm">
+                    <a href="{% url 'create_collection' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-plus-lg"></i> 创建新合集
                     </a>
                 </div>

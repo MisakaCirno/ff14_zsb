@@ -49,7 +49,7 @@ function createHistoryItem(item: VisitHistoryItem): HTMLLIElement {
 
   listItem.dataset.historyItem = ''
   link.className = 'dropdown-item text-truncate'
-  link.href = `/s/${encodeURIComponent(item.id)}/`
+  link.href = `/s/${encodeURIComponent(item.id)}`
   link.title = item.title
   content.className = 'app-history-item'
   title.className = 'app-history-item__title text-truncate'

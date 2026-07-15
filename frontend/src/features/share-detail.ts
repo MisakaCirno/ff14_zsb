@@ -119,7 +119,7 @@ function copyStrategyCode(root: HTMLElement, button: HTMLButtonElement): void {
 }
 
 function copyShareUrl(root: HTMLElement, button: HTMLButtonElement): void {
-  const url = root.querySelector<HTMLInputElement>('[data-share-url]')?.value
+  const url = root.dataset.shareUrl
   if (url === undefined) {
     return
   }
@@ -131,9 +131,10 @@ function copyShareUrl(root: HTMLElement, button: HTMLButtonElement): void {
 }
 
 function initializeShareDetail(root: HTMLElement): void {
-  const shareUrl = root.querySelector<HTMLInputElement>('[data-share-url]')
-  if (shareUrl) {
-    shareUrl.value = `${window.location.origin}${window.location.pathname}`
+  const shareUrlInput = root.querySelector<HTMLInputElement>('[data-share-url-input]')
+  const canonicalShareUrl = root.dataset.shareUrl
+  if (shareUrlInput && canonicalShareUrl) {
+    shareUrlInput.value = canonicalShareUrl
   }
 
   const shareId = root.dataset.shareId

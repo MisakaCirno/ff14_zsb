@@ -39,8 +39,11 @@ def share_detail(request, share_id):
         user_collections = Collection.objects.filter(author=request.user).order_by('-updated_at')
     is_liked = request.user.is_authenticated and share.likes.filter(id=request.user.id).exists()
     is_favorited = request.user.is_authenticated and share.favorites.filter(id=request.user.id).exists()
+    canonical_share_path = share.get_absolute_url()
     return render(request, 'shares/detail.html', {
         'share': share,
+        'canonical_share_path': canonical_share_path,
+        'canonical_share_url': request.build_absolute_uri(canonical_share_path),
         'related_collections': related_collections,
         'user_collections': user_collections,
         'share_logs': share_logs,

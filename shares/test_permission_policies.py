@@ -1,7 +1,9 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import AnonymousUser, User
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -14,6 +16,7 @@ from .policies import (
     share_api_denial_status,
     viewable_share_queryset,
 )
+from .selectors import related_collection_summaries
 
 
 class SharePermissionPolicyTests(TestCase):
@@ -400,6 +403,129 @@ class PermissionEnforcementTests(TestCase):
         self.assertContains(owner_response, private.title)
         self.assertContains(owner_response, rejected.title)
         self.assertContains(owner_response, '查看全部 7 个内容')
+
+    def test_related_collection_preview_keeps_late_current_item_for_each_visibility_scope(self):
+        leading = [
+            self.make_share(
+                f'late current visible {index}',
+                visibility=Share.Visibility.PUBLIC,
+            )
+            for index in range(1, 8)
+        ]
+        private = self.make_share(
+            'late current private',
+            visibility=Share.Visibility.PRIVATE,
+        )
+        rejected = self.make_share(
+            'late current rejected',
+            visibility=Share.Visibility.PUBLIC,
+            status=Share.Status.REJECTED,
+        )
+        current = self.make_share(
+            'late current share',
+            visibility=Share.Visibility.PUBLIC,
+        )
+        collection = Collection.objects.create(
+            title='late current collection',
+            author=self.author,
+            is_public=True,
+        )
+        ordered_shares = [
+            leading[0],
+            private,
+            leading[1],
+            leading[2],
+            rejected,
+            *leading[3:],
+            current,
+        ]
+        for order, item_share in enumerate(ordered_shares, start=1):
+            CollectionItem.objects.create(
+                collection=collection,
+                share=item_share,
+                order=order,
+            )
+
+        for viewer, expected_count, expected_items, expected_positions in (
+            (
+                AnonymousUser(),
+                8,
+                [*leading[:4], current],
+                [1, 2, 3, 4, 8],
+            ),
+            (
+                self.author,
+                10,
+                [*ordered_shares[:4], current],
+                [1, 2, 3, 4, 10],
+            ),
+            (
+                self.staff,
+                10,
+                [*ordered_shares[:4], current],
+                [1, 2, 3, 4, 10],
+            ),
+        ):
+            with self.subTest(viewer=str(viewer)):
+                summary = related_collection_summaries(current, viewer)[0]
+
+                self.assertEqual(summary.visible_item_count, expected_count)
+                self.assertEqual(
+                    [item.share for item in summary.visible_items],
+                    expected_items,
+                )
+                self.assertEqual(
+                    [item.visible_position for item in summary.visible_items],
+                    expected_positions,
+                )
+
+    def test_related_collection_preview_query_count_is_constant_for_multiple_collections(self):
+        leading = [
+            self.make_share(
+                f'query bounded visible {index}',
+                visibility=Share.Visibility.PUBLIC,
+            )
+            for index in range(1, 7)
+        ]
+        current = self.make_share(
+            'query bounded current',
+            visibility=Share.Visibility.PUBLIC,
+        )
+        collections = [
+            Collection.objects.create(
+                title=f'query bounded collection {index}',
+                author=self.author,
+                is_public=True,
+            )
+            for index in range(1, 3)
+        ]
+        for collection in collections:
+            for order, item_share in enumerate([*leading, current], start=1):
+                CollectionItem.objects.create(
+                    collection=collection,
+                    share=item_share,
+                    order=order,
+                )
+
+        with CaptureQueriesContext(connection) as captured:
+            summaries = related_collection_summaries(current, AnonymousUser())
+            snapshots = [
+                (
+                    summary.collection.author.username,
+                    [item.share.title for item in summary.visible_items],
+                    [item.visible_position for item in summary.visible_items],
+                )
+                for summary in summaries
+            ]
+
+        self.assertEqual(len(captured), 2)
+        self.assertEqual(len(snapshots), 2)
+        for _, titles, positions in snapshots:
+            self.assertEqual(
+                titles,
+                [share.title for share in [*leading[:4], current]],
+            )
+            self.assertEqual(positions, [1, 2, 3, 4, 7])
 
     def test_staff_can_inspect_private_collection_and_share_api(self):
         private_share = self.make_share('private', visibility=Share.Visibility.PRIVATE)

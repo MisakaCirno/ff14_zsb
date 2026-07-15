@@ -7,6 +7,9 @@ from .models import Collection, CollectionItem, Report, Share, SiteMessage
 from .policies import can_view_collection, viewable_share_queryset
 
 
+_RELATED_COLLECTION_PREVIEW_SIZE = 5
+
+
 @dataclass(frozen=True, slots=True)
 class RelatedCollectionSummary:
     collection: Collection
@@ -56,7 +59,8 @@ def related_collection_summaries(share, user):
             ),
         ),
     ).filter(
-        visible_position__lte=5,
+        Q(visible_position__lte=_RELATED_COLLECTION_PREVIEW_SIZE)
+        | Q(share_id=share.pk),
     ).select_related(
         'share',
         'share__author',
@@ -68,9 +72,20 @@ def related_collection_summaries(share, user):
     summaries = []
     for collection in collections:
         visible_items = visible_items_by_collection[collection.pk]
+        preview_items = visible_items[:_RELATED_COLLECTION_PREVIEW_SIZE]
+        if not any(item.share_id == share.pk for item in preview_items):
+            current_item = next(
+                (item for item in visible_items if item.share_id == share.pk),
+                None,
+            )
+            if current_item is not None:
+                preview_items = [
+                    *preview_items[:_RELATED_COLLECTION_PREVIEW_SIZE - 1],
+                    current_item,
+                ]
         summaries.append(RelatedCollectionSummary(
             collection=collection,
-            visible_items=tuple(visible_items),
+            visible_items=tuple(preview_items),
             visible_item_count=collection.visible_item_count,
         ))
     return summaries

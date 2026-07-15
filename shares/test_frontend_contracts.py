@@ -341,6 +341,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn("listItem.dataset.historyItem = ''", history_source)
         self.assertIn("querySelectorAll('[data-history-item]')", history_source)
         self.assertIn('clearButton.disabled = history.length === 0', history_source)
+        self.assertIn(
+            'link.href = `/s/${encodeURIComponent(item.id)}`',
+            history_source,
+        )
         self.assertNotIn('header.nextElementSibling', history_source)
         self.assertNotIn('title.style.', history_source)
         self.assertNotIn('dateLabel.style.', history_source)
@@ -946,6 +950,12 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             self.assertNotIn(legacy_handler, source)
 
         self.assertIn('recordVisitHistory(shareId, shareTitle)', module_source)
+        self.assertIn('const canonicalShareUrl = root.dataset.shareUrl', module_source)
+        self.assertIn('const url = root.dataset.shareUrl', module_source)
+        self.assertNotIn('window.location.pathname', module_source)
+        self.assertIn('data-share-url="{{ canonical_share_url }}"', source)
+        self.assertIn('data-share-url-input value="{{ canonical_share_url }}"', source)
+        self.assertEqual(source.count('{{ item.visible_position }}.'), 2)
         self.assertIn("updateCounter(root, '[data-views-count]'", module_source)
         self.assertIn("updateCounter(root, '[data-copies-count]'", module_source)
 
@@ -980,6 +990,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('html2canvas', about_source)
         self.assertIn("static 'js/qrcode.min.js'", source)
         self.assertIn('window.QRCode', module_source)
+        self.assertIn('const cleanUrl = elements.root.dataset.shareUrl', module_source)
+        self.assertNotIn('window.location.pathname', module_source)
         self.assertIn('const targetWidth = 960', module_source)
         self.assertIn('const targetHeight = 720', module_source)
         self.assertIn("if (blob === null)", module_source)
