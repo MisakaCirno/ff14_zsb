@@ -51,7 +51,12 @@
                 <em>暂无描述</em>
                 {% endif %}
             </p>
-            {% if card_variant == 'management' and share.status == 'rejected' and share.review_feedback %}
+            {% if card_variant == 'management' and share.is_restricted %}
+            <div class="management-card__feedback" role="note">
+                <strong>内容受限：</strong>
+                <span>{{ share.restriction_reason|truncatechars:80 }}</span>
+            </div>
+            {% elif card_variant == 'management' and share.status == 'rejected' and share.review_feedback %}
             <div class="management-card__feedback" role="note">
                 <strong>审核反馈：</strong>
                 <span>{{ share.review_feedback|truncatechars:80 }}</span>

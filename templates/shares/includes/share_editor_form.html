@@ -39,6 +39,29 @@
     </aside>
     {% endif %}
 
+    {% if editor_mode == 'edit' and share.is_restricted %}
+    <aside
+        class="share-editor-notice share-editor-notice--review share-editor-notice--restriction"
+        id="share-editor-restriction-notice"
+        data-share-restriction-notice
+        aria-labelledby="share-editor-restriction-title">
+        <i class="bi bi-shield-exclamation" aria-hidden="true"></i>
+        <div>
+            <h2 id="share-editor-restriction-title">当前分享仍受限制</h2>
+            <p>
+                {% if share.restriction_state == 'report_takedown' %}
+                该分享已因举报处理下架。
+                {% elif share.restriction_state == 'legacy_private' %}
+                该分享来自旧版私密数据，原状态来源仍待管理员确认。
+                {% else %}
+                该分享尚未通过内容审核。
+                {% endif %}
+                限制原因：{{ share.restriction_reason }}。保存修改后仍会保持限制并进入重新审核；管理员完成审核或明确处理限制后，分享仍会按照你选择的可见范围开放。
+            </p>
+        </div>
+    </aside>
+    {% endif %}
+
     <form
         class="share-editor-form"
         method="post"
@@ -220,6 +243,8 @@
                         <p>
                             {% if editor_mode == 'create' %}
                             提交公开分享后会进入审核；通过前不会出现在广场，但仍可通过链接访问。
+                            {% elif share.is_restricted %}
+                            保存实际修改后会重新进入审核，但不会自动解除当前限制；没有实际修改时不会触发重审。
                             {% else %}
                             公开分享发生实际修改并保存后需要重新审核；通过前不会出现在广场。没有实际修改时不会触发重审。
                             {% endif %}
@@ -264,7 +289,7 @@
                 type="submit"
                 class="btn btn-primary btn-lg share-editor-actions__submit"
                 data-share-editor-submit
-                {% if not editor_mode == 'create' or user.is_authenticated %}aria-describedby="share-editor-public-review-notice"{% endif %}>
+                {% if not editor_mode == 'create' or user.is_authenticated %}aria-describedby="{% if editor_mode == 'edit' and share.is_restricted %}share-editor-restriction-notice {% endif %}share-editor-public-review-notice"{% endif %}>
                 <i class="bi bi-check-circle" aria-hidden="true"></i>
                 <span>{% if editor_mode == 'create' %}创建分享{% else %}保存修改{% endif %}</span>
             </button>

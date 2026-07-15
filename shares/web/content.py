@@ -98,6 +98,12 @@ def edit_share(request, share_id):
             else:
                 if not result.changed:
                     messages.info(request, '没有检测到需要保存的修改。')
+                elif result.share.is_restricted:
+                    messages.info(
+                        request,
+                        '修改已保存并重新进入审核；当前限制不会因编辑自动解除。'
+                        '管理员处理后，分享仍会按照你选择的可见范围开放。',
+                    )
                 elif result.requires_review:
                     messages.info(request, '修改已保存，需要重新审核后才能在公开列表中显示。')
                 else:

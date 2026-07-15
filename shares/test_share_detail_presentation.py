@@ -6,6 +6,7 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import Collection, Share, ShareLog
 from .presentation import (
@@ -188,7 +189,7 @@ class ShareDetailPresentationTests(TestCase):
         self.assertEqual(detail.author.bio, '')
         self.assertTrue(detail.author.is_anonymous)
 
-    def test_pending_notice_is_public_but_rejected_notice_is_privileged(self):
+    def test_pending_notice_is_public_but_restriction_notice_is_privileged(self):
         pending = Share.objects.create(
             title='待审核详情',
             strategy_code='[stgy:pending-detail]',
@@ -203,6 +204,9 @@ class ShareDetailPresentationTests(TestCase):
             visibility=Share.Visibility.PRIVATE,
             status=Share.Status.REJECTED,
             review_feedback='',
+            restriction_state=Share.RestrictionState.REVIEW_REJECTED,
+            restriction_reason='审核内容不符合要求',
+            restricted_at=timezone.now(),
         )
 
         pending_detail = self.detail_for(pending, AnonymousUser())
@@ -212,11 +216,18 @@ class ShareDetailPresentationTests(TestCase):
         for viewer in (self.author, self.staff):
             with self.subTest(viewer=viewer.username):
                 rejected_detail = self.detail_for(rejected, viewer)
-                self.assertEqual(rejected_detail.notice.key, 'rejected')
-                self.assertEqual(rejected_detail.notice.feedback, '')
-                self.assertIn('请修改内容后重新提交', rejected_detail.notice.message)
+                self.assertEqual(
+                    rejected_detail.notice.key,
+                    Share.RestrictionState.REVIEW_REJECTED,
+                )
+                self.assertEqual(
+                    rejected_detail.notice.feedback,
+                    '审核内容不符合要求',
+                )
+                self.assertIn('修改后会重新进入审核', rejected_detail.notice.message)
+                self.assertIn('按照当前可见范围开放', rejected_detail.notice.message)
                 self.assertIn(
-                    'rejected',
+                    'restricted',
                     [badge.key for badge in rejected_detail.badges],
                 )
 
@@ -226,11 +237,34 @@ class ShareDetailPresentationTests(TestCase):
             'rejected',
             [badge.key for badge in unauthorized_detail.badges],
         )
+        self.assertNotEqual(
+            getattr(unauthorized_detail.notice, 'feedback', None),
+            '审核内容不符合要求',
+        )
 
-        rejected.review_feedback = '请补充必要说明'
-        rejected.save(update_fields=['review_feedback'])
+        rejected.restriction_reason = '请补充必要说明'
+        rejected.save(update_fields=['restriction_reason'])
         feedback_detail = self.detail_for(rejected, self.author)
         self.assertEqual(feedback_detail.notice.feedback, '请补充必要说明')
+
+    def test_legacy_private_notice_explains_fail_closed_classification(self):
+        legacy = Share.objects.create(
+            title='旧版私密详情',
+            strategy_code='[stgy:legacy-private-detail]',
+            author=self.author,
+            visibility=Share.Visibility.PRIVATE,
+            restriction_state=Share.RestrictionState.LEGACY_PRIVATE,
+            restriction_reason='历史私密状态来源待人工确认',
+            restricted_at=timezone.now(),
+        )
+
+        detail = self.detail_for(legacy, self.author)
+
+        self.assertEqual(detail.notice.key, Share.RestrictionState.LEGACY_PRIVATE)
+        self.assertEqual(detail.notice.title, '历史私密状态待确认')
+        self.assertEqual(detail.notice.tone, 'warning')
+        self.assertIn('避免旧版下架记录缺失', detail.notice.message)
+        self.assertIn('历史状态待确认', [badge.label for badge in detail.badges])
 
     def test_preview_url_encodes_strategy_code_as_one_path_segment(self):
         special_code = '[stgy:a/b?c#d+e"f]'

@@ -107,7 +107,7 @@
             <p>{{ detail.notice.message }}</p>
             {% if detail.notice.feedback %}
             <p class="share-detail-notice__feedback">
-                <strong>审核反馈：</strong>{{ detail.notice.feedback }}
+                <strong>{{ detail.notice.feedback_label }}：</strong>{{ detail.notice.feedback }}
             </p>
             {% endif %}
         </div>

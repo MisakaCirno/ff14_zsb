@@ -36,6 +36,7 @@ class ShareDetailNoticeViewModel:
     tone: str
     icon: str
     feedback: str = ''
+    feedback_label: str = '审核反馈'
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +136,18 @@ def _share_detail_badges(share, *, can_see_rejected_state):
             tone='danger',
             icon='bi bi-lock-fill',
         ))
+    if share.is_restricted and can_see_rejected_state:
+        restriction_labels = {
+            Share.RestrictionState.REPORT_TAKEDOWN: '举报下架',
+            Share.RestrictionState.REVIEW_REJECTED: '审核限制',
+            Share.RestrictionState.LEGACY_PRIVATE: '历史状态待确认',
+        }
+        badges.append(ShareDetailBadgeViewModel(
+            key='restricted',
+            label=restriction_labels[share.restriction_state],
+            tone='danger',
+            icon='bi bi-shield-lock-fill',
+        ))
     if (
         share.status == Share.Status.PENDING
         and share.visibility == Share.Visibility.PUBLIC
@@ -156,6 +169,43 @@ def _share_detail_badges(share, *, can_see_rejected_state):
 
 
 def _share_detail_notice(share, *, can_see_rejected_state):
+    if share.is_restricted and can_see_rejected_state:
+        report_takedown = (
+            share.restriction_state == Share.RestrictionState.REPORT_TAKEDOWN
+        )
+        legacy_private = (
+            share.restriction_state == Share.RestrictionState.LEGACY_PRIVATE
+        )
+        if report_takedown:
+            title = '分享已被下架'
+            message = (
+                '此分享因举报处理被限制访问。编辑不会自动解除限制；'
+                '管理员复核并解除后，分享仍会按照当前可见范围开放。'
+            )
+            tone = 'danger'
+        elif legacy_private:
+            title = '历史私密状态待确认'
+            message = (
+                '为避免旧版下架记录缺失导致内容被意外重新开放，此分享暂时保持限制。'
+                '管理员完成来源确认后，分享仍会按照当前可见范围开放。'
+            )
+            tone = 'warning'
+        else:
+            title = '分享受到审核限制'
+            message = (
+                '你可以继续编辑此分享；修改后会重新进入审核。'
+                '管理员通过后，分享仍会按照当前可见范围开放。'
+            )
+            tone = 'danger'
+        return ShareDetailNoticeViewModel(
+            key=share.restriction_state,
+            title=title,
+            message=message,
+            tone=tone,
+            icon='bi bi-shield-lock-fill',
+            feedback=share.restriction_reason,
+            feedback_label='限制原因',
+        )
     if (
         share.status == Share.Status.PENDING
         and share.visibility == Share.Visibility.PUBLIC
@@ -235,7 +285,11 @@ def build_share_detail_view_model(share, user):
             can_edit=owner,
             can_delete=owner or moderator,
             can_add_to_collection=owner,
-            can_report=authenticated and not owner,
+            can_report=(
+                authenticated
+                and not owner
+                and not share.is_restricted
+            ),
             can_view_logs=moderator,
         ),
         likes_count=share.likes_count,

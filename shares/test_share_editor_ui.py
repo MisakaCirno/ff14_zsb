@@ -4,6 +4,7 @@ from html.parser import HTMLParser
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import strip_tags
 
 from .models import Share
@@ -124,6 +125,70 @@ class ShareEditorPageTests(TestCase):
         page_text = _visible_text(markup)
         self.assertRegex(page_text, r'公开.*?(?:修改|保存).*?重新(?:进入)?审核')
         self.assertIn('name="version"', markup)
+
+    def test_restricted_edit_explains_that_saving_does_not_lift_restriction(self):
+        self.share.restriction_state = Share.RestrictionState.REPORT_TAKEDOWN
+        self.share.restriction_reason = '管理员确认的下架原因'
+        self.share.restricted_at = timezone.now()
+        self.share.restricted_by = self.author
+        self.share.visibility = Share.Visibility.PRIVATE
+        self.share.save(
+            update_fields=[
+                'restriction_state',
+                'restriction_reason',
+                'restricted_at',
+                'restricted_by',
+                'visibility',
+            ],
+        )
+        self.client.force_login(self.author)
+
+        response = self.client.get(
+            reverse('edit_share', args=[self.share.share_id]),
+        )
+
+        markup, probe = self.assert_shared_editor_contract(response)
+        self.assertEqual(
+            len(probe.matching(attribute='data-share-restriction-notice')),
+            1,
+        )
+        page_text = _visible_text(markup)
+        self.assertIn('管理员确认的下架原因', page_text)
+        self.assertRegex(page_text, r'保存修改后.*?保持限制.*?重新审核')
+        self.assertIn('按照你选择的可见范围开放', page_text)
+        self.assertNotIn('其他用户才能访问', page_text)
+        submit = probe.matching(attribute='data-share-editor-submit')
+        self.assertEqual(len(submit), 1)
+        self.assertIn(
+            'share-editor-restriction-notice',
+            submit[0].get('aria-describedby', '').split(),
+        )
+
+    def test_review_rejected_edit_uses_the_review_specific_explanation(self):
+        self.share.restriction_state = Share.RestrictionState.REVIEW_REJECTED
+        self.share.restriction_reason = '需要补充内容说明'
+        self.share.restricted_at = timezone.now()
+        self.share.restricted_by = self.author
+        self.share.save(update_fields=[
+            'restriction_state',
+            'restriction_reason',
+            'restricted_at',
+            'restricted_by',
+        ])
+        self.client.force_login(self.author)
+
+        response = self.client.get(
+            reverse('edit_share', args=[self.share.share_id]),
+        )
+
+        markup, probe = self.assert_shared_editor_contract(response)
+        self.assertEqual(
+            len(probe.matching(attribute='data-share-restriction-notice')),
+            1,
+        )
+        page_text = _visible_text(markup)
+        self.assertIn('尚未通过内容审核', page_text)
+        self.assertNotIn('因举报处理下架', page_text)
 
     def test_create_validation_errors_have_a_linked_alert_summary(self):
         response = self.client.post(

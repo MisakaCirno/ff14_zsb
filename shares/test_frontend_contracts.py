@@ -186,7 +186,17 @@ class FrontendShellContractTests(TestCase):
         self.share.visibility = Share.Visibility.PRIVATE
         self.share.status = Share.Status.REJECTED
         self.share.review_feedback = '<script>请修正审核问题</script>'
-        self.share.save(update_fields=['visibility', 'status', 'review_feedback'])
+        self.share.restriction_state = Share.RestrictionState.REVIEW_REJECTED
+        self.share.restriction_reason = '<script>请修正审核问题</script>'
+        self.share.restricted_at = timezone.now()
+        self.share.save(update_fields=[
+            'visibility',
+            'status',
+            'review_feedback',
+            'restriction_state',
+            'restriction_reason',
+            'restricted_at',
+        ])
         self.client.force_login(self.author)
 
         management = self.client.get(reverse('my_shares'))
@@ -197,7 +207,7 @@ class FrontendShellContractTests(TestCase):
         self.assertIn('data-managed-share', management_content)
         self.assertIn('审核失败', management_content)
         self.assertIn('私有', management_content)
-        self.assertIn('审核反馈：', management_content)
+        self.assertIn('内容受限：', management_content)
         self.assertIn('&lt;script&gt;请修正审核问题&lt;/script&gt;', management_content)
         self.assertIn('aria-label="1 个点赞"', management_content)
         self.assertIn('aria-label="1 个收藏"', management_content)
@@ -209,7 +219,17 @@ class FrontendShellContractTests(TestCase):
         self.share.visibility = Share.Visibility.PUBLIC
         self.share.status = Share.Status.APPROVED
         self.share.review_feedback = ''
-        self.share.save(update_fields=['visibility', 'status', 'review_feedback'])
+        self.share.restriction_state = Share.RestrictionState.CLEAR
+        self.share.restriction_reason = ''
+        self.share.restricted_at = None
+        self.share.save(update_fields=[
+            'visibility',
+            'status',
+            'review_feedback',
+            'restriction_state',
+            'restriction_reason',
+            'restricted_at',
+        ])
         self.author.liked_shares.add(self.share)
 
         browse = self.client.get(reverse('my_shares'), {'tab': 'likes'})
@@ -810,6 +830,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             copies=456,
             status='pending',
             visibility='private',
+            is_restricted=False,
         )
 
         standard = render_to_string(
@@ -823,6 +844,20 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         review = render_to_string(
             'shares/includes/share_preview.html',
             {'share': share, 'preview_variant': 'review'},
+        )
+        restricted_review = render_to_string(
+            'shares/includes/share_preview.html',
+            {
+                'share': SimpleNamespace(
+                    **{
+                        **share.__dict__,
+                        'status': 'approved',
+                        'is_restricted': True,
+                        'get_restriction_state_display': lambda: '举报下架限制',
+                    },
+                ),
+                'preview_variant': 'review',
+            },
         )
 
         self.assertIn('alt="预览 &amp; &quot;标题&quot; 的战术板预览"', standard)
@@ -844,6 +879,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('点击查看详情', review)
         self.assertNotIn('bi bi-eye"></i> 123', review)
         self.assertNotIn('bi bi-clipboard"></i> 456', review)
+        self.assertIn('举报下架限制', restricted_review)
+        self.assertNotIn('待审核', restricted_review)
 
     def test_empty_state_component_is_escaped_and_reused(self):
         content = render_to_string(
