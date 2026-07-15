@@ -251,17 +251,17 @@
 }
 
 .share-editor-notice--community {
-  background: rgba(255, 193, 7, 0.1);
-  border-color: rgba(153, 115, 0, 0.3);
+  background: var(--app-color-warning-soft);
+  border-color: var(--app-color-warning-text);
 }
 
 .share-editor-notice--community > i {
-  color: #8a6800;
+  color: var(--app-color-warning-text);
 }
 
 .share-editor-notice--anonymous {
-  background: rgba(220, 53, 69, 0.06);
-  border-color: rgba(220, 53, 69, 0.35);
+  background: var(--app-color-danger-soft);
+  border-color: var(--app-color-danger);
 }
 
 .share-editor-notice--anonymous > i,
@@ -282,8 +282,8 @@
 .share-editor-error-summary {
   min-width: 0;
   padding: var(--app-space-4) var(--app-space-5);
-  background: rgba(220, 53, 69, 0.06);
-  border: 1px solid rgba(220, 53, 69, 0.45);
+  background: var(--app-color-danger-soft);
+  border: 1px solid var(--app-color-danger);
   border-left-width: 0.35rem;
   border-radius: var(--app-radius-lg);
 }
@@ -369,7 +369,7 @@
   min-height: 2.75rem;
   padding: var(--app-space-2) var(--app-space-3);
   background: var(--app-color-surface);
-  border: 1px solid var(--app-color-border);
+  border: 1px solid var(--app-color-control-border);
   border-radius: var(--app-radius-md);
 }
 

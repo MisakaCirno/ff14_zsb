@@ -64,11 +64,11 @@
 }
 
 .app-navbar .navbar-toggler {
-  border-color: var(--app-color-shell-border);
+  border-color: var(--app-color-shell-control-border);
 }
 
 .app-navbar .navbar-toggler:focus {
-  box-shadow: 0 0 0 var(--app-focus-ring-width) rgba(255, 255, 255, 0.24);
+  box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-color-shell-focus-ring);
 }
 
 .app-navbar__collapse {
@@ -162,7 +162,7 @@
 .app-noscript-account__actions a:focus-visible,
 .app-noscript-account__actions button:hover,
 .app-noscript-account__actions button:focus-visible {
-  color: #ffffff;
+  color: var(--app-color-shell-text);
 }
 
 .app-noscript-account__actions form {
@@ -176,7 +176,7 @@
   align-items: center;
   min-height: 2.5rem;
   color: var(--app-color-shell-text);
-  border: 1px solid var(--app-color-shell-border);
+  border: 1px solid var(--app-color-shell-control-border);
 }
 
 .app-navbar__quiet-action:hover,
@@ -187,7 +187,7 @@
 .app-navbar__user.show {
   color: var(--app-color-shell-text);
   background: var(--app-color-shell-hover);
-  border-color: rgba(255, 255, 255, 0.28);
+  border-color: var(--app-color-shell-control-border);
 }
 
 .app-navbar__search {
@@ -198,23 +198,24 @@
   min-width: 0;
   color: var(--app-color-shell-text);
   background: rgba(255, 255, 255, 0.08);
-  border-color: var(--app-color-shell-border);
+  border-color: var(--app-color-shell-control-border);
 }
 
 .app-navbar__search .form-control::placeholder {
   color: var(--app-color-shell-text-muted);
-  opacity: 0.8;
+  opacity: 1;
 }
 
 .app-navbar__search .form-control:focus {
   color: var(--app-color-text);
   background: var(--app-color-surface);
+  box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-color-shell-focus-ring);
 }
 
 .app-navbar__search-button {
   color: var(--app-color-shell-text);
   background: var(--app-color-shell-raised);
-  border-color: var(--app-color-shell-border);
+  border-color: var(--app-color-shell-control-border);
 }
 
 .app-navbar__search-button:hover,
@@ -248,9 +249,21 @@
   right: -0.2rem;
   width: 0.65rem;
   height: 0.65rem;
-  background: var(--app-color-danger);
+  background: var(--app-color-shell-notification);
   border: 2px solid var(--app-color-shell-raised);
   border-radius: 50%;
+}
+
+.app-navbar__brand:focus-visible,
+.app-navbar .nav-link:focus-visible,
+.app-navbar .btn:focus-visible,
+.app-noscript-account__actions a:focus-visible,
+.app-noscript-account__actions button:focus-visible,
+.app-footer__brand:focus-visible,
+.app-footer__link:focus-visible {
+  outline: 2px solid var(--app-color-shell-focus-ring);
+  outline-offset: var(--app-focus-ring-offset);
+  box-shadow: none;
 }
 
 .app-history-menu {

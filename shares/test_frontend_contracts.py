@@ -1,3 +1,4 @@
+import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path
@@ -607,6 +608,43 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             encoding='utf-8',
         )
 
+    def read_project_file(self, relative_path):
+        return (Path(settings.BASE_DIR) / relative_path).read_text(encoding='utf-8')
+
+    def assert_css_rule_contains(self, source, selector, declarations):
+        match = re.search(
+            rf'(?m)^{re.escape(selector)}\s*\{{(?P<body>[^}}]*)\}}',
+            source,
+        )
+        self.assertIsNotNone(match, f'Missing CSS rule: {selector}')
+        body = match.group('body')
+        for declaration in declarations:
+            with self.subTest(selector=selector, declaration=declaration):
+                self.assertIn(declaration, body)
+        return body
+
+    def assert_css_selector_group_contains(self, source, selector, declarations):
+        body = None
+        for match in re.finditer(
+            r'(?P<selectors>[^{}]+)\{(?P<body>[^{}]*)\}',
+            source,
+        ):
+            selectors = {
+                item.strip()
+                for item in match.group('selectors').split(',')
+            }
+            if selector in selectors:
+                body = match.group('body')
+                if all(declaration in body for declaration in declarations):
+                    break
+                body = None
+
+        self.assertIsNotNone(
+            body,
+            f'Missing CSS selector group for {selector} with {declarations}',
+        )
+        return body
+
     def test_shared_copy_buttons_do_not_use_inline_handlers(self):
         card_source = self.read_template('shares/includes/share_card.html')
         self.assertIn('data-copy-strategy', card_source)
@@ -750,7 +788,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './public-profile.css';",
             "@import './my-content-page.css';",
             "@import './account-page.css';",
+            "@import './site-message-page.css';",
             "@import './collection-page.css';",
+            "@import './share-editor-page.css';",
+            "@import './share-detail-page.css';",
             "@import './empty-state.css';",
             "@import './feedback.css';",
             "@import './pagination.css';",
@@ -804,7 +845,6 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('--bs-badge-font-size:', adapter_source)
         self.assertIn('.modal {', adapter_source)
         self.assertIn('.form-control:focus', adapter_source)
-        self.assertNotIn('--bs-btn-bg:', adapter_source)
         self.assertNotIn('--bs-alert-bg:', adapter_source)
         self.assertIn('.app-navbar__actions', app_shell_source)
         self.assertIn('.app-footer__inner', app_shell_source)
@@ -945,6 +985,320 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('app-notification__message', feedback_source)
         self.assertIn('app-notification__message', notify_source)
         self.assertNotIn('messageText.style', notify_source)
+
+    def test_frontend_verification_runs_the_contrast_checker(self):
+        package = json.loads(self.read_project_file('frontend/package.json'))
+        scripts = package['scripts']
+
+        self.assertEqual(
+            scripts.get('check:contrast'),
+            'node scripts/check-color-contrast.mjs',
+        )
+        self.assertEqual(
+            scripts.get('verify'),
+            'npm run test && npm run check:contrast && npm run typecheck '
+            '&& npm run lint && npm run build',
+        )
+        self.assertTrue(
+            (Path(settings.BASE_DIR) / 'frontend' / 'scripts'
+             / 'check-color-contrast.mjs').is_file(),
+        )
+
+    def test_color_tokens_cover_interactive_and_shell_contexts(self):
+        tokens_source = self.read_frontend('styles/tokens.css')
+        required_tokens = (
+            '--app-color-on-strong:',
+            '--app-color-on-bright:',
+            '--app-color-control-border:',
+            '--app-color-warning-text:',
+            '--app-color-info-text:',
+            '--app-color-disabled-text:',
+            '--app-color-disabled-bg:',
+            '--app-color-disabled-border:',
+            '--app-color-shell-control-border:',
+            '--app-color-shell-focus-ring:',
+            '--app-color-shell-notification:',
+            '--app-color-shell-gradient-end:',
+            '--app-color-danger-on-dark:',
+            '--app-color-image-focus-inner:',
+            '--app-color-image-focus-outer:',
+        )
+        for token in required_tokens:
+            with self.subTest(token=token):
+                self.assertIn(token, tokens_source)
+
+        for semantic_color in (
+            'primary',
+            'secondary',
+            'success',
+            'warning',
+            'danger',
+            'info',
+        ):
+            with self.subTest(semantic_color=semantic_color):
+                self.assertIn(
+                    f'--app-color-{semantic_color}-rgb:',
+                    tokens_source,
+                )
+                self.assertIn(
+                    f'--app-color-{semantic_color}-hover:',
+                    tokens_source,
+                )
+                self.assertIn(
+                    f'--app-color-{semantic_color}-active:',
+                    tokens_source,
+                )
+                self.assertIn(
+                    f'--app-color-{semantic_color}-soft:',
+                    tokens_source,
+                )
+
+    def test_bootstrap_adapter_maps_primary_button_states_to_app_tokens(self):
+        adapter_source = self.read_frontend('styles/bootstrap-adapter.css')
+
+        self.assert_css_rule_contains(
+            adapter_source,
+            '.btn-primary',
+            (
+                '--bs-btn-color: var(--app-color-on-strong);',
+                '--bs-btn-bg: var(--app-color-primary);',
+                '--bs-btn-border-color: var(--app-color-primary);',
+                '--bs-btn-hover-color: var(--app-color-on-strong);',
+                '--bs-btn-hover-bg: var(--app-color-primary-hover);',
+                '--bs-btn-hover-border-color: var(--app-color-primary-hover);',
+                '--bs-btn-active-color: var(--app-color-on-strong);',
+                '--bs-btn-active-bg: var(--app-color-primary-active);',
+                '--bs-btn-active-border-color: var(--app-color-primary-active);',
+            ),
+        )
+        self.assert_css_selector_group_contains(
+            adapter_source,
+            '.btn-primary',
+            (
+                '--bs-btn-disabled-color: var(--app-color-disabled-text);',
+                '--bs-btn-disabled-bg: var(--app-color-disabled-bg);',
+                '--bs-btn-disabled-border-color: var(--app-color-disabled-border);',
+            ),
+        )
+
+    def test_warning_and_info_keep_fill_text_and_outline_roles_separate(self):
+        adapter_source = self.read_frontend('styles/bootstrap-adapter.css')
+
+        for color in ('warning', 'info'):
+            with self.subTest(color=color, variant='filled'):
+                self.assert_css_rule_contains(
+                    adapter_source,
+                    f'.btn-{color}',
+                    (
+                        '--bs-btn-color: var(--app-color-on-bright);',
+                        f'--bs-btn-bg: var(--app-color-{color});',
+                        f'--bs-btn-hover-bg: var(--app-color-{color}-hover);',
+                        f'--bs-btn-active-bg: var(--app-color-{color}-active);',
+                    ),
+                )
+            with self.subTest(color=color, variant='outline'):
+                self.assert_css_rule_contains(
+                    adapter_source,
+                    f'.btn-outline-{color}',
+                    (
+                        f'--bs-btn-color: var(--app-color-{color}-text);',
+                        f'--bs-btn-border-color: var(--app-color-{color}-text);',
+                        '--bs-btn-hover-color: var(--app-color-on-bright);',
+                        f'--bs-btn-hover-bg: var(--app-color-{color}-hover);',
+                        '--bs-btn-active-color: var(--app-color-on-bright);',
+                        f'--bs-btn-active-bg: var(--app-color-{color}-active);',
+                    ),
+                )
+
+            for semantic_mapping in (
+                f'--bs-{color}: var(--app-color-{color});',
+                f'--bs-{color}-rgb: var(--app-color-{color}-rgb);',
+                f'--bs-{color}-text-emphasis: var(--app-color-{color}-text);',
+                f'--bs-{color}-bg-subtle: var(--app-color-{color}-soft);',
+                f'--bs-{color}-border-subtle: var(--app-color-{color}-text);',
+            ):
+                with self.subTest(color=color, mapping=semantic_mapping):
+                    self.assertIn(semantic_mapping, adapter_source)
+
+            for link_state in ('hover', 'focus'):
+                with self.subTest(color=color, link_state=link_state):
+                    self.assert_css_selector_group_contains(
+                        adapter_source,
+                        f'.link-{color}:{link_state}',
+                        (
+                            f'color: var(--app-color-{color}-text) '
+                            '!important;',
+                        ),
+                    )
+
+    def test_controls_pagination_and_shell_use_context_tokens(self):
+        adapter_source = self.read_frontend('styles/bootstrap-adapter.css')
+        shell_source = self.read_frontend('styles/app-shell.css')
+
+        self.assert_css_selector_group_contains(
+            adapter_source,
+            '.form-control',
+            (
+                'color: var(--app-color-text);',
+                'background-color: var(--app-color-surface);',
+                'border-color: var(--app-color-control-border);',
+            ),
+        )
+        self.assert_css_selector_group_contains(
+            adapter_source,
+            '.form-control:focus',
+            (
+                'border-color: var(--app-color-focus-border);',
+                'box-shadow: 0 0 0 var(--app-focus-ring-width) '
+                'var(--app-focus-ring-color);',
+            ),
+        )
+        self.assert_css_selector_group_contains(
+            adapter_source,
+            '.form-control:disabled',
+            (
+                'color: var(--app-color-disabled-text);',
+                'background-color: var(--app-color-disabled-bg);',
+                'border-color: var(--app-color-disabled-border);',
+            ),
+        )
+        self.assert_css_rule_contains(
+            adapter_source,
+            '.pagination',
+            (
+                '--bs-pagination-border-color: var(--app-color-control-border);',
+                '--bs-pagination-disabled-color: var(--app-color-disabled-text);',
+                '--bs-pagination-disabled-bg: var(--app-color-disabled-bg);',
+                '--bs-pagination-disabled-border-color: '
+                'var(--app-color-disabled-border);',
+            ),
+        )
+
+        self.assert_css_rule_contains(
+            shell_source,
+            '.app-navbar .navbar-toggler',
+            ('border-color: var(--app-color-shell-control-border);',),
+        )
+        self.assert_css_rule_contains(
+            shell_source,
+            '.app-navbar .navbar-toggler:focus',
+            (
+                'box-shadow: 0 0 0 var(--app-focus-ring-width) '
+                'var(--app-color-shell-focus-ring);',
+            ),
+        )
+        self.assert_css_rule_contains(
+            shell_source,
+            '.app-navbar__search .form-control:focus',
+            (
+                'box-shadow: 0 0 0 var(--app-focus-ring-width) '
+                'var(--app-color-shell-focus-ring);',
+            ),
+        )
+        self.assert_css_rule_contains(
+            adapter_source,
+            '.btn-close:focus',
+            (
+                'box-shadow: 0 0 0 var(--app-focus-ring-width) '
+                'var(--app-focus-ring-color);',
+            ),
+        )
+
+        self.assert_css_rule_contains(
+            shell_source,
+            '.app-navbar__notification-dot',
+            ('background: var(--app-color-shell-notification);',),
+        )
+
+    def test_status_and_image_focus_states_use_contrast_safe_tokens(self):
+        message_source = self.read_frontend('styles/site-message-page.css')
+        components_source = self.read_frontend('styles/components.css')
+        preview_source = self.read_frontend('styles/share-preview.css')
+
+        self.assert_css_rule_contains(
+            message_source,
+            '.message-status--unread',
+            ('border-color: var(--app-color-primary);',),
+        )
+        self.assert_css_rule_contains(
+            components_source,
+            '.spoiler-overlay .btn:focus-visible',
+            (
+                'outline: 2px solid var(--app-color-image-focus-inner);',
+                'box-shadow: 0 0 0 0.375rem '
+                'var(--app-color-image-focus-outer);',
+            ),
+        )
+        self.assert_css_rule_contains(
+            preview_source,
+            '.share-preview__link',
+            ('position: relative;',),
+        )
+        self.assert_css_rule_contains(
+            preview_source,
+            '.share-preview__link:focus-visible::after',
+            (
+                'z-index: calc(var(--app-z-content-overlay) + 1);',
+                'border: 2px solid var(--app-color-image-focus-inner);',
+                'box-shadow: 0 0 0 0.1875rem '
+                'var(--app-color-image-focus-outer);',
+            ),
+        )
+
+    def test_empty_copy_and_page_semantics_do_not_lower_contrast_with_opacity(self):
+        cases = (
+            (
+                'styles/public-profile.css',
+                '.public-profile-hero__empty-bio',
+            ),
+            (
+                'styles/collection-page.css',
+                '.collection-detail-hero__empty-description',
+            ),
+        )
+        for stylesheet, selector in cases:
+            with self.subTest(stylesheet=stylesheet, selector=selector):
+                body = self.assert_css_rule_contains(
+                    self.read_frontend(stylesheet),
+                    selector,
+                    ('font-style: italic;',),
+                )
+                self.assertNotIn('opacity:', body)
+
+    def test_page_styles_do_not_embed_legacy_bootstrap_semantic_colors(self):
+        legacy_colors = {
+            'styles/share-detail-page.css': (
+                '#084298',
+                '#0f5132',
+                '#664d03',
+                '#842029',
+                '#055160',
+                'rgba(13, 110, 253,',
+                'rgba(25, 135, 84,',
+                'rgba(255, 193, 7,',
+                'rgba(153, 115, 0,',
+                'rgba(220, 53, 69,',
+                'rgba(13, 202, 240,',
+            ),
+            'styles/share-editor-page.css': (
+                '#8a6800',
+                'rgba(255, 193, 7,',
+                'rgba(153, 115, 0,',
+                'rgba(220, 53, 69,',
+            ),
+            'styles/account-page.css': (
+                'rgba(220, 53, 69,',
+            ),
+        }
+
+        for stylesheet, forbidden_colors in legacy_colors.items():
+            source = self.read_frontend(stylesheet).lower()
+            for forbidden_color in forbidden_colors:
+                with self.subTest(
+                    stylesheet=stylesheet,
+                    forbidden_color=forbidden_color,
+                ):
+                    self.assertNotIn(forbidden_color.lower(), source)
 
     def test_pagination_component_preserves_query_parameters(self):
         request = RequestFactory().get(

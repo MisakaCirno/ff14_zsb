@@ -4,13 +4,25 @@
 }
 
 .share-preview__link {
+  position: relative;
   display: block;
   border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
 }
 
 .share-preview__link:focus-visible {
-  outline: var(--app-focus-ring-width) solid var(--app-focus-ring-color);
-  outline-offset: var(--app-focus-ring-inset);
+  outline: 0;
+}
+
+.share-preview__link:focus-visible::after {
+  position: absolute;
+  inset: var(--app-space-1);
+  z-index: calc(var(--app-z-content-overlay) + 1);
+  pointer-events: none;
+  content: '';
+  border: 2px solid var(--app-color-image-focus-inner);
+  border-radius: calc(var(--app-radius-lg) - var(--app-space-1))
+    calc(var(--app-radius-lg) - var(--app-space-1)) 0 0;
+  box-shadow: 0 0 0 0.1875rem var(--app-color-image-focus-outer);
 }
 
 .share-preview__image {

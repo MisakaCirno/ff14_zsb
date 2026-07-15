@@ -1,35 +1,86 @@
 :root {
   /* Color */
-  --app-color-canvas: #f5f7fb;
-  --app-color-surface: #ffffff;
-  --app-color-surface-muted: #f8f9fa;
-  --app-color-text: #212529;
-  --app-color-text-muted: #6c757d;
-  --app-color-border: #dee2e6;
-  --app-color-border-strong: #ced4da;
-  --app-color-primary: #0d6efd;
-  --app-color-primary-soft: rgba(13, 110, 253, 0.1);
-  --app-color-success: #198754;
-  --app-color-warning: #ffc107;
-  --app-color-danger: #dc3545;
-  --app-color-info: #0dcaf0;
+  --app-color-canvas: #f7f4f1;
+  --app-color-canvas-rgb: 247, 244, 241;
+  --app-color-surface: #fffdfb;
+  --app-color-surface-rgb: 255, 253, 251;
+  --app-color-surface-muted: #f4efeb;
+  --app-color-surface-muted-rgb: 244, 239, 235;
+  --app-color-text: #2d2926;
+  --app-color-text-rgb: 45, 41, 38;
+  --app-color-text-muted: #625a55;
+  --app-color-border: #ded6d0;
+  --app-color-border-strong: #877a71;
+  --app-color-control-border: #877a71;
+  --app-color-on-strong: #fffdfb;
+  --app-color-on-bright: #2d2926;
+
+  --app-color-primary: #9b2f50;
+  --app-color-primary-rgb: 155, 47, 80;
+  --app-color-primary-hover: #822541;
+  --app-color-primary-hover-rgb: 130, 37, 65;
+  --app-color-primary-active: #6c1d35;
+  --app-color-primary-soft: #f7e8ed;
+  --app-color-secondary: #625a55;
+  --app-color-secondary-rgb: 98, 90, 85;
+  --app-color-secondary-hover: #514a46;
+  --app-color-secondary-active: #403a37;
+  --app-color-secondary-soft: #ede7e2;
+  --app-color-secondary-soft-rgb: 237, 231, 226;
+  --app-color-success: #146c43;
+  --app-color-success-rgb: 20, 108, 67;
+  --app-color-success-hover: #105936;
+  --app-color-success-active: #0c472c;
+  --app-color-success-soft: #e5f2ea;
+  --app-color-warning: #d0a22b;
+  --app-color-warning-rgb: 208, 162, 43;
+  --app-color-warning-hover: #dab54b;
+  --app-color-warning-active: #c1911e;
+  --app-color-warning-text: #765600;
+  --app-color-warning-soft: #fff3d4;
+  --app-color-danger: #b42335;
+  --app-color-danger-rgb: 180, 35, 53;
+  --app-color-danger-hover: #981d2d;
+  --app-color-danger-active: #7f1725;
+  --app-color-danger-soft: #f8e7e9;
+  --app-color-info: #69d5e7;
+  --app-color-info-rgb: 105, 213, 231;
+  --app-color-info-hover: #82deeb;
+  --app-color-info-active: #51c4d8;
+  --app-color-info-text: #055160;
+  --app-color-info-soft: #e3f4f7;
+
+  --app-color-disabled-text: #625a55;
+  --app-color-disabled-bg: #e4ddd7;
+  --app-color-disabled-border: #877a71;
   --app-color-preview-start: #667eea;
   --app-color-preview-end: #764ba2;
-  --app-color-focus-border: #86b7fe;
+  --app-color-focus-border: #a64262;
+  --app-color-image-focus-inner: #fffdfb;
+  --app-color-image-focus-outer: #9b2f50;
   --app-gradient-preview: linear-gradient(
     135deg,
     var(--app-color-preview-start) 0%,
     var(--app-color-preview-end) 100%
   );
   --app-color-overlay: rgba(0, 0, 0, 0.6);
-  --app-color-overlay-hover: rgba(0, 0, 0, 0.5);
+  --app-color-overlay-hover: rgba(0, 0, 0, 0.68);
   --app-color-shell: #171725;
   --app-color-shell-raised: #252441;
   --app-color-shell-text: #f8f8ff;
   --app-color-shell-text-muted: #c9cada;
   --app-color-shell-border: rgba(255, 255, 255, 0.14);
+  --app-color-shell-control-border: rgba(255, 255, 255, 0.4);
+  --app-color-shell-focus-ring: rgba(255, 255, 255, 0.45);
+  --app-color-shell-notification: #e24b5b;
   --app-color-shell-hover: rgba(255, 255, 255, 0.09);
-  --app-gradient-shell: linear-gradient(115deg, #171725 0%, #28234d 100%);
+  --app-color-danger-on-dark: #ffc1c8;
+  --app-color-shell-gradient-end: #28234d;
+  --app-gradient-shell: linear-gradient(
+    115deg,
+    var(--app-color-shell) 0%,
+    var(--app-color-shell-gradient-end) 100%
+  );
 
   /* Typography */
   --app-font-sans: var(--bs-font-sans-serif);
@@ -68,7 +119,7 @@
   --app-shadow-modal: 0 1rem 3rem rgba(0, 0, 0, 0.175);
   --app-shadow-shell: 0 0.35rem 1.25rem rgba(18, 17, 40, 0.18);
   --app-focus-ring-width: 0.25rem;
-  --app-focus-ring-color: rgba(13, 110, 253, 0.25);
+  --app-focus-ring-color: rgba(155, 47, 80, 0.7);
   --app-focus-ring-offset: 0.125rem;
   --app-focus-ring-inset: -0.25rem;
 

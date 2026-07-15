@@ -4,8 +4,70 @@
   --bs-body-font-weight: var(--app-font-regular);
   --bs-body-line-height: var(--app-line-height-normal);
   --bs-body-color: var(--app-color-text);
+  --bs-body-color-rgb: var(--app-color-text-rgb);
   --bs-body-bg: var(--app-color-canvas);
+  --bs-body-bg-rgb: var(--app-color-canvas-rgb);
+  --bs-emphasis-color: var(--app-color-text);
+  --bs-emphasis-color-rgb: var(--app-color-text-rgb);
+  --bs-secondary-color: var(--app-color-text-muted);
+  --bs-secondary-color-rgb: var(--app-color-secondary-rgb);
+  --bs-secondary-bg: var(--app-color-surface-muted);
+  --bs-secondary-bg-rgb: var(--app-color-surface-muted-rgb);
+  --bs-tertiary-color: var(--app-color-text-muted);
+  --bs-tertiary-color-rgb: var(--app-color-secondary-rgb);
+  --bs-tertiary-bg: var(--app-color-secondary-soft);
+  --bs-tertiary-bg-rgb: var(--app-color-secondary-soft-rgb);
   --bs-border-color: var(--app-color-border);
+
+  --bs-primary: var(--app-color-primary);
+  --bs-primary-rgb: var(--app-color-primary-rgb);
+  --bs-secondary: var(--app-color-secondary);
+  --bs-secondary-rgb: var(--app-color-secondary-rgb);
+  --bs-success: var(--app-color-success);
+  --bs-success-rgb: var(--app-color-success-rgb);
+  --bs-warning: var(--app-color-warning);
+  --bs-warning-rgb: var(--app-color-warning-rgb);
+  --bs-danger: var(--app-color-danger);
+  --bs-danger-rgb: var(--app-color-danger-rgb);
+  --bs-info: var(--app-color-info);
+  --bs-info-rgb: var(--app-color-info-rgb);
+  --bs-light: var(--app-color-surface-muted);
+  --bs-light-rgb: var(--app-color-surface-muted-rgb);
+  --bs-dark: var(--app-color-text);
+  --bs-dark-rgb: var(--app-color-text-rgb);
+  --bs-white: var(--app-color-surface);
+  --bs-white-rgb: var(--app-color-surface-rgb);
+
+  --bs-primary-text-emphasis: var(--app-color-primary-active);
+  --bs-primary-bg-subtle: var(--app-color-primary-soft);
+  --bs-primary-border-subtle: var(--app-color-focus-border);
+  --bs-secondary-text-emphasis: var(--app-color-secondary-active);
+  --bs-secondary-bg-subtle: var(--app-color-secondary-soft);
+  --bs-secondary-border-subtle: var(--app-color-control-border);
+  --bs-success-text-emphasis: var(--app-color-success-active);
+  --bs-success-bg-subtle: var(--app-color-success-soft);
+  --bs-success-border-subtle: var(--app-color-success);
+  --bs-warning-text-emphasis: var(--app-color-warning-text);
+  --bs-warning-bg-subtle: var(--app-color-warning-soft);
+  --bs-warning-border-subtle: var(--app-color-warning-text);
+  --bs-danger-text-emphasis: var(--app-color-danger-active);
+  --bs-danger-bg-subtle: var(--app-color-danger-soft);
+  --bs-danger-border-subtle: var(--app-color-danger);
+  --bs-info-text-emphasis: var(--app-color-info-text);
+  --bs-info-bg-subtle: var(--app-color-info-soft);
+  --bs-info-border-subtle: var(--app-color-info-text);
+
+  --bs-link-color: var(--app-color-primary);
+  --bs-link-color-rgb: var(--app-color-primary-rgb);
+  --bs-link-hover-color: var(--app-color-primary-hover);
+  --bs-link-hover-color-rgb: var(--app-color-primary-hover-rgb);
+  --bs-code-color: var(--app-color-danger);
+  --bs-highlight-bg: var(--app-color-warning-soft);
+  --bs-form-valid-color: var(--app-color-success);
+  --bs-form-valid-border-color: var(--app-color-success);
+  --bs-form-invalid-color: var(--app-color-danger);
+  --bs-form-invalid-border-color: var(--app-color-danger);
+
   --bs-box-shadow-sm: var(--app-shadow-sm);
   --bs-box-shadow: var(--app-shadow-md);
   --bs-box-shadow-lg: var(--app-shadow-modal);
@@ -16,6 +78,217 @@
 .btn {
   --bs-btn-font-weight: var(--app-font-medium);
   --bs-btn-focus-box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-focus-ring-color);
+}
+
+.btn-close:focus {
+  outline: 0;
+  box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-focus-ring-color);
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-success,
+.btn-warning,
+.btn-danger,
+.btn-info,
+.btn-outline-primary,
+.btn-outline-secondary,
+.btn-outline-success,
+.btn-outline-warning,
+.btn-outline-danger,
+.btn-outline-info,
+.btn-light,
+.btn-dark,
+.btn-outline-light,
+.btn-outline-dark {
+  --bs-btn-disabled-color: var(--app-color-disabled-text);
+  --bs-btn-disabled-bg: var(--app-color-disabled-bg);
+  --bs-btn-disabled-border-color: var(--app-color-disabled-border);
+  --bs-btn-disabled-opacity: 1;
+}
+
+.btn-primary {
+  --bs-btn-color: var(--app-color-on-strong);
+  --bs-btn-bg: var(--app-color-primary);
+  --bs-btn-border-color: var(--app-color-primary);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-primary-hover);
+  --bs-btn-hover-border-color: var(--app-color-primary-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-primary-active);
+  --bs-btn-active-border-color: var(--app-color-primary-active);
+}
+
+.btn-secondary {
+  --bs-btn-color: var(--app-color-on-strong);
+  --bs-btn-bg: var(--app-color-secondary);
+  --bs-btn-border-color: var(--app-color-secondary);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-secondary-hover);
+  --bs-btn-hover-border-color: var(--app-color-secondary-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-secondary-active);
+  --bs-btn-active-border-color: var(--app-color-secondary-active);
+}
+
+.btn-success {
+  --bs-btn-color: var(--app-color-on-strong);
+  --bs-btn-bg: var(--app-color-success);
+  --bs-btn-border-color: var(--app-color-success);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-success-hover);
+  --bs-btn-hover-border-color: var(--app-color-success-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-success-active);
+  --bs-btn-active-border-color: var(--app-color-success-active);
+}
+
+.btn-warning {
+  --bs-btn-color: var(--app-color-on-bright);
+  --bs-btn-bg: var(--app-color-warning);
+  --bs-btn-border-color: var(--app-color-warning);
+  --bs-btn-hover-color: var(--app-color-on-bright);
+  --bs-btn-hover-bg: var(--app-color-warning-hover);
+  --bs-btn-hover-border-color: var(--app-color-warning-hover);
+  --bs-btn-active-color: var(--app-color-on-bright);
+  --bs-btn-active-bg: var(--app-color-warning-active);
+  --bs-btn-active-border-color: var(--app-color-warning-active);
+}
+
+.btn-danger {
+  --bs-btn-color: var(--app-color-on-strong);
+  --bs-btn-bg: var(--app-color-danger);
+  --bs-btn-border-color: var(--app-color-danger);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-danger-hover);
+  --bs-btn-hover-border-color: var(--app-color-danger-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-danger-active);
+  --bs-btn-active-border-color: var(--app-color-danger-active);
+}
+
+.btn-info {
+  --bs-btn-color: var(--app-color-on-bright);
+  --bs-btn-bg: var(--app-color-info);
+  --bs-btn-border-color: var(--app-color-info);
+  --bs-btn-hover-color: var(--app-color-on-bright);
+  --bs-btn-hover-bg: var(--app-color-info-hover);
+  --bs-btn-hover-border-color: var(--app-color-info-hover);
+  --bs-btn-active-color: var(--app-color-on-bright);
+  --bs-btn-active-bg: var(--app-color-info-active);
+  --bs-btn-active-border-color: var(--app-color-info-active);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--app-color-primary);
+  --bs-btn-border-color: var(--app-color-primary);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-primary-hover);
+  --bs-btn-hover-border-color: var(--app-color-primary-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-primary-active);
+  --bs-btn-active-border-color: var(--app-color-primary-active);
+}
+
+.btn-outline-secondary {
+  --bs-btn-color: var(--app-color-secondary);
+  --bs-btn-border-color: var(--app-color-secondary);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-secondary-hover);
+  --bs-btn-hover-border-color: var(--app-color-secondary-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-secondary-active);
+  --bs-btn-active-border-color: var(--app-color-secondary-active);
+}
+
+.btn-outline-success {
+  --bs-btn-color: var(--app-color-success);
+  --bs-btn-border-color: var(--app-color-success);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-success-hover);
+  --bs-btn-hover-border-color: var(--app-color-success-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-success-active);
+  --bs-btn-active-border-color: var(--app-color-success-active);
+}
+
+.btn-outline-warning {
+  --bs-btn-color: var(--app-color-warning-text);
+  --bs-btn-border-color: var(--app-color-warning-text);
+  --bs-btn-hover-color: var(--app-color-on-bright);
+  --bs-btn-hover-bg: var(--app-color-warning-hover);
+  --bs-btn-hover-border-color: var(--app-color-warning-text);
+  --bs-btn-active-color: var(--app-color-on-bright);
+  --bs-btn-active-bg: var(--app-color-warning-active);
+  --bs-btn-active-border-color: var(--app-color-warning-text);
+}
+
+.btn-outline-danger {
+  --bs-btn-color: var(--app-color-danger);
+  --bs-btn-border-color: var(--app-color-danger);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-danger-hover);
+  --bs-btn-hover-border-color: var(--app-color-danger-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-danger-active);
+  --bs-btn-active-border-color: var(--app-color-danger-active);
+}
+
+.btn-outline-info {
+  --bs-btn-color: var(--app-color-info-text);
+  --bs-btn-border-color: var(--app-color-info-text);
+  --bs-btn-hover-color: var(--app-color-on-bright);
+  --bs-btn-hover-bg: var(--app-color-info-hover);
+  --bs-btn-hover-border-color: var(--app-color-info-text);
+  --bs-btn-active-color: var(--app-color-on-bright);
+  --bs-btn-active-bg: var(--app-color-info-active);
+  --bs-btn-active-border-color: var(--app-color-info-text);
+}
+
+.btn-light {
+  --bs-btn-color: var(--app-color-text);
+  --bs-btn-bg: var(--app-color-surface);
+  --bs-btn-border-color: var(--app-color-control-border);
+  --bs-btn-hover-color: var(--app-color-text);
+  --bs-btn-hover-bg: var(--app-color-surface-muted);
+  --bs-btn-hover-border-color: var(--app-color-control-border);
+  --bs-btn-active-color: var(--app-color-text);
+  --bs-btn-active-bg: var(--app-color-secondary-soft);
+  --bs-btn-active-border-color: var(--app-color-control-border);
+}
+
+.btn-dark {
+  --bs-btn-color: var(--app-color-on-strong);
+  --bs-btn-bg: var(--app-color-text);
+  --bs-btn-border-color: var(--app-color-text);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-secondary-hover);
+  --bs-btn-hover-border-color: var(--app-color-secondary-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-secondary-active);
+  --bs-btn-active-border-color: var(--app-color-secondary-active);
+}
+
+.btn-outline-light {
+  --bs-btn-color: var(--app-color-surface);
+  --bs-btn-border-color: var(--app-color-shell-control-border);
+  --bs-btn-hover-color: var(--app-color-text);
+  --bs-btn-hover-bg: var(--app-color-surface);
+  --bs-btn-hover-border-color: var(--app-color-surface);
+  --bs-btn-active-color: var(--app-color-text);
+  --bs-btn-active-bg: var(--app-color-secondary-soft);
+  --bs-btn-active-border-color: var(--app-color-surface);
+}
+
+.btn-outline-dark {
+  --bs-btn-color: var(--app-color-text);
+  --bs-btn-border-color: var(--app-color-text);
+  --bs-btn-hover-color: var(--app-color-on-strong);
+  --bs-btn-hover-bg: var(--app-color-secondary-hover);
+  --bs-btn-hover-border-color: var(--app-color-secondary-hover);
+  --bs-btn-active-color: var(--app-color-on-strong);
+  --bs-btn-active-bg: var(--app-color-secondary-active);
+  --bs-btn-active-border-color: var(--app-color-secondary-active);
 }
 
 .card {
@@ -32,6 +305,39 @@
   --bs-badge-padding-y: 0.35em;
 }
 
+.text-bg-primary,
+.text-bg-success,
+.text-bg-danger {
+  color: var(--app-color-on-strong) !important;
+}
+
+.text-bg-warning,
+.text-bg-info {
+  color: var(--app-color-on-bright) !important;
+}
+
+.text-warning,
+.link-warning,
+.link-warning:hover,
+.link-warning:focus {
+  color: var(--app-color-warning-text) !important;
+}
+
+.text-info,
+.link-info,
+.link-info:hover,
+.link-info:focus {
+  color: var(--app-color-info-text) !important;
+}
+
+.border-warning {
+  border-color: var(--app-color-warning-text) !important;
+}
+
+.border-info {
+  border-color: var(--app-color-info-text) !important;
+}
+
 .alert {
   --bs-alert-border-radius: var(--app-radius-md);
 }
@@ -46,23 +352,88 @@
 }
 
 .dropdown-menu:not(.dropdown-menu-dark) {
-  --bs-dropdown-border-color: var(--app-color-border);
+  --bs-dropdown-color: var(--app-color-text);
+  --bs-dropdown-bg: var(--app-color-surface);
+  --bs-dropdown-border-color: var(--app-color-control-border);
   --bs-dropdown-border-radius: var(--app-radius-md);
   --bs-dropdown-inner-border-radius: calc(
     var(--app-radius-md) - var(--bs-dropdown-border-width)
   );
   --bs-dropdown-box-shadow: var(--app-shadow-md);
+  --bs-dropdown-link-color: var(--app-color-text);
+  --bs-dropdown-link-hover-color: var(--app-color-primary-hover);
+  --bs-dropdown-link-hover-bg: var(--app-color-primary-soft);
+  --bs-dropdown-link-active-color: var(--app-color-on-strong);
+  --bs-dropdown-link-active-bg: var(--app-color-primary);
+  --bs-dropdown-link-disabled-color: var(--app-color-disabled-text);
+  --bs-dropdown-header-color: var(--app-color-text-muted);
+}
+
+.form-control,
+.form-select,
+.form-check-input {
+  color: var(--app-color-text);
+  background-color: var(--app-color-surface);
+  border-color: var(--app-color-control-border);
+}
+
+.form-control::placeholder {
+  color: var(--app-color-text-muted);
+  opacity: 1;
+}
+
+.form-control:disabled,
+.form-select:disabled,
+.form-check-input:disabled {
+  color: var(--app-color-disabled-text);
+  background-color: var(--app-color-disabled-bg);
+  border-color: var(--app-color-disabled-border);
+  opacity: 1;
+}
+
+.form-check-input:disabled ~ .form-check-label,
+.form-check-input[disabled] ~ .form-check-label {
+  color: var(--app-color-disabled-text);
+  opacity: 1;
 }
 
 .form-control:focus,
 .form-select:focus,
 .form-check-input:focus {
+  color: var(--app-color-text);
+  background-color: var(--app-color-surface);
   border-color: var(--app-color-focus-border);
   outline: 0;
   box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-focus-ring-color);
 }
 
-.form-check-input:checked {
+.form-check-input:checked,
+.form-check-input[type='checkbox']:indeterminate {
   background-color: var(--app-color-primary);
   border-color: var(--app-color-primary);
+}
+
+.input-group-text {
+  color: var(--app-color-text);
+  background: var(--app-color-surface-muted);
+  border-color: var(--app-color-control-border);
+}
+
+.pagination {
+  --bs-pagination-color: var(--app-color-primary);
+  --bs-pagination-bg: var(--app-color-surface);
+  --bs-pagination-border-color: var(--app-color-control-border);
+  --bs-pagination-hover-color: var(--app-color-primary-hover);
+  --bs-pagination-hover-bg: var(--app-color-primary-soft);
+  --bs-pagination-hover-border-color: var(--app-color-primary);
+  --bs-pagination-focus-color: var(--app-color-primary-hover);
+  --bs-pagination-focus-bg: var(--app-color-primary-soft);
+  --bs-pagination-focus-box-shadow: 0 0 0 var(--app-focus-ring-width)
+    var(--app-focus-ring-color);
+  --bs-pagination-active-color: var(--app-color-on-strong);
+  --bs-pagination-active-bg: var(--app-color-primary);
+  --bs-pagination-active-border-color: var(--app-color-primary);
+  --bs-pagination-disabled-color: var(--app-color-disabled-text);
+  --bs-pagination-disabled-bg: var(--app-color-disabled-bg);
+  --bs-pagination-disabled-border-color: var(--app-color-disabled-border);
 }
