@@ -215,7 +215,7 @@ python manage.py createsuperuser
 A: 检查服务器终端的错误日志，可能是数据库或代码问题
 
 ### Q: 昵称没有显示
-A: 确保已运行 `create_profiles.py` 为现有用户创建 UserProfile
+A: 先运行 `python manage.py migrate`，确认 `0023_userprofile_integrity` 已应用。该迁移会无损补齐历史缺失的 UserProfile；只读页面在资料缺失时也会回退显示用户名。
 
 ### Q: 修改密码后被退出登录
 A: 检查是否正确使用了 `update_session_auth_hash` 函数

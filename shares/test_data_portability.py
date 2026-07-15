@@ -213,6 +213,72 @@ class DataPortabilityTests(TestCase):
             self.assertEqual(len(quarantined), 1)
             self.assertIn('title exceeds max length 200', quarantined[0]['errors'])
 
+    def test_dataset_missing_user_profile_is_rejected(self):
+        with TemporaryDirectory() as temporary:
+            dataset, _ = self.export_to(Path(temporary))
+            profiles_path = dataset / 'user_profiles.jsonl'
+            profile_lines = profiles_path.read_text(encoding='utf-8').splitlines()
+            kept_lines = [
+                line
+                for line in profile_lines
+                if json.loads(line)['fields']['user'] != ['reporter']
+            ]
+            self.assertEqual(len(kept_lines), len(profile_lines) - 1)
+            profiles_path.write_text(
+                ''.join(f'{line}\n' for line in kept_lines),
+                encoding='utf-8',
+                newline='\n',
+            )
+
+            manifest_path = dataset / MANIFEST_FILENAME
+            manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+            profile_metadata = manifest['entities']['user_profiles']
+            profile_metadata['count'] = len(kept_lines)
+            profile_metadata['sha256'] = sha256(profiles_path.read_bytes()).hexdigest()
+            manifest_path.write_text(
+                json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
+                encoding='utf-8',
+                newline='\n',
+            )
+
+            report = validate_dataset(dataset)
+
+            self.assertFalse(report.valid)
+            self.assertNotIn('Checksum mismatch: user_profiles.jsonl', report.errors)
+            self.assertNotIn(
+                'Count mismatch for user_profiles: expected 2, found 1',
+                report.errors,
+            )
+            missing_profile_records = [
+                item
+                for item in report.quarantined_records
+                if item['entity'] == 'users' and item['pk'] == self.reporter.pk
+            ]
+            self.assertEqual(len(missing_profile_records), 1)
+            self.assertIn(
+                'user is missing a profile',
+                missing_profile_records[0]['errors'],
+            )
+            with self.assertRaises(DataPortabilityError):
+                import_dataset(dataset)
+
+    def test_round_trip_preserves_a_legacy_overlong_profile_bio_verbatim(self):
+        legacy_bio = '旧资料原文🙂' * 240
+        UserProfile.objects.filter(user=self.author).update(bio=legacy_bio)
+
+        with TemporaryDirectory() as temporary:
+            dataset, _ = self.export_to(Path(temporary))
+            report = validate_dataset(dataset)
+            self.assertTrue(report.valid, report.as_dict())
+
+            self.clear_portable_data()
+            self.assertEqual(import_dataset(dataset), 'imported')
+
+        self.assertEqual(
+            User.objects.get(username='author').profile.bio,
+            legacy_bio,
+        )
+
     def test_import_round_trip_preserves_ids_passwords_and_relations(self):
         author_id = self.author.id
         password_hash = self.author.password

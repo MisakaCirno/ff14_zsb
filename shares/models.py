@@ -1,8 +1,7 @@
-from django.db import models
-from django.contrib.auth.models import User
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 import random
+
+from django.contrib.auth.models import User
+from django.db import models
 
 from .content_sanitizer import sanitize_rich_text
 
@@ -44,20 +43,6 @@ class UserProfile(models.Model):
     def get_display_name(self):
         """获取显示名称（优先使用昵称）"""
         return self.nickname if self.nickname else self.user.username
-
-
-@receiver(post_save, sender=User)
-def create_user_profile(sender, instance, created, raw=False, **kwargs):
-    """创建用户时自动创建用户资料"""
-    if created and not raw:
-        UserProfile.objects.create(user=instance)
-
-
-@receiver(post_save, sender=User)
-def save_user_profile(sender, instance, raw=False, **kwargs):
-    """保存用户时自动保存用户资料"""
-    if not raw and hasattr(instance, 'profile'):
-        instance.profile.save()
 
 
 class Share(models.Model):

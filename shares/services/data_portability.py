@@ -633,6 +633,10 @@ def _validate_cross_entity(
         if record.fields.get('home_feed_mode') not in {'paginated', 'infinite'}:
             _add_error(errors_by_record, record, 'invalid home feed mode')
 
+    for username, user_record in user_names.items():
+        if username not in profile_users:
+            _add_error(errors_by_record, user_record, 'user is missing a profile')
+
     share_ids: dict[str, ParsedRecord] = {}
     for record in records['shares']:
         fields = record.fields
