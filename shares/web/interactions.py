@@ -9,10 +9,37 @@ from shares.models import Share
 from shares.policies import can_view_share
 from shares.presentation import is_htmx_request
 from shares.rate_limits import consume_rate_limit, get_client_ip
+from shares.services.interactions import (
+    ShareInteractionUnavailableError,
+    set_favorite_state,
+    set_like_state,
+)
 from shares.web.decorators import login_required_or_hx_redirect
 
 
 INTERACTION_FRAGMENTS = {'card', 'detail'}
+INTERACTION_TARGET_STATES = {
+    'active': True,
+    'inactive': False,
+}
+
+
+def _interaction_target_state(request):
+    try:
+        return INTERACTION_TARGET_STATES[request.POST['target_state']]
+    except KeyError:
+        return None
+
+
+def _invalid_target_state_response(is_htmx):
+    message = 'target_state must be active or inactive.'
+    if is_htmx:
+        return HttpResponseBadRequest(message)
+    return JsonResponse({'status': 'error', 'message': message}, status=400)
+
+
+def _hidden_share_response():
+    return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
 
 
 def _record_counter(request, share, *, cookie_name, rule_name, field_name):
@@ -83,27 +110,28 @@ def toggle_like(request, share_id):
     fragment = request.GET.get('fragment') if is_htmx else None
     if is_htmx and fragment not in INTERACTION_FRAGMENTS:
         return HttpResponseBadRequest('Unsupported interaction fragment.')
-    share = get_object_or_404(Share, share_id=share_id)
-    if not can_view_share(request.user, share):
-        return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
-    if share.likes.filter(id=request.user.id).exists():
-        share.likes.remove(request.user)
-        is_liked = False
-    else:
-        share.likes.add(request.user)
-        is_liked = True
-    likes_count = share.likes.count()
+    target_active = _interaction_target_state(request)
+    if target_active is None:
+        return _invalid_target_state_response(is_htmx)
+    try:
+        result = set_like_state(
+            share_id=share_id,
+            user=request.user,
+            target_active=target_active,
+        )
+    except ShareInteractionUnavailableError:
+        return _hidden_share_response()
     if is_htmx:
         return render(request, 'shares/includes/like_button.html', {
-            'share': share,
-            'is_liked': is_liked,
-            'likes_count': likes_count,
+            'share': result.share,
+            'is_liked': result.is_active,
+            'likes_count': result.count,
             'interaction_fragment': fragment,
         })
     return JsonResponse({
         'status': 'success',
-        'is_liked': is_liked,
-        'likes_count': likes_count,
+        'is_liked': result.is_active,
+        'likes_count': result.count,
     })
 
 
@@ -116,25 +144,26 @@ def toggle_favorite(request, share_id):
     fragment = request.GET.get('fragment') if is_htmx else None
     if is_htmx and fragment not in INTERACTION_FRAGMENTS:
         return HttpResponseBadRequest('Unsupported interaction fragment.')
-    share = get_object_or_404(Share, share_id=share_id)
-    if not can_view_share(request.user, share):
-        return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
-    if share.favorites.filter(id=request.user.id).exists():
-        share.favorites.remove(request.user)
-        is_favorited = False
-    else:
-        share.favorites.add(request.user)
-        is_favorited = True
-    favorites_count = share.favorites.count()
+    target_active = _interaction_target_state(request)
+    if target_active is None:
+        return _invalid_target_state_response(is_htmx)
+    try:
+        result = set_favorite_state(
+            share_id=share_id,
+            user=request.user,
+            target_active=target_active,
+        )
+    except ShareInteractionUnavailableError:
+        return _hidden_share_response()
     if is_htmx:
         return render(request, 'shares/includes/favorite_button.html', {
-            'share': share,
-            'is_favorited': is_favorited,
-            'favorites_count': favorites_count,
+            'share': result.share,
+            'is_favorited': result.is_active,
+            'favorites_count': result.count,
             'interaction_fragment': fragment,
         })
     return JsonResponse({
         'status': 'success',
-        'is_favorited': is_favorited,
-        'favorites_count': favorites_count,
+        'is_favorited': result.is_active,
+        'favorites_count': result.count,
     })

@@ -52,9 +52,13 @@ HTMX 搜索遇到空查询、超长查询或精确分享 ID 时返回 `204` 和 
 
 点赞 `/share/<share_id>/like/` 和收藏 `/share/<share_id>/favorite/` 只接受 `POST`：
 
-- 已登录的普通请求继续返回原 JSON 字段，不受前端迁移影响。
+- 请求体必须明确提交 `target_state=active` 或 `target_state=inactive`，分别表示确保关系存在或不存在；接口不再接受含义不确定的空请求体切换。
+- 相同目标状态的重复或并发请求是幂等的。服务端在短事务内重新检查访问权限并返回事务完成后的实际状态与计数。
+- 已登录的普通请求继续返回原 JSON 字段：点赞为 `status`、`is_liked`、`likes_count`，收藏为 `status`、`is_favorited`、`favorites_count`。
 - HTMX 请求必须指定 `fragment=card` 或 `fragment=detail`，返回与场景样式匹配的单个按钮 HTML，并由按钮以 `outerHTML` 替换自身。
-- 缺少或传入未知 fragment 时返回 `400`，且不得改变点赞或收藏关系。
+- 缺少或传入未知 fragment、缺少或传入未知目标状态时返回 `400`，且不得改变点赞或收藏关系。
 - 登录会话失效时返回 `204` 和 `HX-Redirect`。登录回跳优先采用经过同源校验的 `HX-Current-URL`，禁止外站地址进入 `next`。
 
 响应按 `HX-Request` 和 `Cookie` 区分，并使用私有 `no-store` 缓存策略。CSRF 保护保持启用，浏览器端由全局 HTMX 请求钩子注入 `X-CSRFToken`。
+
+R15 部署时必须同步发布后端与按钮模板。旧页面中的空请求体不会回退到有竞态的 toggle 语义，而会收到 `400`；用户刷新页面后即可获得携带显式目标状态的新按钮。该变更不影响“小抄儿”公开 API。

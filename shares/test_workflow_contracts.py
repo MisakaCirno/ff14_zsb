@@ -1,12 +1,136 @@
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, Event
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
+from unittest import skipUnless
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import Client, TestCase
+from django.db import close_old_connections, connection
+from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import Collection, CollectionItem, Report, Share, ShareLog, UserProfile
+from .services import interactions as interaction_service
+
+
+class InteractionServiceBoundaryTests(SimpleTestCase):
+    @staticmethod
+    def operational_error(sqlite_errorcode):
+        cause = sqlite3.OperationalError('database table is locked')
+        cause.sqlite_errorcode = sqlite_errorcode
+        error = interaction_service.OperationalError(str(cause))
+        error.__cause__ = cause
+        return error
+
+    def test_only_shared_cache_lock_conflicts_are_retryable(self):
+        shared_cache_lock = self.operational_error(sqlite3.SQLITE_LOCKED_SHAREDCACHE)
+        busy_timeout = self.operational_error(sqlite3.SQLITE_BUSY)
+
+        with patch.object(
+            interaction_service,
+            'connection',
+            SimpleNamespace(vendor='sqlite'),
+        ):
+            self.assertTrue(
+                interaction_service._is_transient_sqlite_lock(shared_cache_lock),
+            )
+            self.assertFalse(interaction_service._is_transient_sqlite_lock(busy_timeout))
+
+        with patch.object(
+            interaction_service,
+            'connection',
+            SimpleNamespace(vendor='postgresql'),
+        ):
+            self.assertFalse(
+                interaction_service._is_transient_sqlite_lock(shared_cache_lock),
+            )
+
+    def test_shared_cache_lock_retries_the_idempotent_target_operation(self):
+        shared_cache_lock = self.operational_error(sqlite3.SQLITE_LOCKED_SHAREDCACHE)
+        expected = object()
+
+        with (
+            patch.object(
+                interaction_service,
+                'connection',
+                SimpleNamespace(vendor='sqlite'),
+            ),
+            patch.object(
+                interaction_service,
+                '_set_interaction_state_once',
+                side_effect=[shared_cache_lock, expected],
+            ) as mutate,
+            patch.object(interaction_service, 'sleep') as retry_sleep,
+        ):
+            result = interaction_service.set_like_state(
+                share_id='share-id',
+                user=object(),
+                target_active=True,
+            )
+
+        self.assertIs(result, expected)
+        self.assertEqual(mutate.call_count, 2)
+        retry_sleep.assert_called_once_with(
+            interaction_service.SQLITE_LOCK_RETRY_DELAYS[0],
+        )
+
+    def test_busy_timeout_failure_is_not_retried(self):
+        busy_timeout = self.operational_error(sqlite3.SQLITE_BUSY)
+
+        with (
+            patch.object(
+                interaction_service,
+                'connection',
+                SimpleNamespace(vendor='sqlite'),
+            ),
+            patch.object(
+                interaction_service,
+                '_set_interaction_state_once',
+                side_effect=busy_timeout,
+            ) as mutate,
+            patch.object(interaction_service, 'sleep') as retry_sleep,
+        ):
+            with self.assertRaises(interaction_service.OperationalError):
+                interaction_service.set_like_state(
+                    share_id='share-id',
+                    user=object(),
+                    target_active=True,
+                )
+
+        mutate.assert_called_once()
+        retry_sleep.assert_not_called()
+
+    def test_integrity_error_only_becomes_unavailable_when_share_was_deleted(self):
+        integrity_error = interaction_service.IntegrityError('foreign key failed')
+
+        for share_exists, expected_error in (
+            (False, interaction_service.ShareInteractionUnavailableError),
+            (True, interaction_service.IntegrityError),
+        ):
+            with (
+                self.subTest(share_exists=share_exists),
+                patch.object(
+                    interaction_service,
+                    '_set_interaction_state_once',
+                    side_effect=integrity_error,
+                ),
+                patch.object(
+                    interaction_service.Share.objects,
+                    'filter',
+                    return_value=SimpleNamespace(
+                        exists=lambda: share_exists,
+                    ),
+                ),
+            ):
+                with self.assertRaises(expected_error):
+                    interaction_service.set_like_state(
+                        share_id='share-id',
+                        user=object(),
+                        target_active=True,
+                    )
 
 
 class ShareWriteWorkflowTests(TestCase):
@@ -475,31 +599,41 @@ class InteractionWorkflowTests(TestCase):
             status=Share.Status.APPROVED,
         )
 
-    def test_like_endpoint_toggles_relation(self):
+    def test_like_endpoint_sets_explicit_state_idempotently(self):
         self.client.force_login(self.user)
 
-        add_response = self.client.post(reverse('toggle_like', args=[self.share.share_id]))
-        remove_response = self.client.post(reverse('toggle_like', args=[self.share.share_id]))
+        url = reverse('toggle_like', args=[self.share.share_id])
+        add_responses = [
+            self.client.post(url, {'target_state': 'active'}),
+            self.client.post(url, {'target_state': 'active'}),
+        ]
+        remove_responses = [
+            self.client.post(url, {'target_state': 'inactive'}),
+            self.client.post(url, {'target_state': 'inactive'}),
+        ]
 
-        self.assertEqual(add_response.json(), {
-            'status': 'success',
-            'is_liked': True,
-            'likes_count': 1,
-        })
-        self.assertEqual(remove_response.json(), {
-            'status': 'success',
-            'is_liked': False,
-            'likes_count': 0,
-        })
+        for response in add_responses:
+            self.assertEqual(response.json(), {
+                'status': 'success',
+                'is_liked': True,
+                'likes_count': 1,
+            })
+        for response in remove_responses:
+            self.assertEqual(response.json(), {
+                'status': 'success',
+                'is_liked': False,
+                'likes_count': 0,
+            })
         self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
-        self.assertIn('HX-Request', add_response.headers['Vary'])
-        self.assertIn('no-store', add_response.headers['Cache-Control'])
+        self.assertIn('HX-Request', add_responses[0].headers['Vary'])
+        self.assertIn('no-store', add_responses[0].headers['Cache-Control'])
 
     def test_hx_like_endpoint_returns_reusable_card_button(self):
         self.client.force_login(self.user)
 
         response = self.client.post(
             reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card',
+            {'target_state': 'active'},
             HTTP_HX_REQUEST='true',
         )
 
@@ -510,6 +644,9 @@ class InteractionWorkflowTests(TestCase):
         self.assertContains(response, 'hx-post=')
         self.assertContains(response, 'aria-label="点赞，当前 1 个点赞"')
         self.assertContains(response, 'aria-pressed="true"')
+        self.assertContains(response, 'hx-vals=\'{"target_state":"inactive"}\'')
+        self.assertContains(response, 'hx-sync="this:drop"')
+        self.assertContains(response, 'hx-disabled-elt="this"')
         self.assertContains(response, '>1</span>')
         self.assertIn('HX-Request', response.headers['Vary'])
         self.assertIn('no-store', response.headers['Cache-Control'])
@@ -520,6 +657,7 @@ class InteractionWorkflowTests(TestCase):
 
         response = self.client.post(
             reverse('toggle_like', args=[self.share.share_id]) + '?fragment=detail',
+            {'target_state': 'active'},
             HTTP_HX_REQUEST='true',
         )
 
@@ -532,16 +670,25 @@ class InteractionWorkflowTests(TestCase):
         self.assertNotContains(response, 'w-50')
         self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
 
-    def test_favorite_endpoint_toggles_relation(self):
+    def test_favorite_endpoint_sets_explicit_state_idempotently(self):
         self.client.force_login(self.user)
 
-        add_response = self.client.post(reverse('toggle_favorite', args=[self.share.share_id]))
-        remove_response = self.client.post(reverse('toggle_favorite', args=[self.share.share_id]))
+        url = reverse('toggle_favorite', args=[self.share.share_id])
+        add_responses = [
+            self.client.post(url, {'target_state': 'active'}),
+            self.client.post(url, {'target_state': 'active'}),
+        ]
+        remove_responses = [
+            self.client.post(url, {'target_state': 'inactive'}),
+            self.client.post(url, {'target_state': 'inactive'}),
+        ]
 
-        self.assertTrue(add_response.json()['is_favorited'])
-        self.assertEqual(add_response.json()['favorites_count'], 1)
-        self.assertFalse(remove_response.json()['is_favorited'])
-        self.assertEqual(remove_response.json()['favorites_count'], 0)
+        for response in add_responses:
+            self.assertTrue(response.json()['is_favorited'])
+            self.assertEqual(response.json()['favorites_count'], 1)
+        for response in remove_responses:
+            self.assertFalse(response.json()['is_favorited'])
+            self.assertEqual(response.json()['favorites_count'], 0)
         self.assertFalse(self.share.favorites.filter(pk=self.user.pk).exists())
 
     def test_hx_favorite_endpoint_returns_reusable_card_button(self):
@@ -549,6 +696,7 @@ class InteractionWorkflowTests(TestCase):
 
         response = self.client.post(
             reverse('toggle_favorite', args=[self.share.share_id]) + '?fragment=card',
+            {'target_state': 'active'},
             HTTP_HX_REQUEST='true',
         )
 
@@ -558,6 +706,7 @@ class InteractionWorkflowTests(TestCase):
         self.assertContains(response, 'hx-post=')
         self.assertContains(response, 'aria-label="收藏，当前 1 个收藏"')
         self.assertContains(response, 'aria-pressed="true"')
+        self.assertContains(response, 'hx-vals=\'{"target_state":"inactive"}\'')
         self.assertContains(response, '>1</span>')
         self.assertTrue(self.share.favorites.filter(pk=self.user.pk).exists())
 
@@ -566,6 +715,7 @@ class InteractionWorkflowTests(TestCase):
 
         response = self.client.post(
             reverse('toggle_favorite', args=[self.share.share_id]) + '?fragment=detail',
+            {'target_state': 'active'},
             HTTP_HX_REQUEST='true',
         )
 
@@ -584,16 +734,64 @@ class InteractionWorkflowTests(TestCase):
             with self.subTest(query=query):
                 response = self.client.post(
                     reverse('toggle_like', args=[self.share.share_id]) + query,
+                    {'target_state': 'active'},
                     HTTP_HX_REQUEST='true',
                 )
 
                 self.assertEqual(response.status_code, 400)
                 self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
 
+    def test_interaction_requires_valid_target_state_without_mutating(self):
+        self.client.force_login(self.user)
+
+        for url_name, relation_name in (
+            ('toggle_like', 'likes'),
+            ('toggle_favorite', 'favorites'),
+        ):
+            url = reverse(url_name, args=[self.share.share_id])
+            relation = getattr(self.share, relation_name)
+            for payload in ({}, {'target_state': ''}, {'target_state': 'toggle'}):
+                with self.subTest(endpoint=url_name, payload=payload):
+                    response = self.client.post(url, payload)
+
+                    self.assertEqual(response.status_code, 400)
+                    self.assertEqual(response.json()['status'], 'error')
+                    self.assertFalse(relation.filter(pk=self.user.pk).exists())
+
+        response = self.client.post(
+            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card',
+            {'target_state': 'toggle'},
+            HTTP_HX_REQUEST='true',
+        )
+        self.assertContains(
+            response,
+            'target_state must be active or inactive.',
+            status_code=400,
+        )
+        self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
+
+    def test_interaction_rolls_back_if_final_permission_check_fails(self):
+        self.client.force_login(self.user)
+
+        with patch.object(
+            interaction_service,
+            'can_view_share',
+            side_effect=(True, False),
+        ) as permission_check:
+            response = self.client.post(
+                reverse('toggle_like', args=[self.share.share_id]),
+                {'target_state': 'active'},
+            )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(permission_check.call_count, 2)
+        self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
+
     def test_expired_hx_interaction_redirects_the_full_page_to_login(self):
         detail_url = reverse('share_detail', args=[self.share.share_id])
         response = self.client.post(
             reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card',
+            {'target_state': 'active'},
             HTTP_HX_REQUEST='true',
             HTTP_HX_CURRENT_URL=f'http://testserver{detail_url}',
         )
@@ -609,6 +807,7 @@ class InteractionWorkflowTests(TestCase):
 
         response = self.client.post(
             action_url,
+            {'target_state': 'active'},
             HTTP_HX_REQUEST='true',
             HTTP_HX_CURRENT_URL='https://example.invalid/phishing',
         )
@@ -621,7 +820,11 @@ class InteractionWorkflowTests(TestCase):
         csrf_client.force_login(self.user)
         action_url = reverse('toggle_like', args=[self.share.share_id]) + '?fragment=detail'
 
-        denied = csrf_client.post(action_url, HTTP_HX_REQUEST='true')
+        denied = csrf_client.post(
+            action_url,
+            {'target_state': 'active'},
+            HTTP_HX_REQUEST='true',
+        )
 
         self.assertEqual(denied.status_code, 403)
         self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
@@ -630,6 +833,7 @@ class InteractionWorkflowTests(TestCase):
         csrf_token = page.cookies['csrftoken'].value
         allowed = csrf_client.post(
             action_url,
+            {'target_state': 'active'},
             HTTP_HX_REQUEST='true',
             HTTP_X_CSRFTOKEN=csrf_token,
         )
@@ -665,6 +869,138 @@ class InteractionWorkflowTests(TestCase):
         self.assertEqual(report.share, self.share)
         self.assertEqual(report.reporter, self.user)
         self.assertEqual(report.reason, '需要管理员核查')
+
+
+class InteractionConcurrencyTests(TransactionTestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(username='author', password='password123')
+        self.user = User.objects.create_user(username='user', password='password123')
+        self.share = Share.objects.create(
+            title='并发互动测试',
+            strategy_code='[stgy:interaction-concurrency]',
+            author=self.author,
+            visibility=Share.Visibility.PUBLIC,
+            status=Share.Status.APPROVED,
+        )
+
+    def _post_concurrently(self, url, target_state):
+        clients = [Client(), Client()]
+        for client in clients:
+            client.force_login(self.user)
+        barrier = Barrier(len(clients))
+
+        def send(client):
+            close_old_connections()
+            try:
+                barrier.wait(timeout=5)
+                response = client.post(url, {'target_state': target_state})
+                return response.status_code, response.json()
+            finally:
+                close_old_connections()
+
+        with ThreadPoolExecutor(max_workers=len(clients)) as executor:
+            futures = [executor.submit(send, client) for client in clients]
+            return [future.result(timeout=20) for future in futures]
+
+    def _post_like_while_share_changes(self, mutate_share):
+        client = Client()
+        client.force_login(self.user)
+        first_permission_check = Event()
+        continue_interaction = Event()
+        original_can_view_share = interaction_service.can_view_share
+
+        def pause_after_first_check(user, share):
+            allowed = original_can_view_share(user, share)
+            if not first_permission_check.is_set():
+                first_permission_check.set()
+                if not continue_interaction.wait(timeout=10):
+                    raise AssertionError('Timed out waiting for concurrent share change.')
+            return allowed
+
+        def send_interaction():
+            close_old_connections()
+            try:
+                return client.post(
+                    reverse('toggle_like', args=[self.share.share_id]),
+                    {'target_state': 'active'},
+                )
+            finally:
+                close_old_connections()
+
+        with (
+            patch.object(
+                interaction_service,
+                'can_view_share',
+                side_effect=pause_after_first_check,
+            ),
+            ThreadPoolExecutor(max_workers=1) as executor,
+        ):
+            future = executor.submit(send_interaction)
+            try:
+                self.assertTrue(first_permission_check.wait(timeout=10))
+                mutate_share()
+            finally:
+                continue_interaction.set()
+            return future.result(timeout=20)
+
+    def test_concurrent_duplicate_target_requests_converge(self):
+        cases = (
+            ('toggle_like', 'likes', 'is_liked', 'likes_count'),
+            ('toggle_favorite', 'favorites', 'is_favorited', 'favorites_count'),
+        )
+
+        for url_name, relation_name, state_key, count_key in cases:
+            url = reverse(url_name, args=[self.share.share_id])
+            relation = getattr(self.share, relation_name)
+            with self.subTest(endpoint=url_name, target_state='active'):
+                relation.clear()
+                responses = self._post_concurrently(url, 'active')
+
+                self.assertEqual([status for status, _ in responses], [200, 200])
+                self.assertTrue(all(payload[state_key] for _, payload in responses))
+                self.assertTrue(all(payload[count_key] == 1 for _, payload in responses))
+                self.assertEqual(relation.filter(pk=self.user.pk).count(), 1)
+
+            with self.subTest(endpoint=url_name, target_state='inactive'):
+                relation.add(self.user)
+                responses = self._post_concurrently(url, 'inactive')
+
+                self.assertEqual([status for status, _ in responses], [200, 200])
+                self.assertTrue(all(not payload[state_key] for _, payload in responses))
+                self.assertTrue(all(payload[count_key] == 0 for _, payload in responses))
+                self.assertFalse(relation.filter(pk=self.user.pk).exists())
+
+    @skipUnless(
+        connection.vendor == 'postgresql',
+        'PostgreSQL-specific permission race contract',
+    )
+    def test_concurrent_visibility_change_rolls_back_interaction(self):
+        response = self._post_like_while_share_changes(
+            lambda: Share.objects.filter(pk=self.share.pk).update(
+                visibility=Share.Visibility.PRIVATE,
+            ),
+        )
+
+        self.share.refresh_from_db()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.share.visibility, Share.Visibility.PRIVATE)
+        self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
+
+    @skipUnless(
+        connection.vendor == 'postgresql',
+        'PostgreSQL-specific deletion race contract',
+    )
+    def test_concurrent_share_deletion_returns_not_found(self):
+        share_pk = self.share.pk
+        through_model = Share.likes.through
+
+        response = self._post_like_while_share_changes(
+            lambda: Share.objects.filter(pk=share_pk).delete(),
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Share.objects.filter(pk=share_pk).exists())
+        self.assertFalse(through_model.objects.filter(share_id=share_pk).exists())
 
 
 class CollectionAndProfileWorkflowTests(TestCase):

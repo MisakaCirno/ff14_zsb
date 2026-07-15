@@ -194,7 +194,12 @@ class PermissionEnforcementTests(TestCase):
             ('toggle_favorite', self.client.post),
         ):
             with self.subTest(endpoint=url_name):
-                response = method(reverse(url_name, args=[private.share_id]))
+                payload = (
+                    {'target_state': 'active'}
+                    if url_name in {'toggle_like', 'toggle_favorite'}
+                    else None
+                )
+                response = method(reverse(url_name, args=[private.share_id]), payload)
                 self.assertEqual(response.status_code, 404)
 
         private.refresh_from_db()
@@ -210,8 +215,14 @@ class PermissionEnforcementTests(TestCase):
         code = self.client.get(reverse('get_share_code', args=[share.share_id]))
         report = self.client.get(reverse('report_share', args=[share.share_id]))
         copy = self.client.post(reverse('record_copy', args=[share.share_id]))
-        like = self.client.post(reverse('toggle_like', args=[share.share_id]))
-        favorite = self.client.post(reverse('toggle_favorite', args=[share.share_id]))
+        like = self.client.post(
+            reverse('toggle_like', args=[share.share_id]),
+            {'target_state': 'active'},
+        )
+        favorite = self.client.post(
+            reverse('toggle_favorite', args=[share.share_id]),
+            {'target_state': 'active'},
+        )
 
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(code.status_code, 200)

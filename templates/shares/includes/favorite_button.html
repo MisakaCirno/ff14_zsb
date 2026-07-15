@@ -3,8 +3,11 @@
         class="btn btn-sm {% if is_favorited %}btn-warning{% else %}btn-outline-secondary{% endif %}{% if fragment != 'detail' %} hover-lift w-50{% endif %}"
         id="btn-favorite-{{ share.share_id }}"
         hx-post="{% url 'toggle_favorite' share.share_id %}?fragment={{ fragment }}"
+        hx-vals='{"target_state":"{% if is_favorited %}inactive{% else %}active{% endif %}"}'
         hx-target="this"
         hx-swap="outerHTML"
+        hx-sync="this:drop"
+        hx-disabled-elt="this"
         aria-label="收藏，当前 {{ favorites_count }} 个收藏"
         aria-pressed="{% if is_favorited %}true{% else %}false{% endif %}"
         title="{% if is_favorited %}取消收藏{% else %}收藏{% endif %}">

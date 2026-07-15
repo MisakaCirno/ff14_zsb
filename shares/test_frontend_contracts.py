@@ -924,6 +924,20 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 self.assertNotIn('toggleIndexLike(', source)
                 self.assertNotIn('toggleIndexFavorite(', source)
 
+    def test_reaction_buttons_submit_explicit_idempotent_target_state(self):
+        for template_path in (
+            'shares/includes/like_button.html',
+            'shares/includes/favorite_button.html',
+        ):
+            with self.subTest(template=template_path):
+                source = self.read_template(template_path)
+                self.assertIn('hx-vals=', source)
+                self.assertIn('"target_state":', source)
+                self.assertIn('active', source)
+                self.assertIn('inactive', source)
+                self.assertIn('hx-sync="this:drop"', source)
+                self.assertIn('hx-disabled-elt="this"', source)
+
     def test_home_template_delegates_announcement_and_infinite_scroll(self):
         source = self.read_template('shares/index.html')
         page_source = self.read_template('shares/includes/share_cards_page.html')
