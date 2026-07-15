@@ -1,0 +1,284 @@
+<section
+    class="share-editor-page share-editor-page--{{ editor_mode }}"
+    aria-labelledby="share-editor-page-title">
+    <header class="share-editor-hero">
+        <div class="share-editor-hero__copy">
+            <p class="share-editor-hero__eyebrow">
+                {% if editor_mode == 'create' %}发布战术板{% else %}维护分享内容{% endif %}
+            </p>
+            <h1 class="share-editor-hero__title" id="share-editor-page-title">
+                {% if editor_mode == 'create' %}
+                <i class="bi bi-plus-circle" aria-hidden="true"></i>
+                <span>创建新分享</span>
+                {% else %}
+                <i class="bi bi-pencil" aria-hidden="true"></i>
+                <span>编辑分享</span>
+                {% endif %}
+            </h1>
+            <p class="share-editor-hero__description">
+                {% if editor_mode == 'create' %}
+                填写战术板代码和必要说明，选择合适的公开范围后即可发布。
+                {% else %}
+                更新标题、战术板代码、说明或公开范围。没有实际变化时不会重复保存。
+                {% endif %}
+            </p>
+        </div>
+        <span class="share-editor-hero__mode">
+            <i class="bi {% if editor_mode == 'create' %}bi-cloud-arrow-up{% else %}bi-shield-check{% endif %}" aria-hidden="true"></i>
+            {% if editor_mode == 'create' %}新内容{% else %}安全编辑{% endif %}
+        </span>
+    </header>
+
+    {% if editor_mode == 'create' %}
+    <aside class="share-editor-notice share-editor-notice--community" aria-labelledby="share-editor-community-title">
+        <i class="bi bi-people" aria-hidden="true"></i>
+        <div>
+            <h2 id="share-editor-community-title">发布前请确认</h2>
+            <p>请准确填写内容，并如实标记剧透或可能令人不适的信息，共同维护清晰、友好的社区环境。</p>
+        </div>
+    </aside>
+    {% endif %}
+
+    <form
+        class="share-editor-form"
+        method="post"
+        data-share-editor
+        data-share-editor-mode="{{ editor_mode }}"
+        aria-labelledby="share-editor-page-title">
+        {% csrf_token %}
+        {% if form.version %}{{ form.version }}{% endif %}
+
+        {% if form.errors %}
+        <div
+            class="share-editor-error-summary"
+            data-form-error-summary
+            role="alert"
+            aria-labelledby="share-editor-error-title"
+            tabindex="-1">
+            <div class="share-editor-error-summary__heading">
+                <i class="bi bi-exclamation-octagon" aria-hidden="true"></i>
+                <h2 id="share-editor-error-title">提交内容需要检查</h2>
+            </div>
+            <p>你的内容尚未保存，请修正以下问题后再次提交。</p>
+            <ul>
+                {% for error in form.non_field_errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+                {% for error in form.version.errors %}
+                <li><strong>编辑版本：</strong>{{ error }}</li>
+                {% endfor %}
+                {% for field in form.visible_fields %}
+                    {% for error in field.errors %}
+                    <li>
+                        <a href="#{% if field.name == 'description' %}share-editor-description-field{% else %}{{ field.id_for_label }}{% endif %}">
+                            {{ field.label }}：{{ error }}
+                        </a>
+                    </li>
+                    {% endfor %}
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <section class="share-editor-panel" aria-labelledby="share-editor-content-heading">
+            <header class="share-editor-panel__header">
+                <span class="share-editor-panel__icon" aria-hidden="true">
+                    <i class="bi bi-card-text"></i>
+                </span>
+                <div>
+                    <h2 id="share-editor-content-heading">分享内容</h2>
+                    <p>标题和战术板代码为必填项，描述可以补充使用方式或注意事项。</p>
+                </div>
+            </header>
+            <div class="share-editor-panel__body">
+                {% include 'shares/includes/form_field.html' with field=form.title only %}
+
+                {% include 'shares/includes/form_field.html' with field=form.strategy_code only %}
+
+                <div
+                    id="share-editor-description-field"
+                    class="share-editor-field share-editor-field--description mb-3{% if form.description.errors %} share-editor-field--invalid{% endif %}"
+                    data-share-field="description"
+                    data-share-help-id="{{ form.description.auto_id }}_helptext"
+                    tabindex="-1"
+                    {% if form.description.errors %}data-share-error-id="{{ form.description.id_for_label }}_error"{% endif %}>
+                    <label
+                        class="share-editor-field__label form-label"
+                        id="{{ form.description.id_for_label }}_label"
+                        for="{{ form.description.id_for_label }}">
+                        <span>{{ form.description.label }}</span>
+                        <span class="share-editor-field__optional">可选</span>
+                    </label>
+                    <p
+                        class="share-editor-field__help form-text"
+                        id="{{ form.description.auto_id }}_helptext"
+                        data-share-description-help>
+                        {{ form.description.help_text }}
+                    </p>
+                    <div
+                        class="share-editor-field__native"
+                        data-share-description-source
+                        role="group"
+                        aria-labelledby="{{ form.description.id_for_label }}_label"
+                        aria-describedby="{{ form.description.auto_id }}_helptext{% if form.description.errors %} {{ form.description.id_for_label }}_error{% endif %}">
+                        {{ form.description }}
+                    </div>
+                    <div
+                        class="share-editor-rich-text"
+                        data-share-rich-text-shell
+                        data-share-label-id="{{ form.description.id_for_label }}_label"
+                        data-share-help-id="{{ form.description.auto_id }}_helptext"
+                        {% if form.description.errors %}data-share-error-id="{{ form.description.id_for_label }}_error"{% endif %}
+                        hidden>
+                        <div
+                            data-share-rich-text-editor
+                            data-share-label-id="{{ form.description.id_for_label }}_label"
+                            data-share-help-id="{{ form.description.auto_id }}_helptext"
+                            {% if form.description.errors %}data-share-error-id="{{ form.description.id_for_label }}_error"{% endif %}
+                            aria-labelledby="{{ form.description.id_for_label }}_label"
+                            aria-describedby="{{ form.description.auto_id }}_helptext{% if form.description.errors %} {{ form.description.id_for_label }}_error{% endif %}"></div>
+                    </div>
+                    {% if form.description.errors %}
+                    <div class="share-editor-field__errors">
+                        {{ form.description.errors }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <section class="share-editor-panel" aria-labelledby="share-editor-publishing-heading">
+            <header class="share-editor-panel__header">
+                <span class="share-editor-panel__icon" aria-hidden="true">
+                    <i class="bi bi-sliders"></i>
+                </span>
+                <div>
+                    <h2 id="share-editor-publishing-heading">分类与发布范围</h2>
+                    <p>选择内容分类、可见性和必要标记，帮助其他用户正确理解这份分享。</p>
+                </div>
+            </header>
+            <div class="share-editor-panel__body">
+                <div class="share-editor-fields-grid">
+                    {% include 'shares/includes/form_field.html' with field=form.category only %}
+
+                    {% if editor_mode == 'create' and not user.is_authenticated %}
+                    <div
+                        class="share-editor-field{% if form.visibility.errors %} share-editor-field--invalid{% endif %}"
+                        data-share-field="visibility"
+                        data-share-help-id="{{ form.visibility.id_for_label }}_help">
+                        <label class="share-editor-field__label form-label" for="{{ form.visibility.id_for_label }}_display">
+                            <span>{{ form.visibility.label }}</span>
+                            <span class="share-editor-field__required" aria-hidden="true">*</span>
+                            <span class="visually-hidden">（必填）</span>
+                        </label>
+                        <select
+                            class="form-select"
+                            id="{{ form.visibility.id_for_label }}_display"
+                            aria-describedby="{{ form.visibility.id_for_label }}_help"
+                            disabled>
+                            <option selected>不公开（仅链接或分享 ID 可见）</option>
+                        </select>
+                        <input
+                            type="hidden"
+                            name="{{ form.visibility.html_name }}"
+                            id="{{ form.visibility.id_for_label }}"
+                            value="unlisted">
+                        <p class="share-editor-field__help form-text" id="{{ form.visibility.id_for_label }}_help">
+                            未登录时只支持创建不公开的链接分享。
+                        </p>
+                        {% if form.visibility.errors %}
+                        <div class="share-editor-field__errors">
+                            {{ form.visibility.errors }}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    {% include 'shares/includes/form_field.html' with field=form.visibility only %}
+                    {% endif %}
+                </div>
+
+                {% if editor_mode == 'create' and not user.is_authenticated %}
+                <aside
+                    class="share-editor-notice share-editor-notice--anonymous"
+                    data-anonymous-share-notice
+                    aria-labelledby="share-editor-anonymous-title">
+                    <i class="bi bi-person-exclamation" aria-hidden="true"></i>
+                    <div>
+                        <h3 id="share-editor-anonymous-title">匿名分享无法由你后续管理</h3>
+                        <p>创建后内容不会绑定到任何账号，你将无法自行编辑、删除或找回。请在提交后妥善保存链接；如需长期维护，请先登录或注册。</p>
+                    </div>
+                </aside>
+                {% else %}
+                <aside
+                    class="share-editor-notice share-editor-notice--review"
+                    id="share-editor-public-review-notice"
+                    data-public-review-notice
+                    aria-labelledby="share-editor-review-title">
+                    <i class="bi bi-shield-check" aria-hidden="true"></i>
+                    <div>
+                        <h3 id="share-editor-review-title">公开内容需要审核</h3>
+                        <p>
+                            {% if editor_mode == 'create' %}
+                            提交公开分享后会进入审核；通过前不会出现在广场，但仍可通过链接访问。
+                            {% else %}
+                            公开分享发生实际修改并保存后需要重新审核；通过前不会出现在广场。没有实际修改时不会触发重审。
+                            {% endif %}
+                        </p>
+                    </div>
+                </aside>
+                {% endif %}
+
+                {% if editor_mode == 'create' and user.is_authenticated and form.show_collection_field %}
+                {% include 'shares/includes/form_field.html' with field=form.collection_id only %}
+                {% endif %}
+
+                <fieldset class="share-editor-flags" aria-describedby="share-editor-flags-help">
+                    <legend>
+                        <span>内容标记</span>
+                        <span class="share-editor-field__optional">按实际情况勾选</span>
+                    </legend>
+                    <p id="share-editor-flags-help">这些标记会帮助浏览者在打开内容前作出合适的选择。</p>
+                    <div class="share-editor-flags__options">
+                        <div class="share-editor-flag{% if form.is_spoiler.errors %} share-editor-field--invalid{% endif %}">
+                            {{ form.is_spoiler }}
+                            <label for="{{ form.is_spoiler.id_for_label }}">{{ form.is_spoiler.label }}</label>
+                            {% if form.is_spoiler.errors %}<div class="share-editor-field__errors">{{ form.is_spoiler.errors }}</div>{% endif %}
+                        </div>
+                        <div class="share-editor-flag{% if form.is_nsfw.errors %} share-editor-field--invalid{% endif %}">
+                            {{ form.is_nsfw }}
+                            <label for="{{ form.is_nsfw.id_for_label }}">{{ form.is_nsfw.label }}</label>
+                            {% if form.is_nsfw.errors %}<div class="share-editor-field__errors">{{ form.is_nsfw.errors }}</div>{% endif %}
+                        </div>
+                        <div class="share-editor-flag{% if form.is_original.errors %} share-editor-field--invalid{% endif %}">
+                            {{ form.is_original }}
+                            <label for="{{ form.is_original.id_for_label }}">{{ form.is_original.label }}</label>
+                            {% if form.is_original.errors %}<div class="share-editor-field__errors">{{ form.is_original.errors }}</div>{% endif %}
+                        </div>
+                    </div>
+                </fieldset>
+            </div>
+        </section>
+
+        <div class="share-editor-actions">
+            <button
+                type="submit"
+                class="btn btn-primary btn-lg share-editor-actions__submit"
+                data-share-editor-submit
+                {% if not editor_mode == 'create' or user.is_authenticated %}aria-describedby="share-editor-public-review-notice"{% endif %}>
+                <i class="bi bi-check-circle" aria-hidden="true"></i>
+                <span>{% if editor_mode == 'create' %}创建分享{% else %}保存修改{% endif %}</span>
+            </button>
+            {% if editor_mode == 'create' %}
+            <a href="{% url 'index' %}" class="btn btn-outline-secondary share-editor-actions__cancel">
+                <i class="bi bi-x-circle" aria-hidden="true"></i>
+                <span>取消</span>
+            </a>
+            {% else %}
+            <a href="{% url 'share_detail' share.share_id %}" class="btn btn-outline-secondary share-editor-actions__cancel">
+                <i class="bi bi-x-circle" aria-hidden="true"></i>
+                <span>取消</span>
+            </a>
+            {% endif %}
+        </div>
+    </form>
+</section>

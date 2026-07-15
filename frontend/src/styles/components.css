@@ -100,12 +100,6 @@
   position: relative;
 }
 
-[data-share-rich-text-editor].ql-container {
-  height: 200px;
-  font-family: inherit;
-  font-size: inherit;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .card-hover,
   .hover-lift,

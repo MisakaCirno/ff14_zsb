@@ -1,0 +1,26 @@
+<div
+    class="share-editor-field{% if field.errors %} share-editor-field--invalid{% endif %}"
+    data-share-field="{{ field.name }}"
+    {% if field.help_text %}data-share-help-id="{{ field.auto_id }}_helptext"{% endif %}
+    {% if field.errors %}data-share-error-id="{{ field.id_for_label }}_error"{% endif %}>
+    <label class="share-editor-field__label form-label" for="{{ field.id_for_label }}">
+        <span>{{ field.label }}</span>
+        {% if field.field.required %}
+        <span class="share-editor-field__required" aria-hidden="true">*</span>
+        <span class="visually-hidden">（必填）</span>
+        {% else %}
+        <span class="share-editor-field__optional">可选</span>
+        {% endif %}
+    </label>
+    {{ field }}
+    {% if field.help_text %}
+    <p class="share-editor-field__help form-text" id="{{ field.auto_id }}_helptext">
+        {{ field.help_text }}
+    </p>
+    {% endif %}
+    {% if field.errors %}
+    <div class="share-editor-field__errors">
+        {{ field.errors }}
+    </div>
+    {% endif %}
+</div>

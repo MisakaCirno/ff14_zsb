@@ -88,6 +88,7 @@ class ShareForm(forms.ModelForm):
     """分享创建/编辑表单"""
     strategy_code = forms.CharField(
         label='战术板代码',
+        help_text='可直接粘贴游戏导出的完整文本，系统会提取其中的 [stgy:...] 代码。',
         max_length=STRATEGY_CODE_INPUT_MAX_LENGTH,
         widget=forms.Textarea(attrs={
             'class': 'form-control',
@@ -98,6 +99,7 @@ class ShareForm(forms.ModelForm):
     )
     description = forms.CharField(
         label='描述',
+        help_text='可选。支持标题、列表、引用和代码块等常用排版。',
         required=False,
         max_length=RICH_TEXT_MAX_LENGTH,
         widget=forms.Textarea(attrs={
@@ -113,8 +115,6 @@ class ShareForm(forms.ModelForm):
         fields = ['title', 'strategy_code', 'description', 'category', 'visibility', 'is_spoiler', 'is_nsfw', 'is_original']
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '输入标题'}),
-            'strategy_code': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': '粘贴战术板代码，例如：[stgy:a0+k-wvpr...]'}),
-            'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '添加描述（可选）'}),
             'category': forms.Select(attrs={'class': 'form-select'}),
             'visibility': forms.Select(attrs={'class': 'form-select'}),
             'is_spoiler': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -123,14 +123,17 @@ class ShareForm(forms.ModelForm):
         }
         labels = {
             'title': '标题',
-            'strategy_code': '战术板代码',
-            'description': '描述',
             'category': '分类',
             'visibility': '可见性',
             'is_spoiler': '可能包含剧透',
             'is_nsfw': '可能令人不适',
             'is_original': '我是原创作者',
         }
+        help_texts = {
+            'category': '战斗适合副本攻略和机制解法；娱乐适合绘画、风景和趣味玩法。',
+            'visibility': '公开内容需审核；不公开内容仅能通过链接或 ID 访问；私有内容仅自己可见。',
+        }
+
     def clean_strategy_code(self):
         return normalize_strategy_code(self.cleaned_data['strategy_code'])
 
@@ -140,6 +143,7 @@ class CreateShareForm(ShareForm):
 
     collection_id = forms.ModelChoiceField(
         label='添加到合集',
+        help_text='可选。新分享会追加到所选合集的末尾。',
         queryset=Collection.objects.none(),
         required=False,
         empty_label='-- 不添加到合集 --',

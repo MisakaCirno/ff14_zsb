@@ -1,0 +1,605 @@
+.share-editor-page {
+  container-name: share-editor-page;
+  container-type: inline-size;
+  display: grid;
+  gap: var(--app-space-5);
+  width: 100%;
+  max-width: 72rem;
+  min-width: 0;
+  margin-inline: auto;
+  padding-inline: clamp(var(--app-space-3), 3vw, var(--app-space-7));
+}
+
+.share-editor-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--app-space-5);
+  align-items: center;
+  min-width: 0;
+  padding: clamp(var(--app-space-4), 3vw, var(--app-space-6));
+  background:
+    linear-gradient(125deg, var(--app-color-primary-soft), transparent 50%),
+    var(--app-color-surface);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-xl);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.share-editor-hero__copy {
+  min-width: 0;
+}
+
+.share-editor-hero__eyebrow {
+  margin: 0 0 var(--app-space-1);
+  color: var(--app-color-primary);
+  font-size: var(--app-text-xs);
+  font-weight: var(--app-font-semibold);
+  letter-spacing: 0.08em;
+}
+
+.share-editor-hero__title {
+  display: flex;
+  gap: var(--app-space-2);
+  align-items: center;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(1.75rem, 4vw, 2.4rem);
+  line-height: var(--app-line-height-tight);
+}
+
+.share-editor-hero__title i {
+  flex: 0 0 auto;
+  color: var(--app-color-primary);
+}
+
+.share-editor-hero__description {
+  max-width: 52rem;
+  margin: var(--app-space-2) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--app-color-text-muted);
+  line-height: var(--app-line-height-relaxed);
+}
+
+.share-editor-hero__mode {
+  display: inline-flex;
+  gap: var(--app-space-2);
+  align-items: center;
+  min-height: 2.75rem;
+  padding: var(--app-space-2) var(--app-space-4);
+  color: var(--app-color-primary);
+  font-size: var(--app-text-sm);
+  font-weight: var(--app-font-semibold);
+  white-space: nowrap;
+  background: var(--app-color-primary-soft);
+  border: 1px solid var(--app-color-focus-border);
+  border-radius: var(--app-radius-pill);
+}
+
+.share-editor-form {
+  display: grid;
+  gap: var(--app-space-5);
+  min-width: 0;
+}
+
+.share-editor-form[aria-busy='true'] {
+  cursor: progress;
+}
+
+.share-editor-panel {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--app-color-surface);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-xl);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.share-editor-panel:focus-within {
+  border-color: var(--app-color-focus-border);
+  box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-focus-ring-color);
+}
+
+.share-editor-panel__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--app-space-3);
+  align-items: start;
+  min-width: 0;
+  padding: var(--app-space-4) var(--app-space-5);
+  background: var(--app-color-surface-muted);
+  border-bottom: 1px solid var(--app-color-border);
+}
+
+.share-editor-panel__icon {
+  display: inline-grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  color: var(--app-color-primary);
+  background: var(--app-color-primary-soft);
+  border-radius: var(--app-radius-md);
+}
+
+.share-editor-panel__header h2 {
+  margin: 0;
+  font-size: clamp(1.15rem, 3vw, 1.4rem);
+}
+
+.share-editor-panel__header p {
+  margin: var(--app-space-1) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--app-color-text-muted);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-line-height-relaxed);
+}
+
+.share-editor-panel__body {
+  display: grid;
+  gap: var(--app-space-5);
+  min-width: 0;
+  padding: clamp(var(--app-space-4), 3vw, var(--app-space-6));
+}
+
+.share-editor-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-4);
+  min-width: 0;
+}
+
+.share-editor-field {
+  min-width: 0;
+}
+
+.share-editor-field--description.mb-3 {
+  margin-bottom: 0 !important;
+}
+
+.share-editor-field--description:focus {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring-color);
+  outline-offset: var(--app-focus-ring-offset);
+}
+
+.share-editor-field__label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1) var(--app-space-2);
+  align-items: baseline;
+  margin-bottom: var(--app-space-2);
+  color: var(--app-color-text);
+  font-weight: var(--app-font-semibold);
+}
+
+.share-editor-field__required {
+  color: var(--app-color-danger);
+}
+
+.share-editor-field__optional {
+  color: var(--app-color-text-muted);
+  font-size: var(--app-text-xs);
+  font-weight: var(--app-font-medium);
+}
+
+.share-editor-field > .form-control,
+.share-editor-field > .form-select,
+.share-editor-field__native,
+.share-editor-field__native > textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.share-editor-field textarea {
+  min-height: 7.5rem;
+  resize: vertical;
+}
+
+.share-editor-field__help {
+  margin: var(--app-space-2) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--app-color-text-muted);
+  line-height: var(--app-line-height-relaxed);
+}
+
+.share-editor-field--invalid > .form-control,
+.share-editor-field--invalid > .form-select,
+.share-editor-field--invalid .share-editor-field__native > textarea,
+.share-editor-field--invalid .ql-toolbar.ql-snow,
+.share-editor-field--invalid [data-share-rich-text-editor].ql-container {
+  border-color: var(--app-color-danger);
+}
+
+.share-editor-field__errors .errorlist {
+  display: grid;
+  gap: var(--app-space-1);
+  margin: var(--app-space-2) 0 0;
+  padding-left: 1.25rem;
+  color: var(--app-color-danger);
+  font-size: var(--app-text-sm);
+}
+
+.share-editor-field__errors li {
+  overflow-wrap: anywhere;
+}
+
+.share-editor-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--app-space-3);
+  min-width: 0;
+  padding: var(--app-space-4) var(--app-space-5);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-lg);
+}
+
+.share-editor-notice > i {
+  margin-top: 0.1em;
+  font-size: var(--app-text-xl);
+}
+
+.share-editor-notice h2,
+.share-editor-notice h3 {
+  margin: 0;
+  font-size: var(--app-text-base);
+}
+
+.share-editor-notice p {
+  margin: var(--app-space-1) 0 0;
+  overflow-wrap: anywhere;
+  font-size: var(--app-text-sm);
+  line-height: var(--app-line-height-relaxed);
+}
+
+.share-editor-notice--community {
+  background: rgba(255, 193, 7, 0.1);
+  border-color: rgba(153, 115, 0, 0.3);
+}
+
+.share-editor-notice--community > i {
+  color: #8a6800;
+}
+
+.share-editor-notice--anonymous {
+  background: rgba(220, 53, 69, 0.06);
+  border-color: rgba(220, 53, 69, 0.35);
+}
+
+.share-editor-notice--anonymous > i,
+.share-editor-notice--anonymous h3 {
+  color: var(--app-color-danger);
+}
+
+.share-editor-notice--review {
+  background: var(--app-color-primary-soft);
+  border-color: var(--app-color-focus-border);
+}
+
+.share-editor-notice--review > i,
+.share-editor-notice--review h3 {
+  color: var(--app-color-primary);
+}
+
+.share-editor-error-summary {
+  min-width: 0;
+  padding: var(--app-space-4) var(--app-space-5);
+  background: rgba(220, 53, 69, 0.06);
+  border: 1px solid rgba(220, 53, 69, 0.45);
+  border-left-width: 0.35rem;
+  border-radius: var(--app-radius-lg);
+}
+
+.share-editor-error-summary:focus-visible {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring-color);
+  outline-offset: var(--app-focus-ring-offset);
+}
+
+.share-editor-error-summary__heading {
+  display: flex;
+  gap: var(--app-space-2);
+  align-items: center;
+  color: var(--app-color-danger);
+}
+
+.share-editor-error-summary__heading h2 {
+  margin: 0;
+  font-size: var(--app-text-lg);
+}
+
+.share-editor-error-summary > p {
+  margin: var(--app-space-2) 0 0;
+}
+
+.share-editor-error-summary ul {
+  display: grid;
+  gap: var(--app-space-1);
+  margin: var(--app-space-3) 0 0;
+  padding-left: 1.25rem;
+}
+
+.share-editor-error-summary li,
+.share-editor-error-summary a {
+  overflow-wrap: anywhere;
+}
+
+.share-editor-error-summary a {
+  color: var(--app-color-danger);
+  font-weight: var(--app-font-medium);
+  text-underline-offset: 0.16em;
+}
+
+.share-editor-flags {
+  min-width: 0;
+  margin: 0;
+  padding: var(--app-space-4);
+  background: var(--app-color-surface-muted);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-lg);
+}
+
+.share-editor-flags legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  align-items: baseline;
+  width: auto;
+  margin: 0;
+  padding: 0 var(--app-space-2);
+  font-size: var(--app-text-base);
+  font-weight: var(--app-font-semibold);
+}
+
+.share-editor-flags > p {
+  margin: 0 0 var(--app-space-3);
+  color: var(--app-color-text-muted);
+  font-size: var(--app-text-sm);
+}
+
+.share-editor-flags__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--app-space-2);
+}
+
+.share-editor-flag {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--app-space-2);
+  align-items: center;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: var(--app-space-2) var(--app-space-3);
+  background: var(--app-color-surface);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-md);
+}
+
+.share-editor-flag:focus-within {
+  border-color: var(--app-color-focus-border);
+  box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-focus-ring-color);
+}
+
+.share-editor-flag label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.share-editor-flag .form-check-input {
+  margin: 0;
+}
+
+.share-editor-flag .share-editor-field__errors {
+  grid-column: 1 / -1;
+}
+
+.share-editor-actions {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) minmax(8rem, auto);
+  gap: var(--app-space-3);
+  width: min(100%, 32rem);
+  margin-left: auto;
+}
+
+.share-editor-actions .btn {
+  display: inline-flex;
+  gap: var(--app-space-2);
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 2.75rem;
+  overflow-wrap: anywhere;
+}
+
+.share-editor-actions__submit {
+  order: 1;
+}
+
+.share-editor-actions__cancel {
+  order: 2;
+}
+
+.share-editor-rich-text[hidden] {
+  display: none;
+}
+
+.share-editor-rich-text {
+  min-width: 0;
+}
+
+.share-editor-rich-text .ql-toolbar.ql-snow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-1);
+  padding: var(--app-space-2);
+  font-family: inherit;
+  background: var(--app-color-surface-muted);
+  border-color: var(--app-color-border-strong);
+  border-radius: var(--app-radius-md) var(--app-radius-md) 0 0;
+}
+
+.share-editor-rich-text .ql-toolbar.ql-snow .ql-formats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem;
+  align-items: center;
+  margin: 0;
+}
+
+.share-editor-rich-text .ql-toolbar.ql-snow button {
+  float: none;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0.6rem;
+  border-radius: var(--app-radius-sm);
+}
+
+.share-editor-rich-text .ql-toolbar.ql-snow button:hover,
+.share-editor-rich-text .ql-toolbar.ql-snow button:focus-visible,
+.share-editor-rich-text .ql-toolbar.ql-snow button.ql-active {
+  color: var(--app-color-primary);
+  background: var(--app-color-primary-soft);
+}
+
+.share-editor-rich-text .ql-toolbar.ql-snow button:focus-visible,
+.share-editor-rich-text .ql-toolbar.ql-snow .ql-picker-label:focus-visible,
+.share-editor-rich-text .ql-toolbar.ql-snow .ql-picker-item:focus-visible,
+.share-editor-rich-text .ql-editor:focus-visible {
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring-color);
+  outline-offset: var(--app-focus-ring-offset);
+}
+
+.share-editor-rich-text .ql-snow .ql-picker {
+  float: none;
+  height: 2.75rem;
+}
+
+.share-editor-rich-text .ql-snow .ql-picker-label {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  border-radius: var(--app-radius-sm);
+}
+
+.share-editor-rich-text .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label::before,
+.share-editor-rich-text .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item:not([data-value])::before {
+  content: '正文';
+}
+
+.share-editor-rich-text .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item[data-value='2']::before {
+  content: '二级标题';
+}
+
+.share-editor-rich-text .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-item[data-value='3']::before {
+  content: '三级标题';
+}
+
+.share-editor-rich-text .ql-container.ql-snow .ql-tooltip::before {
+  content: '链接：';
+}
+
+.share-editor-rich-text .ql-container.ql-snow .ql-tooltip[data-mode='link']::before {
+  content: '输入链接：';
+}
+
+.share-editor-rich-text .ql-container.ql-snow .ql-tooltip a.ql-action::after {
+  content: '编辑';
+}
+
+.share-editor-rich-text .ql-container.ql-snow .ql-tooltip.ql-editing a.ql-action::after {
+  content: '保存';
+}
+
+.share-editor-rich-text .ql-container.ql-snow .ql-tooltip a.ql-remove::before {
+  content: '移除';
+}
+
+.share-editor-rich-text [data-share-rich-text-editor].ql-container {
+  height: auto;
+  min-height: 12rem;
+  overflow: visible;
+  font-family: inherit;
+  font-size: inherit;
+  border-color: var(--app-color-border-strong);
+  border-radius: 0 0 var(--app-radius-md) var(--app-radius-md);
+}
+
+.share-editor-rich-text .ql-editor {
+  min-height: 12rem;
+  max-height: 32rem;
+  overflow-y: auto;
+  line-height: var(--app-line-height-relaxed);
+}
+
+@container share-editor-page (max-width: 44rem) {
+  .share-editor-hero {
+    grid-template-columns: 1fr;
+    gap: var(--app-space-3);
+  }
+
+  .share-editor-hero__mode {
+    width: fit-content;
+  }
+
+  .share-editor-fields-grid,
+  .share-editor-flags__options {
+    grid-template-columns: 1fr;
+  }
+
+  .share-editor-actions {
+    width: 100%;
+  }
+}
+
+@container share-editor-page (max-width: 32rem) {
+  .share-editor-panel__header,
+  .share-editor-panel__body,
+  .share-editor-notice,
+  .share-editor-error-summary {
+    padding-inline: var(--app-space-3);
+  }
+
+  .share-editor-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .share-editor-actions__submit,
+  .share-editor-actions__cancel {
+    order: initial;
+    width: 100%;
+  }
+
+  .share-editor-rich-text .ql-toolbar.ql-snow .ql-formats {
+    max-width: 100%;
+  }
+}
+
+@media (pointer: coarse) {
+  .share-editor-rich-text .ql-toolbar.ql-snow button,
+  .share-editor-rich-text .ql-snow .ql-picker-label,
+  .share-editor-actions .btn,
+  .share-editor-flag {
+    min-height: 2.75rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .share-editor-hero,
+  .share-editor-panel,
+  .share-editor-notice,
+  .share-editor-error-summary,
+  .share-editor-flags,
+  .share-editor-flag {
+    border-color: CanvasText;
+  }
+
+  .share-editor-page .form-control:focus,
+  .share-editor-page .form-select:focus,
+  .share-editor-page .form-check-input:focus,
+  .share-editor-field--description:focus {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+}
