@@ -11,6 +11,28 @@ python manage.py createsuperuser
 
 测试密码仅在交互提示中输入，不要把真实密码写入文档、代码、工单或版本库。
 
+## 自动化与可访问性回归
+
+提交前运行完整验证：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\verify.ps1
+```
+
+前端行为测试和颜色对比度也可单独运行：
+
+```powershell
+npm --prefix frontend test
+npm --prefix frontend run check:contrast
+```
+
+颜色检查通过后，仍需使用隔离的本地数据库在 `1440×1000`、`768×1024` 和 `320×800` 三个视口验收首页、分享详情、站内信、登录、创建分享和管理审核页面：
+
+- 使用 Tab 和 Shift+Tab 检查焦点可见性与顺序。
+- 检查正常、悬停、激活、禁用、成功、警告、危险和信息状态。
+- 确认 `scrollWidth <= clientWidth`，焦点环不被卡片、图片或屏幕边缘裁切。
+- 普通文本对比度至少 4.5:1；大号文本和非文本界面至少 3:1。
+
 ## 测试步骤
 
 ### 1️⃣ 测试昵称设置功能
