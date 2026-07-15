@@ -97,7 +97,7 @@
                 {% if current_tab == 'my_shares' %}
                 {% include 'shares/includes/share_card.html' with share=share card_variant='management' only %}
                 {% else %}
-                {% include 'shares/includes/share_card.html' with share=share card_variant='browse' viewer=user only %}
+                {% include 'shares/includes/share_card.html' with interaction_return_url=share_interaction_return_url csrf_token=csrf_token share=share card_variant='browse' viewer=user only %}
                 {% endif %}
             {% empty %}
             <div class="col-12">

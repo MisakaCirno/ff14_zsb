@@ -1,5 +1,5 @@
 from django.db.models import F
-from django.http import HttpResponseBadRequest, JsonResponse
+from django.http import HttpResponseBadRequest, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -14,7 +14,7 @@ from shares.services.interactions import (
     set_favorite_state,
     set_like_state,
 )
-from shares.web.decorators import login_required_or_hx_redirect
+from shares.web.decorators import get_safe_local_return_url, login_required_or_hx_redirect
 
 
 INTERACTION_FRAGMENTS = {'card', 'detail'}
@@ -40,6 +40,16 @@ def _invalid_target_state_response(is_htmx):
 
 def _hidden_share_response():
     return JsonResponse({'status': 'error', 'message': 'Share not found'}, status=404)
+
+
+def _interaction_success_response(request, result, payload):
+    if 'next' in request.POST:
+        return_url = (
+            get_safe_local_return_url(request, request.POST.get('next'))
+            or result.share.get_absolute_url()
+        )
+        return HttpResponseRedirect(return_url)
+    return JsonResponse(payload)
 
 
 def _record_counter(request, share, *, cookie_name, rule_name, field_name):
@@ -128,7 +138,7 @@ def toggle_like(request, share_id):
             'likes_count': result.count,
             'interaction_fragment': fragment,
         })
-    return JsonResponse({
+    return _interaction_success_response(request, result, {
         'status': 'success',
         'is_liked': result.is_active,
         'likes_count': result.count,
@@ -162,7 +172,7 @@ def toggle_favorite(request, share_id):
             'favorites_count': result.count,
             'interaction_fragment': fragment,
         })
-    return JsonResponse({
+    return _interaction_success_response(request, result, {
         'status': 'success',
         'is_favorited': result.is_active,
         'favorites_count': result.count,

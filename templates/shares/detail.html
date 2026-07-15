@@ -93,6 +93,9 @@
                 </a>
                 {% endif %}
             </div>
+            {% if detail.actions.can_edit or detail.actions.can_report or detail.actions.can_view_logs %}
+            {% include 'shares/includes/share_interaction_form.html' with share=share interaction_fragment='detail' interaction_return_url=canonical_share_path csrf_token=csrf_token only %}
+            {% endif %}
         </div>
     </header>
 

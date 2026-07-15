@@ -7,7 +7,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from shares.forms import CreateShareForm, EditShareForm
 from shares.models import Collection, Share
 from shares.policies import can_view_share, is_moderator, viewable_share_queryset
-from shares.presentation import build_share_detail_view_model
+from shares.presentation import (
+    build_my_reaction_return_url,
+    build_share_detail_view_model,
+)
 from shares.rate_limits import consume_rate_limit, request_identity
 from shares.selectors import (
     annotate_share_cards,
@@ -163,5 +166,11 @@ def my_shares(request):
             else ('-created_at', '-pk')
         )
     queryset = annotate_share_cards(queryset, request.user).order_by(*ordering)
-    context['shares'] = Paginator(queryset, 12).get_page(page_number)
+    shares = Paginator(queryset, 12).get_page(page_number)
+    context['shares'] = shares
+    if tab in {'likes', 'favorites'}:
+        context['share_interaction_return_url'] = build_my_reaction_return_url(
+            tab=tab,
+            page_number=shares.number,
+        )
     return render(request, 'shares/my_shares.html', context)

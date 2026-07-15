@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from urllib.parse import urlencode
 
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, resolve_url
@@ -360,13 +361,31 @@ def build_query_string(request, **updates):
     return params.urlencode()
 
 
-def build_share_cards_return_url(request):
+def build_share_cards_return_url(request, *, page_number):
     params = request.GET.copy()
     params.pop('partial', None)
-    params.pop('page', None)
     params.pop('continuation', None)
+    transport_request = (
+        is_htmx_request(request)
+        or request.GET.get('partial') == 'shares'
+        or request.GET.get('continuation') == '1'
+        or request.GET.get('feed') == UserProfile.HomeFeedMode.INFINITE
+    )
+    if transport_request or page_number <= 1:
+        params.pop('page', None)
+    else:
+        params['page'] = str(page_number)
     query = params.urlencode()
     return f'{request.path}?{query}' if query else request.path
+
+
+def build_my_reaction_return_url(*, tab, page_number):
+    """Build a canonical return target for reaction cards in My Content."""
+    if tab not in {'likes', 'favorites'}:
+        raise ValueError('Unsupported reaction tab.')
+    page_number = max(1, int(page_number))
+    query = urlencode({'tab': tab, 'page': page_number})
+    return f"{reverse('my_shares')}?{query}"
 
 
 def build_share_cards_next_query(request, shares):
@@ -394,7 +413,10 @@ def redirect_response(request, to, *args, **kwargs):
 def render_share_cards_response(request, shares):
     context = {
         'shares': shares,
-        'share_cards_return_url': build_share_cards_return_url(request),
+        'share_cards_return_url': build_share_cards_return_url(
+            request,
+            page_number=shares.number,
+        ),
         'share_cards_next_query': build_share_cards_next_query(request, shares),
     }
     is_continuation = (

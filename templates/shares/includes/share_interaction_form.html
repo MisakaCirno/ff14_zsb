@@ -1,0 +1,9 @@
+{% with fragment=interaction_fragment|default:'card' %}
+<form
+    id="share-interaction-form-{{ fragment }}-{{ share.share_id }}"
+    method="post"
+    data-share-interaction-form="{{ fragment }}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ interaction_return_url }}">
+</form>
+{% endwith %}

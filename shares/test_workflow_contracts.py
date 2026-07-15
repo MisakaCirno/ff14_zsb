@@ -684,12 +684,200 @@ class InteractionWorkflowTests(TestCase):
         ]
 
         for response in add_responses:
-            self.assertTrue(response.json()['is_favorited'])
-            self.assertEqual(response.json()['favorites_count'], 1)
+            self.assertEqual(response.json(), {
+                'status': 'success',
+                'is_favorited': True,
+                'favorites_count': 1,
+            })
         for response in remove_responses:
-            self.assertFalse(response.json()['is_favorited'])
-            self.assertEqual(response.json()['favorites_count'], 0)
+            self.assertEqual(response.json(), {
+                'status': 'success',
+                'is_favorited': False,
+                'favorites_count': 0,
+            })
         self.assertFalse(self.share.favorites.filter(pk=self.user.pk).exists())
+
+    def test_plain_form_interactions_redirect_and_remain_idempotent(self):
+        self.client.force_login(self.user)
+        return_url = f'{self.share.get_absolute_url()}?source=interaction#actions'
+
+        for url_name, relation_name in (
+            ('toggle_like', 'likes'),
+            ('toggle_favorite', 'favorites'),
+        ):
+            relation = getattr(self.share, relation_name)
+            for target_state, expected_active in (
+                ('active', True),
+                ('active', True),
+                ('inactive', False),
+                ('inactive', False),
+            ):
+                with self.subTest(endpoint=url_name, target_state=target_state):
+                    response = self.client.post(
+                        reverse(url_name, args=[self.share.share_id]),
+                        {'target_state': target_state, 'next': return_url},
+                    )
+
+                    self.assertEqual(response.status_code, 302)
+                    self.assertEqual(response.headers['Location'], return_url)
+                    self.assertEqual(
+                        relation.filter(pk=self.user.pk).exists(),
+                        expected_active,
+                    )
+                    self.assertIn('HX-Request', response.headers['Vary'])
+                    self.assertIn('Cookie', response.headers['Vary'])
+                    self.assertIn('no-store', response.headers['Cache-Control'])
+
+    def test_plain_form_interaction_normalizes_same_origin_https_next(self):
+        self.client.force_login(self.user)
+        return_url = f'{self.share.get_absolute_url()}?source=absolute#actions'
+
+        response = self.client.post(
+            reverse('toggle_like', args=[self.share.share_id]),
+            {
+                'target_state': 'active',
+                'next': f'https://testserver{return_url}',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers['Location'], return_url)
+        self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
+
+    def test_plain_form_interaction_rejects_unsafe_next(self):
+        self.client.force_login(self.user)
+        action_url = reverse('toggle_like', args=[self.share.share_id])
+        canonical_url = self.share.get_absolute_url()
+        unsafe_urls = (
+            'https://example.invalid/phishing',
+            '//example.invalid/phishing',
+            '///example.invalid/phishing',
+            'relative/path',
+            '/\\example.invalid/phishing',
+            'https://testserver.example.invalid/phishing',
+            'javascript:alert(1)',
+            'https://[invalid',
+            f'{canonical_url}\r\nX-Injected: true',
+        )
+
+        for unsafe_url in unsafe_urls:
+            with self.subTest(next=unsafe_url):
+                response = self.client.post(
+                    action_url,
+                    {'target_state': 'active', 'next': unsafe_url},
+                )
+
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.headers['Location'], canonical_url)
+
+        insecure_response = self.client.post(
+            action_url,
+            {
+                'target_state': 'active',
+                'next': f'http://testserver{canonical_url}',
+            },
+            secure=True,
+        )
+        self.assertEqual(insecure_response.status_code, 302)
+        self.assertEqual(insecure_response.headers['Location'], canonical_url)
+
+    def test_hx_interaction_ignores_form_next_and_returns_fragment(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse('toggle_favorite', args=[self.share.share_id]) + '?fragment=card',
+            {
+                'target_state': 'active',
+                'next': self.share.get_absolute_url(),
+            },
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers['Content-Type'].startswith('text/html'))
+        self.assertNotIn('Location', response.headers)
+        self.assertContains(response, 'hx-post=')
+        self.assertTrue(self.share.favorites.filter(pk=self.user.pk).exists())
+
+    def test_plain_form_login_redirect_uses_a_validated_source_page(self):
+        action_url = reverse('toggle_like', args=[self.share.share_id])
+        detail_url = self.share.get_absolute_url()
+        form_source = f'{detail_url}?source=form'
+        referer_source = f'{detail_url}?source=referer'
+
+        response = self.client.post(
+            action_url,
+            {'target_state': 'active', 'next': form_source},
+            HTTP_REFERER=f'http://testserver{referer_source}',
+        )
+        redirect_query = parse_qs(urlsplit(response.headers['Location']).query)
+        self.assertEqual(redirect_query['next'], [form_source])
+        self.assertNotEqual(redirect_query['next'], [action_url])
+
+        unsafe_response = self.client.post(
+            action_url,
+            {
+                'target_state': 'active',
+                'next': 'https://example.invalid/phishing',
+            },
+            HTTP_REFERER=f'http://testserver{referer_source}',
+        )
+        unsafe_redirect_query = parse_qs(
+            urlsplit(unsafe_response.headers['Location']).query,
+        )
+        self.assertEqual(unsafe_redirect_query['next'], [referer_source])
+        self.assertNotEqual(unsafe_redirect_query['next'], [action_url])
+
+        no_referer_response = self.client.post(
+            action_url,
+            {
+                'target_state': 'active',
+                'next': 'javascript:alert(1)',
+            },
+        )
+        no_referer_redirect_query = parse_qs(
+            urlsplit(no_referer_response.headers['Location']).query,
+        )
+        self.assertEqual(no_referer_redirect_query['next'], [detail_url])
+        self.assertNotEqual(no_referer_redirect_query['next'], [action_url])
+        self.assertFalse(self.share.likes.exists())
+
+    def test_plain_interaction_without_next_preserves_legacy_login_return_url(self):
+        action_url = reverse('toggle_favorite', args=[self.share.share_id])
+
+        response = self.client.post(action_url, {'target_state': 'active'})
+
+        redirect_query = parse_qs(urlsplit(response.headers['Location']).query)
+        self.assertEqual(redirect_query['next'], [action_url])
+        self.assertFalse(self.share.favorites.exists())
+
+    def test_plain_form_interaction_requires_csrf_token(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(self.user)
+        action_url = reverse('toggle_like', args=[self.share.share_id])
+        detail_url = self.share.get_absolute_url()
+
+        denied = csrf_client.post(
+            action_url,
+            {'target_state': 'active', 'next': detail_url},
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
+
+        page = csrf_client.get(detail_url)
+        csrf_token = page.cookies['csrftoken'].value
+        allowed = csrf_client.post(
+            action_url,
+            {
+                'target_state': 'active',
+                'next': detail_url,
+                'csrfmiddlewaretoken': csrf_token,
+            },
+        )
+
+        self.assertEqual(allowed.status_code, 302)
+        self.assertEqual(allowed.headers['Location'], detail_url)
+        self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
 
     def test_hx_favorite_endpoint_returns_reusable_card_button(self):
         self.client.force_login(self.user)
@@ -804,6 +992,7 @@ class InteractionWorkflowTests(TestCase):
 
     def test_expired_hx_interaction_rejects_external_current_url(self):
         action_url = reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card'
+        detail_url = self.share.get_absolute_url()
 
         response = self.client.post(
             action_url,
@@ -813,7 +1002,39 @@ class InteractionWorkflowTests(TestCase):
         )
 
         redirect_query = parse_qs(urlsplit(response.headers['HX-Redirect']).query)
-        self.assertEqual(redirect_query['next'], [action_url])
+        self.assertEqual(redirect_query['next'], [detail_url])
+
+    def test_expired_hx_interaction_uses_safe_form_next_when_current_url_is_missing(self):
+        detail_url = self.share.get_absolute_url()
+        form_source = f'{detail_url}?source=hx-form'
+
+        response = self.client.post(
+            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card',
+            {'target_state': 'active', 'next': form_source},
+            HTTP_HX_REQUEST='true',
+        )
+
+        redirect_query = parse_qs(urlsplit(response.headers['HX-Redirect']).query)
+        self.assertEqual(redirect_query['next'], [form_source])
+        self.assertFalse(self.share.likes.exists())
+
+    def test_expired_hx_interaction_falls_back_to_canonical_detail(self):
+        detail_url = self.share.get_absolute_url()
+
+        response = self.client.post(
+            reverse('toggle_favorite', args=[self.share.share_id]) + '?fragment=detail',
+            {
+                'target_state': 'active',
+                'next': 'javascript:alert(1)',
+            },
+            HTTP_HX_REQUEST='true',
+            HTTP_HX_CURRENT_URL='https://example.invalid/phishing',
+            HTTP_REFERER='//example.invalid/phishing',
+        )
+
+        redirect_query = parse_qs(urlsplit(response.headers['HX-Redirect']).query)
+        self.assertEqual(redirect_query['next'], [detail_url])
+        self.assertFalse(self.share.favorites.exists())
 
     def test_hx_detail_interaction_requires_csrf_token(self):
         csrf_client = Client(enforce_csrf_checks=True)

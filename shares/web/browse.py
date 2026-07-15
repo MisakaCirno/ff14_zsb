@@ -127,7 +127,10 @@ def index(request):
             page=None,
             partial=None,
         ),
-        'share_cards_return_url': build_share_cards_return_url(request),
+        'share_cards_return_url': build_share_cards_return_url(
+            request,
+            page_number=shares.number,
+        ),
         'share_cards_next_query': build_share_cards_next_query(request, shares),
     })
 
@@ -174,7 +177,10 @@ def search(request):
             page=None,
             partial=None,
         ),
-        'share_cards_return_url': build_share_cards_return_url(request),
+        'share_cards_return_url': build_share_cards_return_url(
+            request,
+            page_number=shares.number,
+        ),
         'share_cards_next_query': build_share_cards_next_query(request, shares),
     })
 

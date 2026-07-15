@@ -105,8 +105,8 @@
 
                 <div class="btn-group browse-card__action-group" role="group" aria-label="互动操作">
                     {% if viewer.is_authenticated %}
-                    {% include 'shares/includes/like_button.html' with is_liked=share.is_liked likes_count=share.likes_count %}
-                    {% include 'shares/includes/favorite_button.html' with is_favorited=share.is_favorited favorites_count=share.favorites_count %}
+                    {% include 'shares/includes/like_button.html' with share=share is_liked=share.is_liked likes_count=share.likes_count interaction_fragment='card' only %}
+                    {% include 'shares/includes/favorite_button.html' with share=share is_favorited=share.is_favorited favorites_count=share.favorites_count interaction_fragment='card' only %}
                     {% else %}
                     <a href="{% url 'login' %}?next={{ login_return_url|urlencode }}" class="btn btn-sm btn-outline-danger hover-lift" title="登录后点赞" aria-label="登录后点赞《{{ share.title }}》，当前 {{ share.likes_count }} 个点赞">
                         <i class="bi bi-heart" aria-hidden="true"></i>
@@ -119,6 +119,9 @@
                     {% endif %}
                 </div>
             </div>
+            {% if viewer.is_authenticated %}
+            {% include 'shares/includes/share_interaction_form.html' with share=share interaction_fragment='card' interaction_return_url=interaction_return_url csrf_token=csrf_token only %}
+            {% endif %}
             {% endif %}
         </footer>
     </article>

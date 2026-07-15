@@ -60,6 +60,45 @@ class HomeFeedModeTests(TestCase):
         self.assertContains(response, '?feed=paginated&amp;page=2')
         self.assertNotContains(response, 'id="infinite-scroll-sentinel"')
 
+    def test_paginated_reaction_return_url_preserves_resolved_page(self):
+        self.client.login(username='alice', password='password123')
+
+        for path, query, expected_return_url in (
+            (
+                reverse('index'),
+                {
+                    'feed': UserProfile.HomeFeedMode.PAGINATED,
+                    'page': '999',
+                },
+                '/?feed=paginated&amp;page=2',
+            ),
+            (
+                reverse('search'),
+                {
+                    'q': '分享',
+                    'feed': UserProfile.HomeFeedMode.PAGINATED,
+                    'page': '999',
+                },
+                '/search/?q=%E5%88%86%E4%BA%AB&amp;feed=paginated&amp;page=2',
+            ),
+            (
+                reverse('index'),
+                {
+                    'feed': UserProfile.HomeFeedMode.PAGINATED,
+                    'page': 'invalid',
+                },
+                '/?feed=paginated',
+            ),
+        ):
+            with self.subTest(path=path, query=query):
+                response = self.client.get(path, query)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(
+                    response,
+                    f'name="next" value="{expected_return_url}"',
+                )
+
     def test_post_feed_mode_choice_is_saved(self):
         self.client.login(username='alice', password='password123')
         self.user.profile.home_feed_mode = UserProfile.HomeFeedMode.PAGINATED
@@ -150,6 +189,48 @@ class HomeFeedModeTests(TestCase):
         )
         self.assertNotIn('partial%3Dshares', html)
         self.assertNotIn('page%3D2', html)
+
+    def test_reaction_return_url_drops_transport_page_state(self):
+        self.client.login(username='alice', password='password123')
+        cases = (
+            (
+                self.client.get(reverse('index'), {
+                    'feed': UserProfile.HomeFeedMode.PAGINATED,
+                    'partial': 'shares',
+                    'page': 2,
+                    'sort': 'likes',
+                }).json()['html'],
+                '/?feed=paginated&amp;sort=likes',
+            ),
+            (
+                self.client.get(
+                    reverse('index'),
+                    {
+                        'feed': UserProfile.HomeFeedMode.INFINITE,
+                        'continuation': '1',
+                        'page': 2,
+                        'sort': 'likes',
+                    },
+                    HTTP_HX_REQUEST='true',
+                ).content.decode(),
+                '/?feed=infinite&amp;sort=likes',
+            ),
+            (
+                self.client.get(reverse('index'), {
+                    'feed': UserProfile.HomeFeedMode.INFINITE,
+                    'page': 2,
+                    'sort': 'likes',
+                }).content.decode(),
+                '/?feed=infinite&amp;sort=likes',
+            ),
+        )
+
+        for html, expected_return_url in cases:
+            with self.subTest(return_url=expected_return_url):
+                self.assertIn(
+                    f'name="next" value="{expected_return_url}"',
+                    html,
+                )
 
     def test_hx_request_returns_html_fragment_and_takes_precedence(self):
         response = self.client.get(

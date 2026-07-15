@@ -44,7 +44,7 @@
 
 HTMX 搜索遇到空查询、超长查询或精确分享 ID 时返回 `204` 和 `HX-Redirect`，由浏览器执行整页导航；普通请求继续使用标准 `302`。这样可以防止完整页面或详情页被交换进卡片网格。
 
-首页与局部响应共用 `templates/shares/includes/share_cards.html`。瀑布流 continuation 使用 `templates/shares/includes/share_cards_page.html` 包装卡片与下一页状态。匿名登录链接的 `next` 参数会移除 `partial`、`page` 和 `continuation` 并进行 URL 编码，登录后不会误落入局部响应。
+首页与局部响应共用 `templates/shares/includes/share_cards.html`。瀑布流 continuation 使用 `templates/shares/includes/share_cards_page.html` 包装卡片与下一页状态。普通完整分页的登录与互动返回地址保留 Paginator 解析后的实际页码；首页移除 `page`。局部 HTML、兼容 JSON、continuation 和 infinite 传输场景会移除 `partial`、`page` 与 `continuation`，并对登录链接的 `next` 进行 URL 编码，返回后不会误落入局部响应。
 
 `continuation` 是 R12 的内部传输参数，只在 HTMX 瀑布流请求中生效；旧 `partial=shares` JSON 与普通 HTMX 卡片片段继续保持 R11 契约。
 
@@ -54,12 +54,14 @@ HTMX 搜索遇到空查询、超长查询或精确分享 ID 时返回 `204` 和 
 
 - 请求体必须明确提交 `target_state=active` 或 `target_state=inactive`，分别表示确保关系存在或不存在；接口不再接受含义不确定的空请求体切换。
 - 相同目标状态的重复或并发请求是幂等的。服务端在短事务内重新检查访问权限并返回事务完成后的实际状态与计数。
-- 已登录的普通请求继续返回原 JSON 字段：点赞为 `status`、`is_liked`、`likes_count`，收藏为 `status`、`is_favorited`、`favorites_count`。
-- HTMX 请求必须指定 `fragment=card` 或 `fragment=detail`，返回与场景样式匹配的单个按钮 HTML，并由按钮以 `outerHTML` 替换自身。
+- 点赞和收藏按钮以携带 CSRF 令牌、显式目标状态和返回地址的原生 HTML 表单为基础能力；HTMX 只负责渐进增强局部更新，JavaScript 未加载或执行失败时仍可提交操作。
+- 已登录的普通请求未提交 `next` 时继续返回精确的原 JSON 字段：点赞为 `status`、`is_liked`、`likes_count`，收藏为 `status`、`is_favorited`、`favorites_count`。
+- 已登录的普通请求显式提交 `next` 时，安全的同源站内地址返回 `302`；非法、外站或不可解析的 `next` 回退到当前分享的 canonical detail 地址，不能形成开放重定向。
+- HTMX 请求必须指定 `fragment=card` 或 `fragment=detail`，返回与场景样式匹配的单个按钮 HTML，并由按钮以 `outerHTML` 替换自身；即使请求体同时包含 `next`，HTMX fragment 契约仍优先，不返回 `302`。
 - 缺少或传入未知 fragment、缺少或传入未知目标状态时返回 `400`，且不得改变点赞或收藏关系。
-- 登录会话失效时返回 `204` 和 `HX-Redirect`。登录回跳优先采用经过同源校验的 `HX-Current-URL`，禁止外站地址进入 `next`。
+- 登录会话失效时，HTMX 请求返回 `204` 和 `HX-Redirect`；普通表单进入登录页。登录回跳只采用经过同源校验的当前页面、显式 `next` 或来源页，无安全候选时回退到 canonical detail，绝不能落到仅接受 `POST` 的点赞或收藏动作地址。
 
-响应按 `HX-Request` 和 `Cookie` 区分，并使用私有 `no-store` 缓存策略。CSRF 保护保持启用，浏览器端由全局 HTMX 请求钩子注入 `X-CSRFToken`。
+响应按 `HX-Request` 和 `Cookie` 区分，并使用私有 `no-store` 缓存策略。CSRF 保护保持启用：原生表单携带 CSRF 字段，浏览器端仍由全局 HTMX 请求钩子注入 `X-CSRFToken`。
 
 R15 部署时必须同步发布后端与按钮模板。旧页面中的空请求体不会回退到有竞态的 toggle 语义，而会收到 `400`；用户刷新页面后即可获得携带显式目标状态的新按钮。该变更不影响“小抄儿”公开 API。
 

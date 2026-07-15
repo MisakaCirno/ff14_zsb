@@ -1,4 +1,5 @@
 import re
+from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -12,6 +13,53 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import Share
+
+
+class _InteractionMarkupProbe(HTMLParser):
+    _VOID_TAGS = {
+        'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
+        'meta', 'param', 'source', 'track', 'wbr',
+    }
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.elements = []
+        self._stack = []
+
+    def handle_starttag(self, tag, attrs):
+        element = {
+            'tag': tag,
+            'attrs': dict(attrs),
+            'ancestors': tuple(self._stack),
+        }
+        self.elements.append(element)
+        if tag not in self._VOID_TAGS:
+            self._stack.append(element)
+
+    def handle_startendtag(self, tag, attrs):
+        self.elements.append({
+            'tag': tag,
+            'attrs': dict(attrs),
+            'ancestors': tuple(self._stack),
+        })
+
+    def handle_endtag(self, tag):
+        for index in range(len(self._stack) - 1, -1, -1):
+            if self._stack[index]['tag'] == tag:
+                del self._stack[index:]
+                break
+
+    def matching(self, *, tag=None, attribute=None, value=None):
+        matches = self.elements
+        if tag is not None:
+            matches = [item for item in matches if item['tag'] == tag]
+        if attribute is not None:
+            matches = [
+                item for item in matches
+                if attribute in item['attrs']
+                and (value is None or item['attrs'][attribute] == value)
+            ]
+        return matches
 
 
 class FrontendShellContractTests(TestCase):
@@ -154,6 +202,237 @@ class FrontendShellContractTests(TestCase):
         self.assertNotIn('toggleFavorite()', content)
         self.assertNotIn('function toggleLike', content)
         self.assertNotIn('function toggleFavorite', content)
+
+    def test_reaction_forms_are_external_unique_and_referenceable(self):
+        second_share = Share.objects.create(
+            title='第二个表单契约',
+            strategy_code='[stgy:second-form-contract]',
+            author=self.author,
+            visibility=Share.Visibility.PUBLIC,
+            status=Share.Status.APPROVED,
+        )
+        self.client.force_login(self.author)
+        cases = (
+            (
+                self.client.get(reverse('index')),
+                'card',
+                reverse('index'),
+                {
+                    f'share-interaction-form-card-{self.share.share_id}',
+                    f'share-interaction-form-card-{second_share.share_id}',
+                },
+            ),
+            (
+                self.client.get(
+                    reverse('share_detail', args=[self.share.share_id]),
+                ),
+                'detail',
+                self.share.get_absolute_url(),
+                {f'share-interaction-form-detail-{self.share.share_id}'},
+            ),
+        )
+
+        for response, fragment, expected_next, expected_form_ids in cases:
+            with self.subTest(fragment=fragment):
+                probe = _InteractionMarkupProbe()
+                probe.feed(response.content.decode())
+                expected_form_id = (
+                    f'share-interaction-form-{fragment}-{self.share.share_id}'
+                )
+                forms = probe.matching(
+                    tag='form',
+                    attribute='data-share-interaction-form',
+                )
+                form_ids = [form['attrs'].get('id') for form in forms]
+
+                self.assertEqual(set(form_ids), expected_form_ids)
+                self.assertEqual(len(form_ids), len(set(form_ids)))
+                form = next(
+                    item for item in forms
+                    if item['attrs'].get('id') == expected_form_id
+                )
+                self.assertEqual(form['attrs'].get('method'), 'post')
+                self.assertNotIn(
+                    'form',
+                    {ancestor['tag'] for ancestor in form['ancestors']},
+                )
+                ancestor_classes = {
+                    class_name
+                    for ancestor in form['ancestors']
+                    for class_name in ancestor['attrs'].get('class', '').split()
+                }
+                self.assertNotIn('btn-group', ancestor_classes)
+                self.assertNotIn('browse-card__actions', ancestor_classes)
+
+                form_inputs = [
+                    item for item in probe.matching(tag='input')
+                    if form in item['ancestors']
+                ]
+                self.assertTrue(any(
+                    item['attrs'].get('name') == 'csrfmiddlewaretoken'
+                    and item['attrs'].get('value')
+                    for item in form_inputs
+                ))
+                self.assertTrue(any(
+                    item['attrs'].get('type') == 'hidden'
+                    and item['attrs'].get('name') == 'next'
+                    and item['attrs'].get('value') == expected_next
+                    for item in form_inputs
+                ))
+
+                expected_actions = {
+                    f'btn-like-{self.share.share_id}': reverse(
+                        'toggle_like', args=[self.share.share_id],
+                    ),
+                    f'btn-favorite-{self.share.share_id}': reverse(
+                        'toggle_favorite', args=[self.share.share_id],
+                    ),
+                }
+                for button_id, action in expected_actions.items():
+                    button = probe.matching(
+                        tag='button', attribute='id', value=button_id,
+                    )[0]
+                    self.assertEqual(button['attrs']['type'], 'submit')
+                    self.assertEqual(button['attrs']['form'], expected_form_id)
+                    self.assertEqual(button['attrs']['formaction'], action)
+                    self.assertEqual(button['attrs']['name'], 'target_state')
+                    self.assertEqual(button['attrs']['value'], 'active')
+                    self.assertNotIn(
+                        'form',
+                        {
+                            ancestor['tag']
+                            for ancestor in button['ancestors']
+                        },
+                    )
+                    if fragment == 'card':
+                        self.assertIn(
+                            'btn-group',
+                            button['ancestors'][-1]['attrs']
+                            .get('class', '').split(),
+                        )
+
+    def test_reaction_forms_render_only_with_authenticated_buttons(self):
+        anonymous_pages = (
+            self.client.get(reverse('index')),
+            self.client.get(
+                reverse('share_detail', args=[self.share.share_id]),
+            ),
+        )
+        for response in anonymous_pages:
+            probe = _InteractionMarkupProbe()
+            probe.feed(response.content.decode())
+            self.assertFalse(probe.matching(
+                tag='form', attribute='data-share-interaction-form',
+            ))
+
+        self.client.force_login(self.author)
+        non_interactive_variants = (
+            self.client.get(reverse('my_shares')),
+            self.client.get(reverse(
+                'user_public_profile', args=[self.author.username],
+            )),
+        )
+        for response in non_interactive_variants:
+            probe = _InteractionMarkupProbe()
+            probe.feed(response.content.decode())
+            self.assertFalse(probe.matching(
+                tag='form', attribute='data-share-interaction-form',
+            ))
+
+    def test_hx_reaction_fragments_keep_deterministic_form_references(self):
+        self.client.force_login(self.author)
+        cases = (
+            ('toggle_like', 'card'),
+            ('toggle_favorite', 'detail'),
+        )
+
+        for endpoint, fragment in cases:
+            with self.subTest(endpoint=endpoint, fragment=fragment):
+                response = self.client.post(
+                    reverse(endpoint, args=[self.share.share_id])
+                    + f'?fragment={fragment}',
+                    {'target_state': 'active'},
+                    HTTP_HX_REQUEST='true',
+                )
+                probe = _InteractionMarkupProbe()
+                probe.feed(response.content.decode())
+                buttons = probe.matching(tag='button', attribute='form')
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(len(buttons), 1)
+                self.assertEqual(
+                    buttons[0]['attrs']['form'],
+                    f'share-interaction-form-{fragment}-{self.share.share_id}',
+                )
+                self.assertEqual(buttons[0]['attrs']['hx-target'], 'this')
+                self.assertEqual(buttons[0]['attrs']['hx-swap'], 'outerHTML')
+                self.assertFalse(probe.matching(tag='form'))
+
+    def test_browse_and_my_reaction_forms_use_canonical_safe_return_urls(self):
+        self.share.likes.add(self.author)
+        self.share.favorites.add(self.author)
+        self.client.force_login(self.author)
+
+        browse_cases = (
+            (
+                reverse('index'),
+                {'sort': 'likes', 'page': '999', 'continuation': '1'},
+                '/?sort=likes',
+            ),
+            (
+                reverse('search'),
+                {'q': '前端', 'page': '999', 'partial': 'ignored'},
+                '/search/?q=%E5%89%8D%E7%AB%AF',
+            ),
+        )
+        for path, query, expected_next in browse_cases:
+            with self.subTest(path=path):
+                response = self.client.get(path, query)
+                probe = _InteractionMarkupProbe()
+                probe.feed(response.content.decode())
+                interaction_forms = probe.matching(
+                    tag='form', attribute='data-share-interaction-form',
+                )
+                next_inputs = probe.matching(
+                    tag='input', attribute='name', value='next',
+                )
+                self.assertEqual(
+                    [
+                        item['attrs']['value'] for item in next_inputs
+                        if any(
+                            form in item['ancestors']
+                            for form in interaction_forms
+                        )
+                    ],
+                    [expected_next],
+                )
+
+        for tab in ('likes', 'favorites'):
+            with self.subTest(tab=tab):
+                response = self.client.get(reverse('my_shares'), {
+                    'tab': tab,
+                    'page': '999',
+                    'order': 'desc',
+                    'source': 'untrusted-extra-state',
+                })
+                probe = _InteractionMarkupProbe()
+                probe.feed(response.content.decode())
+                interaction_forms = probe.matching(
+                    tag='form', attribute='data-share-interaction-form',
+                )
+                next_inputs = probe.matching(
+                    tag='input', attribute='name', value='next',
+                )
+                self.assertEqual(
+                    [
+                        item['attrs']['value'] for item in next_inputs
+                        if any(
+                            form in item['ancestors']
+                            for form in interaction_forms
+                        )
+                    ],
+                    [f'{reverse("my_shares")}?tab={tab}&page=1'],
+                )
 
     def test_my_reaction_pagination_preserves_active_tab(self):
         related_shares = []
@@ -990,6 +1269,14 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 self.assertNotIn('toggleIndexFavorite(', source)
 
     def test_reaction_buttons_submit_explicit_idempotent_target_state(self):
+        form_source = self.read_template(
+            'shares/includes/share_interaction_form.html',
+        )
+        self.assertIn('method="post"', form_source)
+        self.assertIn('{% csrf_token %}', form_source)
+        self.assertIn('type="hidden" name="next"', form_source)
+        self.assertIn('share-interaction-form-{{ fragment }}-', form_source)
+
         for template_path in (
             'shares/includes/like_button.html',
             'shares/includes/favorite_button.html',
@@ -1000,6 +1287,11 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 self.assertIn('"target_state":', source)
                 self.assertIn('active', source)
                 self.assertIn('inactive', source)
+                self.assertIn('type="submit"', source)
+                self.assertIn('form="share-interaction-form-', source)
+                self.assertIn('formaction="{% url ', source)
+                self.assertIn('name="target_state"', source)
+                self.assertIn('value="{% if ', source)
                 self.assertIn('hx-sync="this:drop"', source)
                 self.assertIn('hx-disabled-elt="this"', source)
 

@@ -1,7 +1,11 @@
 {% with fragment=interaction_fragment|default:'card' %}
-<button type="button"
+<button type="submit"
         class="btn btn-sm {% if is_favorited %}btn-warning{% else %}btn-outline-secondary{% endif %}{% if fragment != 'detail' %} hover-lift w-50{% endif %}"
         id="btn-favorite-{{ share.share_id }}"
+        form="share-interaction-form-{{ fragment }}-{{ share.share_id }}"
+        formaction="{% url 'toggle_favorite' share.share_id %}"
+        name="target_state"
+        value="{% if is_favorited %}inactive{% else %}active{% endif %}"
         hx-post="{% url 'toggle_favorite' share.share_id %}?fragment={{ fragment }}"
         hx-vals='{"target_state":"{% if is_favorited %}inactive{% else %}active{% endif %}"}'
         hx-target="this"
