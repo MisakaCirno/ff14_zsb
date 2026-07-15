@@ -1,13 +1,36 @@
+from urllib.parse import urlsplit
+
+from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login, logout, update_session_auth_hash
+from django.contrib.auth import REDIRECT_FIELD_NAME, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.shortcuts import redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from shares.forms import CustomPasswordChangeForm, UserProfileForm
 from shares.models import UserProfile
 from shares.rate_limits import consume_rate_limit, get_client_ip
+
+
+def _get_safe_login_return_url(request):
+    return_url = request.POST.get(
+        REDIRECT_FIELD_NAME,
+        request.GET.get(REDIRECT_FIELD_NAME, ''),
+    )
+    if not return_url or not url_has_allowed_host_and_scheme(
+        return_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return ''
+    try:
+        if not urlsplit(return_url).path.startswith('/'):
+            return ''
+    except ValueError:
+        return ''
+    return return_url
 
 
 def register(request):
@@ -30,6 +53,7 @@ def register(request):
 
 def user_login(request):
     """用户登录"""
+    return_url = _get_safe_login_return_url(request)
     if request.method == 'POST':
         form = AuthenticationForm(request, data=request.POST)
         username = request.POST.get('username', '').strip().casefold()[:150]
@@ -37,15 +61,23 @@ def user_login(request):
         account_limit = consume_rate_limit('login_account', f'account:{username}')
         if not ip_limit.allowed or not account_limit.allowed:
             messages.error(request, '登录尝试过于频繁，请稍后再试。')
-            return render(request, 'shares/login.html', {'form': form}, status=429)
+            return render(
+                request,
+                'shares/login.html',
+                {'form': form, REDIRECT_FIELD_NAME: return_url},
+                status=429,
+            )
         if form.is_valid():
             user = form.get_user()
             login(request, user)
             messages.success(request, f'欢迎回来，{user.username}！')
-            return redirect('index')
+            return redirect(return_url or settings.LOGIN_REDIRECT_URL)
     else:
         form = AuthenticationForm()
-    return render(request, 'shares/login.html', {'form': form})
+    return render(request, 'shares/login.html', {
+        'form': form,
+        REDIRECT_FIELD_NAME: return_url,
+    })
 
 
 @require_POST
