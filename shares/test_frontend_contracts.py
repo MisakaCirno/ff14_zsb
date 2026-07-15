@@ -282,6 +282,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         favorite_source = self.read_template('shares/includes/favorite_button.html')
         card_styles = self.read_frontend('styles/share-card.css')
         action_source = self.read_frontend('features/share-actions.ts')
+        copy_source = self.read_frontend('features/share-copy.ts')
 
         self.assertIn("card_variant='browse' viewer=user", list_source)
         self.assertIn('login_return_url=share_cards_return_url only', list_source)
@@ -316,7 +317,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('.management-card__actions', card_styles)
         self.assertIn('@container browse-card (max-width: 18rem)', card_styles)
         self.assertIn('@container browse-card (max-width: 15rem)', card_styles)
-        self.assertIn("icon.setAttribute('aria-hidden', 'true')", action_source)
+        self.assertIn("import { performShareCopy } from './share-copy'", action_source)
+        self.assertIn("icon.setAttribute('aria-hidden', 'true')", copy_source)
 
     def test_base_template_has_no_classic_business_script(self):
         source = self.read_template('base.html')
@@ -824,7 +826,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
 
         self.assertIn('alt="预览 &amp; &quot;标题&quot; 的战术板预览"', standard)
-        self.assertIn('/n/board/[stgy:a&amp;&quot;b]', standard)
+        self.assertIn('/n/board/%5Bstgy%3Aa%26%22b%5D', standard)
         self.assertNotIn('<script', standard)
         self.assertIn('可能令人不适', standard)
         self.assertNotIn('可能包含剧透', standard)
@@ -927,7 +929,13 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
     def test_detail_basic_interactions_use_module_contract(self):
         source = self.read_template('shares/detail.html')
+        collections_source = self.read_template(
+            'shares/includes/share_detail_collections.html',
+        )
+        modals_source = self.read_template('shares/includes/share_detail_modals.html')
+        combined_source = source + collections_source + modals_source
         module_source = self.read_frontend('features/share-detail.ts')
+        copy_source = self.read_frontend('features/share-copy.ts')
 
         for hook in (
             'data-share-detail',
@@ -937,7 +945,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             'data-views-count',
             'data-copies-count',
         ):
-            self.assertIn(hook, source)
+            self.assertIn(hook, combined_source)
 
         for legacy_handler in (
             'onclick="revealContent',
@@ -954,13 +962,88 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('const url = root.dataset.shareUrl', module_source)
         self.assertNotIn('window.location.pathname', module_source)
         self.assertIn('data-share-url="{{ canonical_share_url }}"', source)
-        self.assertIn('data-share-url-input value="{{ canonical_share_url }}"', source)
-        self.assertEqual(source.count('{{ item.visible_position }}.'), 2)
-        self.assertIn("updateCounter(root, '[data-views-count]'", module_source)
-        self.assertIn("updateCounter(root, '[data-copies-count]'", module_source)
+        self.assertIn('value="{{ canonical_share_url }}"', source)
+        self.assertIn('data-share-url-input', source)
+        self.assertEqual(collections_source.count('{{ item.visible_position }}'), 2)
+        self.assertIn('updateViewsCounter(root, payload)', module_source)
+        self.assertIn('performShareCopy({', module_source)
+        self.assertIn('recordUrl: root.dataset.recordCopyUrl', module_source)
+        self.assertIn("querySelectorAll<HTMLElement>('[data-copies-count]')", copy_source)
+
+    def test_detail_uses_semantic_responsive_page_contract(self):
+        source = self.read_template('shares/detail.html')
+        collections_source = self.read_template(
+            'shares/includes/share_detail_collections.html',
+        )
+        modals_source = self.read_template('shares/includes/share_detail_modals.html')
+        combined_source = source + collections_source + modals_source
+        main_styles = self.read_frontend('styles/main.css')
+        detail_styles = self.read_frontend('styles/share-detail-page.css')
+
+        self.assertIn('<article', source)
+        self.assertIn('class="share-detail-page"', source)
+        self.assertIn('aria-labelledby="share-detail-title"', source)
+        self.assertEqual(source.count('<h1'), 1)
+        self.assertLess(
+            source.index('class="share-detail-hero"'),
+            source.index('class="share-detail-panel share-detail-preview"'),
+        )
+
+        for hook in (
+            'data-content-revealed=',
+            'data-content-overlay',
+            'data-reveal-content',
+            'data-share-image-warning',
+        ):
+            self.assertIn(hook, source)
+        self.assertIn('src="{{ detail.preview_url }}"', source)
+        self.assertIn('for="share-detail-code"', source)
+        self.assertIn('for="share-detail-url"', source)
+        self.assertIn('aria-describedby="share-image-warning-help" disabled', source)
+
+        for forbidden in (
+            'style=',
+            'class="row',
+            'col-lg-',
+            'nav-tabs',
+            'tab-pane',
+            'data-bs-toggle="tab"',
+            'data-bs-toggle="collapse"',
+            'share.status',
+            'share.visibility',
+            'share.category',
+            'share.is_spoiler',
+            'share.is_nsfw',
+            'user.is_authenticated',
+            'user ==',
+        ):
+            self.assertNotIn(forbidden, combined_source)
+
+        self.assertIn('<details', collections_source)
+        self.assertIn('selected_collection_id == collection.id', collections_source)
+        self.assertIn('aria-current="page"', collections_source)
+        self.assertIn('aria-labelledby="share-image-modal-title"', modals_source)
+        self.assertIn('aria-label="关闭分享图片预览"', modals_source)
+        self.assertIn('role="img"', modals_source)
+        self.assertIn('当前浏览器无法显示生成的分享图片预览。', modals_source)
+
+        self.assertIn("@import './share-detail-page.css';", main_styles)
+        for contract in (
+            'container-name: share-detail-page;',
+            'grid-template-columns:',
+            'min-width: 0;',
+            ".share-detail-page[data-content-revealed='true'] [data-share-image-warning]",
+            '@container share-detail-page',
+            '@media (max-width: 575.98px)',
+            '@media (prefers-reduced-motion: reduce)',
+            ':focus-visible',
+        ):
+            self.assertIn(contract, detail_styles)
 
     def test_share_image_uses_module_contract_and_only_qrcode_runtime(self):
         source = self.read_template('shares/detail.html')
+        modals_source = self.read_template('shares/includes/share_detail_modals.html')
+        combined_source = source + modals_source
         about_source = self.read_template('about.html')
         module_source = self.read_frontend('features/share-image.ts')
 
@@ -973,7 +1056,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             'data-copy-share-image',
             'data-download-share-image',
         ):
-            self.assertIn(hook, source)
+            self.assertIn(hook, combined_source)
 
         for legacy_handler in (
             'onclick="generateShareImage',
@@ -996,6 +1079,9 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('const targetHeight = 720', module_source)
         self.assertIn("if (blob === null)", module_source)
         self.assertIn("typeof ClipboardItem !== 'undefined'", module_source)
-        self.assertIn('getOrCreateInstance(modalElement)', module_source)
+        self.assertIn('getBootstrapModal(modalElement)', module_source)
+        self.assertIn("root.dataset.contentRevealed === 'true'", module_source)
+        self.assertIn("root.addEventListener('share:content-revealed'", module_source)
+        self.assertIn('fitCanvasText(context, title', module_source)
         self.assertIn('container.remove()', module_source)
         self.assertIn('link?.remove()', module_source)

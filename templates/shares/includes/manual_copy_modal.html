@@ -1,0 +1,40 @@
+<div
+    class="modal fade"
+    id="manual-copy-modal"
+    data-manual-copy-modal
+    tabindex="-1"
+    aria-labelledby="manual-copy-title"
+    aria-describedby="manual-copy-description"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="manual-copy-title">
+                    <i class="bi bi-clipboard" aria-hidden="true"></i>
+                    手动复制
+                </h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭手动复制窗口"></button>
+            </div>
+            <div class="modal-body">
+                <p id="manual-copy-description" class="text-muted">
+                    浏览器未能自动写入剪贴板。请复制下方已选中的内容。
+                </p>
+                <label class="form-label fw-semibold" for="manual-copy-text" data-manual-copy-label>待复制内容</label>
+                <textarea
+                    class="form-control font-monospace"
+                    id="manual-copy-text"
+                    data-manual-copy-text
+                    rows="7"
+                    readonly
+                    spellcheck="false"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" data-manual-copy-select>
+                    <i class="bi bi-textarea-t" aria-hidden="true"></i>
+                    重新全选
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>

@@ -81,7 +81,7 @@
                     <i class="bi bi-arrow-right-circle" aria-hidden="true"></i>
                     <span>查看详情</span>
                 </a>
-                <button type="button" class="btn btn-sm btn-outline-primary hover-lift" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" aria-label="复制《{{ share.title }}》的分享码">
+                <button type="button" class="btn btn-sm btn-outline-primary hover-lift" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码">
                     <i class="bi bi-clipboard" aria-hidden="true"></i>
                     <span>复制码</span>
                 </button>
@@ -92,7 +92,7 @@
                     <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift" aria-label="查看《{{ share.title }}》详情">
                         <i class="bi bi-arrow-right-circle" aria-hidden="true"></i>
                     </a>
-                    <button type="button" class="btn btn-sm btn-outline-primary hover-lift" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" aria-label="复制《{{ share.title }}》的分享码">
+                    <button type="button" class="btn btn-sm btn-outline-primary hover-lift" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码">
                         <i class="bi bi-clipboard" aria-hidden="true"></i>
                     </button>
                 </div>

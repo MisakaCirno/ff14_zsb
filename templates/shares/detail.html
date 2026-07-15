@@ -8,442 +8,344 @@
 {% endblock %}
 
 {% block content %}
-<div class="container"
-     data-share-detail
-     data-share-id="{{ share.share_id }}"
-     data-share-title="{{ share.title }}"
-     data-share-author="{% if share.author %}{{ share.author.profile.get_display_name }}{% else %}匿名用户{% endif %}"
-     data-share-url="{{ canonical_share_url }}"
-     data-record-view-url="{% url 'record_view' share.share_id %}"
-     data-record-copy-url="{% url 'record_copy' share.share_id %}">
-    {% if share.status == 'pending' and share.visibility == 'public' %}
-    <div class="alert alert-warning mb-4" role="alert">
-        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-        <strong>待审核：</strong> 此分享正在等待管理员审核。在审核通过前，它不会出现在公开列表中，但您可以通过链接分享给他人。
-    </div>
-    {% endif %}
-    {% if share.status == 'rejected' and share.review_feedback and user == share.author %}
-    <div class="alert alert-danger mb-4" role="alert">
-        <i class="bi bi-x-circle-fill me-2"></i>
-        <strong>审核反馈：</strong> {{ share.review_feedback }}
-    </div>
-    {% endif %}
-
-    <div class="row">
-        <div class="col-lg-8">
-            <!-- 预览区域 -->
-            <div class="card mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-eye"></i> 战术板预览</h5>
-                    <div>
-                        {% if user.is_authenticated %}
-                            {% include 'shares/includes/like_button.html' with is_liked=is_liked likes_count=share.likes.count interaction_fragment='detail' %}
-                            {% include 'shares/includes/favorite_button.html' with is_favorited=is_favorited favorites_count=share.favorites.count interaction_fragment='detail' %}
-                        {% else %}
-                            <a href="{% url 'login' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-sm btn-outline-danger me-2" title="登录后点赞">
-                                <i class="bi bi-heart"></i> <span class="ms-1">{{ share.likes.count }}</span>
-                            </a>
-                            <a href="{% url 'login' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-sm btn-outline-secondary" title="登录后收藏">
-                                <i class="bi bi-star"></i> <span class="ms-1">{{ share.favorites.count }}</span>
-                            </a>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="card-body p-0 position-relative">
-                    {% if share.is_nsfw %}
-                    <div class="spoiler-overlay" data-content-overlay style="z-index: 22;">
-                        <div class="text-center">
-                            <i class="bi bi-exclamation-diamond-fill fs-1 text-danger mb-2"></i>
-                            <h5 class="fw-bold">预览图被隐藏</h5>
-                            <p class="mb-3">此分享可能包含令人不适的内容</p>
-                            <button class="btn btn-outline-light btn-sm">
-                                <i class="bi bi-eye"></i> 点击查看
-                            </button>
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    {% if share.is_spoiler %}
-                    <div class="spoiler-overlay" data-content-overlay style="z-index: 21;">
-                        <div class="text-center">
-                            <i class="bi bi-eye-slash-fill fs-1 mb-2"></i>
-                            <h5 class="fw-bold">预览图被隐藏</h5>
-                            <p class="mb-3">此分享可能包含剧透内容</p>
-                            <button class="btn btn-outline-light btn-sm">
-                                <i class="bi bi-eye"></i> 点击查看
-                            </button>
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    <div class="ratio" style="--bs-aspect-ratio: 75%;">
-                        <img src="/n/board/{{ share.strategy_code }}" 
-                             style="object-fit: cover;"
-                             data-share-preview
-                             class="w-100 h-100 {% if share.is_spoiler or share.is_nsfw %}blur-content{% endif %}"
-                             alt="战术板预览">
-                    </div>
-                </div>
+<article
+    class="share-detail-page"
+    aria-labelledby="share-detail-title"
+    data-share-detail
+    data-share-id="{{ share.share_id }}"
+    data-share-title="{{ share.title }}"
+    data-share-author="{{ detail.author.display_name }}"
+    data-share-url="{{ canonical_share_url }}"
+    data-record-view-url="{% url 'record_view' share.share_id %}"
+    data-record-copy-url="{% url 'record_copy' share.share_id %}"
+    data-content-revealed="{% if detail.content_warning %}false{% else %}true{% endif %}"
+    {% if detail.content_warning %}data-content-warning="{{ detail.content_warning.key }}"{% endif %}>
+    <header class="share-detail-hero">
+        <div class="share-detail-hero__identity">
+            <p class="share-detail-hero__eyebrow">战术板分享</p>
+            <div class="share-detail-badges" role="list" aria-label="分享状态">
+                {% for badge in detail.badges %}
+                <span
+                    class="share-detail-badge share-detail-badge--{{ badge.tone }}"
+                    data-share-badge="{{ badge.key }}"
+                    role="listitem">
+                    <i class="{{ badge.icon }}" aria-hidden="true"></i>
+                    {{ badge.label }}
+                </span>
+                {% endfor %}
             </div>
-
-            <!-- 详情区域 -->
-            <div class="card mb-4">
-                <div class="card-header">
-                    <ul class="nav nav-tabs card-header-tabs" role="tablist">
-                        <li class="nav-item">
-                            <button class="nav-link active" id="detail-tab" data-bs-toggle="tab" data-bs-target="#detail-pane" type="button" role="tab" aria-controls="detail-pane" aria-selected="true">
-                                <i class="bi bi-file-text"></i> 详细信息
-                            </button>
-                        </li>
-                        {% if user.is_staff or user.is_superuser %}
-                        <li class="nav-item">
-                            <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs-pane" type="button" role="tab" aria-controls="logs-pane" aria-selected="false">
-                                <i class="bi bi-journal-text"></i> 操作日志
-                            </button>
-                        </li>
+            <h1 class="share-detail-hero__title" id="share-detail-title">{{ share.title }}</h1>
+            <div class="share-detail-author">
+                <span class="share-detail-author__avatar" aria-hidden="true">
+                    <i class="bi bi-person-circle"></i>
+                </span>
+                <div class="share-detail-author__copy">
+                    <p class="share-detail-author__name">
+                        {% if detail.author.profile_url %}
+                        <a href="{{ detail.author.profile_url }}">{{ detail.author.display_name }}</a>
+                        {% else %}
+                        <span>{{ detail.author.display_name }}</span>
                         {% endif %}
-                    </ul>
-                </div>
-                <div class="card-body">
-                    <div class="tab-content">
-                        <!-- 详情标签页 -->
-                        <div class="tab-pane fade show active" id="detail-pane" role="tabpanel" aria-labelledby="detail-tab">
-                            {% if share.description %}
-                            <div class="mb-4">
-                                <h6 class="fw-bold">描述</h6>
-                                <div class="description-content">
-                                    {{ share.description|sanitize_html }}
-                                </div>
-                            </div>
-                            {% endif %}
-        
-                            <div class="mb-4">
-                                <h6 class="fw-bold">战术板代码</h6>
-                                <div class="input-group">
-                                    <input type="text" class="form-control strategy-code" data-share-code value="{{ share.strategy_code }}" readonly>
-                                    <button class="btn btn-outline-secondary" type="button" data-copy-detail-code>
-                                        <i class="bi bi-clipboard"></i> 复制
-                                    </button>
-                                </div>
-                            </div>
-        
-                            <div>
-                                <h6 class="fw-bold">分享链接</h6>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" data-share-url-input value="{{ canonical_share_url }}" readonly>
-                                    <button class="btn btn-outline-secondary" type="button" data-copy-share-url>
-                                        <i class="bi bi-link-45deg"></i> 复制链接
-                                    </button>
-                                    <button class="btn btn-outline-primary" type="button" data-generate-share-image>
-                                        <i class="bi bi-image"></i> 生成分享图
-                                    </button>
-                                </div>
-                                <div class="spinner-border spinner-border-sm d-none mt-2" role="status" data-share-image-spinner>
-                                    <span class="visually-hidden">生成中...</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 日志标签页 (管理员) -->
-                        {% if user.is_staff or user.is_superuser %}
-                        <div class="tab-pane fade" id="logs-pane" role="tabpanel" aria-labelledby="logs-tab">
-                            <div class="list-group list-group-flush border rounded">
-                                {% if share_logs %}
-                                    {% for log in share_logs %}
-                                    <div class="list-group-item">
-                                        <div class="d-flex w-100 justify-content-between">
-                                            <div>
-                                                <span class="fw-bold text-dark">{{ log.user.username }}</span>
-                                                <span class="badge bg-secondary ms-2">{{ log.get_action_display }}</span>
-                                            </div>
-                                            <small class="text-muted">{{ log.created_at|date:"Y-m-d H:i" }}</small>
-                                        </div>
-                                        {% if log.details %}
-                                        <p class="mb-0 small text-muted text-break mt-1 ps-2 border-start border-3">{{ log.details }}</p>
-                                        {% endif %}
-                                    </div>
-                                    {% endfor %}
-                                {% else %}
-                                    <div class="list-group-item text-center text-muted py-5">
-                                        <i class="bi bi-journal-x fs-4 d-block mb-2"></i>
-                                        暂无操作日志
-                                    </div>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
+                    </p>
+                    {% if detail.author.bio %}
+                    <p class="share-detail-author__bio">{{ detail.author.bio }}</p>
+                    {% elif detail.author.is_anonymous %}
+                    <p class="share-detail-author__bio">这份分享未绑定站内账号。</p>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
-        <!-- 侧边栏 -->
-        <div class="col-lg-4">
-            <!-- 标题和作者信息 -->
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h4 class="card-title fw-bold mb-3">
-                        {% if share.category == 'combat' %}
-                        <span class="badge bg-danger fs-6 align-middle me-1">战斗</span>
-                        {% else %}
-                        <span class="badge bg-success fs-6 align-middle me-1">娱乐</span>
-                        {% endif %}
-                        {{ share.title }}
-                    </h4>
-                    
-                    <div class="d-flex align-items-center mb-3">
-                        <div class="flex-shrink-0">
-                            <i class="bi bi-person-circle fs-3 text-primary"></i>
-                        </div>
-                        <div class="flex-grow-1 ms-3">
-                            <h6 class="mb-0">
-                                {% if share.author %}
-                                <a href="{% url 'user_public_profile' share.author.username %}" class="text-decoration-none text-dark">
-                                    {{ share.author.profile.get_display_name }}
-                                </a>
-                                {% else %}
-                                匿名用户
-                                {% endif %}
-                                {% if share.is_original %}
-                                <span class="badge bg-success ms-1" style="font-size: 0.7rem;" title="原创内容">原创</span>
-                                {% endif %}
-                            </h6>
-                            {% if share.author.profile.bio %}
-                            <p class="text-muted small mb-0 mt-1 text-truncate" style="max-width: 200px;" title="{{ share.author.profile.bio }}">
-                                {{ share.author.profile.bio }}
-                            </p>
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <div class="mb-3 text-muted small">
-                        <div class="d-flex justify-content-between mb-1">
-                            <span><i class="bi bi-calendar3"></i> {{ share.created_at|date:"Y-m-d" }}</span>
-                            <span>
-                                <i class="bi bi-eye"></i> <span data-views-count>{{ share.views }}</span> 浏览
-                                <span class="ms-2"><i class="bi bi-clipboard"></i> <span data-copies-count>{{ share.copies }}</span> 复制</span>
-                            </span>
-                        </div>
-                        {% if share.visibility != 'public' %}
-                        <div class="d-flex justify-content-between">
-                            <span><i class="bi bi-shield-lock"></i> 可见性</span>
-                            <span>
-                                {% if share.visibility == 'private' %}
-                                <span class="badge bg-danger">私有</span>
-                                {% elif share.visibility == 'unlisted' %}
-                                <span class="badge bg-warning text-dark">不公开</span>
-                                {% endif %}
-                            </span>
-                        </div>
-                        {% endif %}
-
-                        {% if share.is_spoiler %}
-                        <div class="d-flex justify-content-between mt-1">
-                            <span><i class="bi bi-eye-slash"></i> 内容标记</span>
-                            <span class="badge bg-secondary">可能包含剧透</span>
-                        </div>
-                        {% endif %}
-                        
-                        {% if share.is_nsfw %}
-                        <div class="d-flex justify-content-between mt-1">
-                            <span><i class="bi bi-exclamation-diamond"></i> 内容标记</span>
-                            <span class="badge bg-danger">可能令人不适</span>
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    {% if user == share.author or user.is_staff or user.is_superuser %}
-                    <hr>
-                    <div class="d-grid gap-2">
-                        {% if user == share.author %}
-                        <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#addToCollectionModal">
-                            <i class="bi bi-folder-plus"></i> 添加到合集
-                        </button>
-                        <a href="{% url 'edit_share' share.share_id %}" class="btn btn-outline-primary">
-                            <i class="bi bi-pencil"></i> 编辑
-                        </a>
-                        {% endif %}
-                        <a href="{% url 'delete_share' share.share_id %}" class="btn btn-outline-danger">
-                            <i class="bi bi-trash"></i> 删除
-                        </a>
-                    </div>
-                    {% endif %}
-
-                    {% if user.is_authenticated and user != share.author %}
-                    <hr>
-                    <div class="d-grid">
-                        <a href="{% url 'report_share' share.share_id %}" class="btn btn-outline-secondary btn-sm text-danger border-danger">
-                            <i class="bi bi-flag"></i> 举报此分享
-                        </a>
-                    </div>
-                    {% endif %}
+        <div class="share-detail-hero__activity">
+            <dl class="share-detail-stats" aria-label="分享统计">
+                <div class="share-detail-stats__item">
+                    <dt><i class="bi bi-calendar3" aria-hidden="true"></i> 发布于</dt>
+                    <dd><time datetime="{{ share.created_at|date:'c' }}">{{ share.created_at|date:"Y-m-d" }}</time></dd>
                 </div>
-            </div>
+                <div class="share-detail-stats__item">
+                    <dt><i class="bi bi-eye" aria-hidden="true"></i> 浏览</dt>
+                    <dd data-views-count>{{ share.views }}</dd>
+                </div>
+                <div class="share-detail-stats__item">
+                    <dt><i class="bi bi-clipboard" aria-hidden="true"></i> 复制</dt>
+                    <dd data-copies-count>{{ share.copies }}</dd>
+                </div>
+            </dl>
 
-            <!-- 免责声明 -->
-            <div class="alert alert-light border text-center py-2 mb-4">
-                <div class="mb-1">
-                    <small class="text-muted">
-                        <i class="bi bi-info-circle"></i> 本站内容均由用户上传，仅供参考与交流，不代表本站立场
-                    </small>
-                </div>
-                <div>
-                    <small class="text-muted">
-                        <i class="bi bi-palette"></i> 网页预览受渲染机制限制，可能与游戏内存在细微差异，请以实装效果为准
-                    </small>
-                </div>
-            </div>
-
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> 使用说明</h5>
-                </div>
-                <div class="card-body">
-                    <ol class="small">
-                        <li>复制战术板代码</li>
-                        <li>在游戏菜单中依次选择：
-                            <ul>”小队“-”战术板“-”新建战术板“-”输入分享码“</ul>
-                        </li>
-                        <li>粘贴分享码到文本框中，或选择“从剪贴板粘贴”</li>
-                        <li>点击：“读取” - “保存”</li>
-                        <li>随后根据游戏内提示操作即可</li>
-                    </ol>
-                </div>
-            </div>
-
-            <!-- 所属合集 -->
-            {% if related_collections %}
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-collection"></i> 所属合集</h5>
-                </div>
-                <div class="list-group list-group-flush">
-                    {% for related in related_collections %}
-                    {% with collection=related.collection %}
-                    <div class="list-group-item">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h6 class="mb-0 fw-bold">
-                                <a href="{% url 'collection_detail' collection.id %}" class="text-decoration-none text-dark">
-                                    {{ collection.title }}
-                                </a>
-                            </h6>
-                            <button class="btn btn-sm btn-link text-decoration-none p-0" type="button" data-bs-toggle="collapse" data-bs-target="#collection-{{ collection.id }}" aria-expanded="{% if request.GET.collection_id == collection.id|stringformat:'s' %}true{% else %}false{% endif %}">
-                                展开 <i class="bi bi-chevron-down"></i>
-                            </button>
-                        </div>
-                        <div class="collapse {% if request.GET.collection_id == collection.id|stringformat:'s' %}show{% endif %}" id="collection-{{ collection.id }}">
-                            <div class="small text-muted mb-2">
-                                <i class="bi bi-person"></i> {{ collection.author.profile.get_display_name }}
-                            </div>
-                            <div class="list-group list-group-flush border-top">
-                                {% for item in related.visible_items %}
-                                {% if item.share.share_id == share.share_id %}
-                                <div class="list-group-item px-0 py-2 border-0 active text-white bg-primary rounded px-2">
-                                    <div class="d-flex w-100 justify-content-between">
-                                        <span class="text-truncate" style="max-width: 200px;">{{ item.visible_position }}. {{ item.share.title }}</span>
-                                        <span class="badge bg-light text-primary rounded-pill" style="font-size: 0.7em;">当前</span>
-                                    </div>
-                                </div>
-                                {% else %}
-                                <a href="{% url 'share_detail' item.share.share_id %}?collection_id={{ collection.id }}" class="list-group-item list-group-item-action px-0 py-2 border-0">
-                                    <div class="d-flex w-100 justify-content-between">
-                                        <span class="text-truncate" style="max-width: 200px;">{{ item.visible_position }}. {{ item.share.title }}</span>
-                                    </div>
-                                </a>
-                                {% endif %}
-                                {% endfor %}
-                                {% if related.visible_item_count > 5 %}
-                                <a href="{% url 'collection_detail' collection.id %}" class="list-group-item list-group-item-action px-0 py-2 border-0 text-center text-primary">
-                                    查看全部 {{ related.visible_item_count }} 个内容
-                                </a>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endwith %}
-                    {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
-<!-- 添加到合集模态框 -->
-{% if user.is_authenticated and user == share.author %}
-<div class="modal fade" id="addToCollectionModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">添加到合集</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                {% if user_collections %}
-                <form action="{% url 'add_share_to_collection' share.share_id %}" method="post">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label class="form-label">选择合集</label>
-                        <select name="collection_id" class="form-select" required>
-                            {% for collection in user_collections %}
-                            <option value="{{ collection.id }}">{{ collection.title }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary">确定添加</button>
-                    </div>
-                </form>
-                <div class="text-center mt-3 pt-3 border-top">
-                    <a href="{% url 'create_collection' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-plus-lg"></i> 创建新合集
-                    </a>
-                </div>
+            <div class="share-detail-reactions" aria-label="分享互动">
+                {% if detail.actions.can_edit or detail.actions.can_report or detail.actions.can_view_logs %}
+                    {% include 'shares/includes/like_button.html' with share=share is_liked=detail.is_liked likes_count=detail.likes_count interaction_fragment='detail' only %}
+                    {% include 'shares/includes/favorite_button.html' with share=share is_favorited=detail.is_favorited favorites_count=detail.favorites_count interaction_fragment='detail' only %}
                 {% else %}
-                <div class="text-center py-3">
-                    <p class="text-muted">您还没有创建任何合集</p>
-                    <a href="{% url 'create_collection' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-outline-primary btn-sm">
-                        <i class="bi bi-plus-lg"></i> 创建新合集
-                    </a>
-                </div>
+                <a
+                    href="{% url 'login' %}?next={{ canonical_share_path|urlencode:'' }}"
+                    class="btn btn-sm btn-outline-danger"
+                    aria-label="登录后点赞，当前 {{ detail.likes_count }} 个点赞">
+                    <i class="bi bi-heart" aria-hidden="true"></i>
+                    <span>{{ detail.likes_count }}</span>
+                </a>
+                <a
+                    href="{% url 'login' %}?next={{ canonical_share_path|urlencode:'' }}"
+                    class="btn btn-sm btn-outline-secondary"
+                    aria-label="登录后收藏，当前 {{ detail.favorites_count }} 个收藏">
+                    <i class="bi bi-star" aria-hidden="true"></i>
+                    <span>{{ detail.favorites_count }}</span>
+                </a>
                 {% endif %}
             </div>
         </div>
-    </div>
-</div>
-{% endif %}
+    </header>
 
-<!-- 分享图模态窗口 -->
-<div class="modal fade" data-share-image-modal tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title"><i class="bi bi-image"></i> 分享图片预览</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body text-center p-4" style="background-color: #f8f9fa;">
-                <div class="mb-3">
-                    <canvas data-share-image-canvas style="max-width: 100%; height: auto; border: 2px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);"></canvas>
-                </div>
-                <div class="alert alert-info mb-0">
-                    <i class="bi bi-info-circle"></i> 
-                    <strong>提示：</strong>可以使用下方按钮复制或下载图片，也可以右键点击图片另存为
-                </div>
-            </div>
-            <div class="modal-footer justify-content-center">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-                    <i class="bi bi-x-circle"></i> 关闭
-                </button>
-                <button type="button" class="btn btn-primary" data-copy-share-image>
-                    <i class="bi bi-clipboard"></i> 复制到剪贴板
-                </button>
-                <button type="button" class="btn btn-success" data-download-share-image>
-                    <i class="bi bi-download"></i> 下载图片
-                </button>
-            </div>
+    {% if detail.notice %}
+    <aside
+        class="share-detail-notice share-detail-notice--{{ detail.notice.tone }}"
+        aria-labelledby="share-detail-notice-title"
+        data-share-notice="{{ detail.notice.key }}">
+        <i class="{{ detail.notice.icon }}" aria-hidden="true"></i>
+        <div>
+            <h2 id="share-detail-notice-title">{{ detail.notice.title }}</h2>
+            <p>{{ detail.notice.message }}</p>
+            {% if detail.notice.feedback %}
+            <p class="share-detail-notice__feedback">
+                <strong>审核反馈：</strong>{{ detail.notice.feedback }}
+            </p>
+            {% endif %}
         </div>
+    </aside>
+    {% endif %}
+
+    <div class="share-detail-layout">
+        <div class="share-detail-main">
+            <section class="share-detail-panel share-detail-preview" aria-labelledby="share-detail-preview-title">
+                <header class="share-detail-panel__header">
+                    <span class="share-detail-panel__icon" aria-hidden="true">
+                        <i class="bi bi-eye"></i>
+                    </span>
+                    <div>
+                        <h2 id="share-detail-preview-title">战术板预览</h2>
+                        <p>先确认布局内容，再复制战术板代码到游戏中使用。</p>
+                    </div>
+                </header>
+                <div class="share-detail-preview__frame">
+                    <img
+                        id="share-detail-preview-image"
+                        class="share-detail-preview__image{% if detail.content_warning %} blur-content{% endif %}"
+                        src="{{ detail.preview_url }}"
+                        alt="《{{ share.title }}》的战术板预览"
+                        data-share-preview
+                        decoding="async"
+                        {% if detail.content_warning %}aria-hidden="true"{% endif %}>
+                    {% if detail.content_warning %}
+                    <div
+                        class="share-detail-preview__warning share-detail-preview__warning--{{ detail.content_warning.tone }} spoiler-overlay"
+                        data-content-overlay
+                        aria-labelledby="share-detail-warning-title"
+                        aria-describedby="share-detail-warning-message">
+                        <i class="{{ detail.content_warning.icon }}" aria-hidden="true"></i>
+                        <h3 id="share-detail-warning-title">{{ detail.content_warning.title }}</h3>
+                        <p id="share-detail-warning-message">{{ detail.content_warning.message }}</p>
+                        <button
+                            class="btn btn-outline-light"
+                            type="button"
+                            data-reveal-content
+                            aria-controls="share-detail-preview-image"
+                            aria-expanded="false">
+                            <i class="bi bi-eye" aria-hidden="true"></i>
+                            显示预览
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="share-detail-panel share-detail-content" aria-labelledby="share-detail-content-title">
+                <header class="share-detail-panel__header">
+                    <span class="share-detail-panel__icon" aria-hidden="true">
+                        <i class="bi bi-clipboard-check"></i>
+                    </span>
+                    <div>
+                        <h2 id="share-detail-content-title">使用这份分享</h2>
+                        <p>复制代码是主要操作；分享链接和分享图适合转发给其他玩家。</p>
+                    </div>
+                </header>
+                <div class="share-detail-panel__body">
+                    <div class="share-detail-field share-detail-field--primary">
+                        <label class="share-detail-field__label" for="share-detail-code">战术板代码</label>
+                        <div class="share-detail-field__control">
+                            <input
+                                class="form-control strategy-code"
+                                id="share-detail-code"
+                                type="text"
+                                value="{{ share.strategy_code }}"
+                                data-share-code
+                                readonly>
+                            <button class="btn btn-primary" type="button" data-copy-detail-code>
+                                <i class="bi bi-clipboard" aria-hidden="true"></i>
+                                复制代码
+                            </button>
+                        </div>
+                    </div>
+
+                    {% if share.description %}
+                    <section class="share-detail-description" aria-labelledby="share-detail-description-title">
+                        <h3 id="share-detail-description-title">内容说明</h3>
+                        <div class="description-content share-detail-description__content">
+                            {{ share.description|sanitize_nested_html }}
+                        </div>
+                    </section>
+                    {% endif %}
+
+                    <div class="share-detail-field">
+                        <label class="share-detail-field__label" for="share-detail-url">分享链接</label>
+                        <p class="share-detail-field__help" id="share-detail-url-help">此处始终使用不带历史后缀的标准详情链接。</p>
+                        <div class="share-detail-field__control share-detail-field__control--share">
+                            <input
+                                class="form-control"
+                                id="share-detail-url"
+                                type="text"
+                                value="{{ canonical_share_url }}"
+                                data-share-url-input
+                                aria-describedby="share-detail-url-help"
+                                readonly>
+                            <button class="btn btn-outline-secondary" type="button" data-copy-share-url>
+                                <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                                复制链接
+                            </button>
+                            <button
+                                class="btn btn-outline-primary"
+                                type="button"
+                                data-generate-share-image
+                                aria-controls="shareImageModal"
+                                {% if detail.content_warning %}aria-describedby="share-image-warning-help" disabled{% endif %}>
+                                <i class="bi bi-image" aria-hidden="true"></i>
+                                生成分享图
+                            </button>
+                        </div>
+                        {% if detail.content_warning %}
+                        <p class="share-detail-field__warning" id="share-image-warning-help" data-share-image-warning>
+                            <i class="bi bi-shield-exclamation" aria-hidden="true"></i>
+                            请先显示预览，再生成可能包含敏感内容的分享图。
+                        </p>
+                        {% endif %}
+                        <div
+                            class="share-detail-action-status spinner-border spinner-border-sm d-none"
+                            id="share-image-generation-status"
+                            role="status"
+                            aria-live="polite"
+                            data-share-image-spinner>
+                            <span class="visually-hidden">正在生成分享图</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {% if detail.actions.can_view_logs %}
+            <details class="share-detail-disclosure" data-share-logs>
+                <summary>
+                    <span class="share-detail-disclosure__summary-copy">
+                        <i class="bi bi-journal-text" aria-hidden="true"></i>
+                        <span>操作日志</span>
+                    </span>
+                    <i class="bi bi-chevron-down share-detail-disclosure__chevron" aria-hidden="true"></i>
+                </summary>
+                <div class="share-detail-disclosure__body">
+                    {% if share_logs %}
+                    <ol class="share-detail-log-list">
+                        {% for log in share_logs %}
+                        <li class="share-detail-log-list__item">
+                            <div class="share-detail-log-list__meta">
+                                <span class="share-detail-log-list__actor">
+                                    {{ log.user.username|default:'系统' }}
+                                </span>
+                                <span class="share-detail-log-list__action">{{ log.get_action_display }}</span>
+                                <time datetime="{{ log.created_at|date:'c' }}">{{ log.created_at|date:"Y-m-d H:i" }}</time>
+                            </div>
+                            {% if log.details %}
+                            <p>{{ log.details }}</p>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ol>
+                    {% else %}
+                    <p class="share-detail-disclosure__empty">暂无操作日志。</p>
+                    {% endif %}
+                </div>
+            </details>
+            {% endif %}
+        </div>
+
+        <aside class="share-detail-sidebar" aria-label="分享辅助信息">
+            {% if detail.actions.can_add_to_collection or detail.actions.can_edit or detail.actions.can_delete or detail.actions.can_report %}
+            <section class="share-detail-side-panel" aria-labelledby="share-detail-actions-title">
+                <header class="share-detail-side-panel__header">
+                    <i class="bi bi-sliders" aria-hidden="true"></i>
+                    <h2 id="share-detail-actions-title">内容操作</h2>
+                </header>
+                <div class="share-detail-side-actions">
+                    {% if detail.actions.can_add_to_collection %}
+                    <button
+                        class="btn btn-outline-success"
+                        type="button"
+                        data-bs-toggle="modal"
+                        data-bs-target="#addToCollectionModal"
+                        aria-controls="addToCollectionModal">
+                        <i class="bi bi-folder-plus" aria-hidden="true"></i>
+                        添加到合集
+                    </button>
+                    {% endif %}
+                    {% if detail.actions.can_edit %}
+                    <a href="{% url 'edit_share' share.share_id %}" class="btn btn-outline-primary">
+                        <i class="bi bi-pencil" aria-hidden="true"></i>
+                        编辑分享
+                    </a>
+                    {% endif %}
+                    {% if detail.actions.can_report %}
+                    <a href="{% url 'report_share' share.share_id %}" class="btn btn-outline-danger">
+                        <i class="bi bi-flag" aria-hidden="true"></i>
+                        举报此分享
+                    </a>
+                    {% endif %}
+                    {% if detail.actions.can_delete %}
+                    <a href="{% url 'delete_share' share.share_id %}" class="btn btn-outline-danger">
+                        <i class="bi bi-trash" aria-hidden="true"></i>
+                        删除分享
+                    </a>
+                    {% endif %}
+                </div>
+            </section>
+            {% endif %}
+
+            <section class="share-detail-side-panel" aria-labelledby="share-detail-usage-title">
+                <header class="share-detail-side-panel__header">
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                    <h2 id="share-detail-usage-title">使用说明</h2>
+                </header>
+                <ol class="share-detail-steps">
+                    <li>复制上方的战术板代码。</li>
+                    <li>在游戏内依次打开“小队 → 战术板 → 新建战术板 → 输入分享码”。</li>
+                    <li>粘贴代码，或选择“从剪贴板粘贴”。</li>
+                    <li>依次选择“读取”和“保存”，再按游戏内提示完成操作。</li>
+                </ol>
+            </section>
+
+            {% include 'shares/includes/share_detail_collections.html' with related_collections=related_collections current_share=share selected_collection_id=request.GET.collection_id only %}
+
+            <section class="share-detail-disclaimer" aria-labelledby="share-detail-disclaimer-title">
+                <h2 id="share-detail-disclaimer-title">阅读提示</h2>
+                <p>
+                    <i class="bi bi-info-circle" aria-hidden="true"></i>
+                    本站内容由用户上传，仅供参考与交流，不代表本站立场。
+                </p>
+                <p>
+                    <i class="bi bi-palette" aria-hidden="true"></i>
+                    网页预览可能与游戏内效果存在细微差异，请以实装效果为准。
+                </p>
+            </section>
+        </aside>
     </div>
-</div>
+</article>
+
+{% include 'shares/includes/share_detail_modals.html' with share=share detail=detail user_collections=user_collections canonical_share_path=canonical_share_path csrf_token=csrf_token only %}
 {% endblock %}
 
 {% block extra_js %}

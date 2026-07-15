@@ -1,3 +1,4 @@
+from html.parser import HTMLParser
 from urllib.parse import quote
 
 from django.contrib.auth.models import User
@@ -5,6 +6,16 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .models import Share
+
+
+class _InputProbe(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.inputs = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'input':
+            self.inputs.append(dict(attrs))
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'])
@@ -54,9 +65,17 @@ class ShareCanonicalUrlContractTests(TestCase):
                     response,
                     f'data-share-url="{self.canonical_url}"',
                 )
-                self.assertContains(
-                    response,
-                    f'data-share-url-input value="{self.canonical_url}"',
+                probe = _InputProbe()
+                probe.feed(response.content.decode())
+                share_url_inputs = [
+                    attributes
+                    for attributes in probe.inputs
+                    if 'data-share-url-input' in attributes
+                ]
+                self.assertEqual(len(share_url_inputs), 1)
+                self.assertEqual(
+                    share_url_inputs[0].get('value'),
+                    self.canonical_url,
                 )
 
         legacy_response = self.client.get(

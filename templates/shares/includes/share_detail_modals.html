@@ -1,0 +1,100 @@
+{% if detail.actions.can_add_to_collection %}
+<div
+    class="modal fade share-detail-modal"
+    id="addToCollectionModal"
+    tabindex="-1"
+    role="dialog"
+    aria-labelledby="add-to-collection-title"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="add-to-collection-title">添加到合集</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭添加到合集窗口"></button>
+            </div>
+            <div class="modal-body">
+                {% if user_collections %}
+                <form class="share-detail-modal__form" action="{% url 'add_share_to_collection' share.share_id %}" method="post">
+                    {% csrf_token %}
+                    <div class="share-detail-modal__field">
+                        <label class="form-label" for="share-detail-collection-select">选择合集</label>
+                        <select class="form-select" id="share-detail-collection-select" name="collection_id" required>
+                            {% for collection in user_collections %}
+                            <option value="{{ collection.id }}">{{ collection.title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-folder-plus" aria-hidden="true"></i>
+                        确定添加
+                    </button>
+                </form>
+                <div class="share-detail-modal__secondary-action">
+                    <a href="{% url 'create_collection' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-outline-primary">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                        创建新合集
+                    </a>
+                </div>
+                {% else %}
+                <div class="share-detail-modal__empty">
+                    <i class="bi bi-folder2-open" aria-hidden="true"></i>
+                    <p>你还没有创建任何合集。</p>
+                    <a href="{% url 'create_collection' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-primary">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                        创建第一个合集
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div
+    class="modal fade share-detail-modal share-detail-image-modal"
+    id="shareImageModal"
+    tabindex="-1"
+    role="dialog"
+    aria-labelledby="share-image-modal-title"
+    aria-describedby="share-image-modal-help"
+    aria-hidden="true"
+    data-share-image-modal>
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="share-image-modal-title">
+                    <i class="bi bi-image" aria-hidden="true"></i>
+                    分享图片预览
+                </h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭分享图片预览"></button>
+            </div>
+            <div class="modal-body share-detail-image-modal__body">
+                <canvas
+                    class="share-detail-image-modal__canvas"
+                    data-share-image-canvas
+                    role="img"
+                    aria-label="《{{ share.title }}》的分享图片预览">
+                    当前浏览器无法显示生成的分享图片预览。
+                </canvas>
+                <p class="share-detail-image-modal__help" id="share-image-modal-help">
+                    可以复制或下载图片，也可以在图片上打开右键菜单另存为。
+                </p>
+            </div>
+            <div class="modal-footer share-detail-image-modal__actions">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle" aria-hidden="true"></i>
+                    关闭
+                </button>
+                <button type="button" class="btn btn-primary" data-copy-share-image>
+                    <i class="bi bi-clipboard" aria-hidden="true"></i>
+                    复制到剪贴板
+                </button>
+                <button type="button" class="btn btn-success" data-download-share-image>
+                    <i class="bi bi-download" aria-hidden="true"></i>
+                    下载图片
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

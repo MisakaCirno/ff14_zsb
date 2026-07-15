@@ -5,6 +5,7 @@ import { getCsrfToken } from './core/csrf'
 import { initializeAnnouncement } from './features/announcement'
 import { initializeFormControls } from './features/form-controls'
 import { initializeInfiniteScrollStatus } from './features/infinite-scroll'
+import { initializeManualCopy } from './features/manual-copy'
 import { initializePreviewImages } from './features/preview-images'
 import { initializeShareActions } from './features/share-actions'
 import { initializeShareDetails } from './features/share-detail'
@@ -44,6 +45,7 @@ initializeVisitHistory()
 initializeShareActions()
 initializeAnnouncement()
 initializeInfiniteScrollStatus()
+initializeManualCopy()
 initializeShareEditors()
 initializeShareDetails()
 initializeShareImages()

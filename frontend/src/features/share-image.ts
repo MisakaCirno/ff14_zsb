@@ -1,4 +1,12 @@
+import { getBootstrapModal } from '../core/bootstrap'
 import { showMessage } from '../core/notify'
+import {
+  restoreActionButton,
+  scheduleActionButtonRestore,
+  setActionButtonBusy,
+  setActionButtonSuccess,
+  snapshotActionButton,
+} from './share-copy'
 
 interface QrCodeOptions {
   colorDark: string
@@ -16,20 +24,9 @@ interface QrCodeConstructor {
   }
 }
 
-interface BootstrapModal {
-  show(): void
-}
-
-interface BootstrapNamespace {
-  Modal: {
-    getOrCreateInstance(element: Element): BootstrapModal
-  }
-}
-
 declare global {
   interface Window {
     QRCode?: QrCodeConstructor
-    bootstrap?: BootstrapNamespace
   }
 }
 
@@ -44,32 +41,9 @@ interface ShareImageElements {
   spinner: HTMLElement
 }
 
-interface ButtonSnapshot {
-  children: Node[]
-  className: string
-}
-
 const targetWidth = 960
 const targetHeight = 720
-
-function snapshotButton(button: HTMLButtonElement): ButtonSnapshot {
-  return {
-    children: Array.from(button.childNodes, (node) => node.cloneNode(true)),
-    className: button.className,
-  }
-}
-
-function restoreButton(button: HTMLButtonElement, snapshot: ButtonSnapshot): void {
-  button.replaceChildren(...snapshot.children)
-  button.className = snapshot.className
-  button.disabled = false
-}
-
-function setButtonLabel(button: HTMLButtonElement, iconClass: string, label: string): void {
-  const icon = document.createElement('i')
-  icon.className = iconClass
-  button.replaceChildren(icon, document.createTextNode(` ${label}`))
-}
+const headerHeight = 72
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '未知错误'
@@ -253,6 +227,38 @@ function drawQrCode(
   return { x, y, size }
 }
 
+export function fitCanvasText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string {
+  if (maxWidth <= 0) {
+    return ''
+  }
+  if (context.measureText(text).width <= maxWidth) {
+    return text
+  }
+
+  const ellipsis = '…'
+  if (context.measureText(ellipsis).width > maxWidth) {
+    return ''
+  }
+
+  const characters = Array.from(text)
+  let low = 0
+  let high = characters.length
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2)
+    const candidate = `${characters.slice(0, middle).join('')}${ellipsis}`
+    if (context.measureText(candidate).width <= maxWidth) {
+      low = middle
+    } else {
+      high = middle - 1
+    }
+  }
+  return `${characters.slice(0, low).join('')}${ellipsis}`
+}
+
 function drawHeader(
   context: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -260,25 +266,45 @@ function drawHeader(
   title: string,
   author: string,
 ): void {
+  const horizontalPadding = 20
+  const columnGap = 24
+  const secondaryAvailableWidth = canvas.width - horizontalPadding * 2 - columnGap
+  const authorMaxWidth = Math.floor(secondaryAvailableWidth * 0.4)
+  const urlMaxWidth = secondaryAvailableWidth - authorMaxWidth
+
+  context.save()
   const gradient = context.createLinearGradient(0, 0, canvas.width, 0)
   gradient.addColorStop(0, 'rgba(13, 110, 253, 0.95)')
   gradient.addColorStop(1, 'rgba(102, 126, 234, 0.95)')
   context.fillStyle = gradient
-  context.fillRect(0, 0, canvas.width, 40)
+  context.fillRect(0, 0, canvas.width, headerHeight)
 
   context.fillStyle = '#ffffff'
   context.textAlign = 'left'
   context.font = 'bold 20px "Microsoft YaHei", Arial, sans-serif'
-  context.fillText(title, 20, 27)
-  const titleWidth = context.measureText(title).width
-  context.font = '16px "Microsoft YaHei", Arial, sans-serif'
+  context.fillText(
+    fitCanvasText(context, title, canvas.width - horizontalPadding * 2),
+    horizontalPadding,
+    27,
+  )
+
+  context.font = '15px "Microsoft YaHei", Arial, sans-serif'
   context.fillStyle = 'rgba(255, 255, 255, 0.9)'
-  context.fillText(`  by  ${author}`, 20 + titleWidth, 27)
+  context.fillText(
+    fitCanvasText(context, `作者：${author}`, authorMaxWidth),
+    horizontalPadding,
+    56,
+  )
 
   context.textAlign = 'right'
   context.font = '14px "Microsoft YaHei", Arial, sans-serif'
   context.fillStyle = 'rgba(255, 255, 255, 0.8)'
-  context.fillText(cleanUrl.replace(/^https?:\/\//, ''), canvas.width - 20, 27)
+  context.fillText(
+    fitCanvasText(context, cleanUrl.replace(/^https?:\/\//, ''), urlMaxWidth),
+    canvas.width - horizontalPadding,
+    56,
+  )
+  context.restore()
 }
 
 function drawQrLabel(
@@ -297,17 +323,35 @@ function drawQrLabel(
 }
 
 function showShareImageModal(modalElement: HTMLElement): void {
-  const modalApi = window.bootstrap?.Modal
-  if (!modalApi) {
+  const modal = getBootstrapModal(modalElement)
+  if (!modal) {
     throw new Error('分享图预览组件未加载')
   }
-  modalApi.getOrCreateInstance(modalElement).show()
+  modal.show()
+}
+
+function isContentRevealed(root: HTMLElement): boolean {
+  return root.dataset.contentRevealed === 'true'
+}
+
+function synchronizeGenerateAvailability(elements: ShareImageElements): void {
+  if (elements.generateButton.getAttribute('aria-busy') === 'true') {
+    return
+  }
+  const revealed = isContentRevealed(elements.root)
+  elements.generateButton.disabled = !revealed
+  elements.generateButton.setAttribute('aria-disabled', String(!revealed))
 }
 
 async function generateShareImage(elements: ShareImageElements): Promise<void> {
-  const buttonSnapshot = snapshotButton(elements.generateButton)
-  elements.generateButton.disabled = true
-  setButtonLabel(elements.generateButton, 'bi bi-hourglass-split', '生成中...')
+  if (!isContentRevealed(elements.root)) {
+    synchronizeGenerateAvailability(elements)
+    showMessage('请先确认内容警告并查看预览，再生成分享图。', 'warning')
+    return
+  }
+
+  const buttonSnapshot = snapshotActionButton(elements.generateButton)
+  setActionButtonBusy(elements.generateButton, '生成中...')
   elements.spinner.classList.remove('d-none')
   let qrContainer: HTMLElement | null = null
 
@@ -360,7 +404,8 @@ async function generateShareImage(elements: ShareImageElements): Promise<void> {
     console.error('Unable to generate the share image.', error)
     showMessage(`生成分享图失败：${errorMessage(error)}`, 'danger')
   } finally {
-    restoreButton(elements.generateButton, buttonSnapshot)
+    restoreActionButton(elements.generateButton, buttonSnapshot)
+    synchronizeGenerateAvailability(elements)
     elements.spinner.classList.add('d-none')
     qrContainer?.remove()
   }
@@ -379,33 +424,39 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 async function copyShareImage(elements: ShareImageElements): Promise<void> {
-  const buttonSnapshot = snapshotButton(elements.copyButton)
-  const spinner = document.createElement('span')
-  spinner.className = 'spinner-border spinner-border-sm me-2'
-  elements.copyButton.replaceChildren(spinner, document.createTextNode('复制中...'))
-  elements.copyButton.disabled = true
+  const buttonSnapshot = snapshotActionButton(elements.copyButton)
+  setActionButtonBusy(
+    elements.copyButton,
+    '复制中...',
+    'spinner-border spinner-border-sm',
+  )
 
   try {
     const blob = await canvasToBlob(elements.canvas)
     if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-      setButtonLabel(elements.copyButton, 'bi bi-check-circle', '已复制！')
-      elements.copyButton.classList.remove('btn-primary')
-      elements.copyButton.classList.add('btn-success')
-      window.setTimeout(() => restoreButton(elements.copyButton, buttonSnapshot), 2000)
+      setActionButtonSuccess(elements.copyButton, '已复制')
+      scheduleActionButtonRestore(elements.copyButton, buttonSnapshot)
+      showMessage('分享图已复制到剪贴板。', 'success')
       return
     }
 
-    restoreButton(elements.copyButton, buttonSnapshot)
+    restoreActionButton(elements.copyButton, buttonSnapshot)
     showMessage('当前浏览器不支持直接复制图片，请使用“下载图片”。', 'warning')
   } catch (error) {
     console.error('Unable to copy the share image.', error)
-    restoreButton(elements.copyButton, buttonSnapshot)
-    showMessage('复制失败，请尝试使用"下载图片"功能，或右键保存图片', 'danger')
+    restoreActionButton(elements.copyButton, buttonSnapshot)
+    showMessage('复制失败，请尝试使用“下载图片”功能，或右键保存图片。', 'danger')
   }
 }
 
 async function downloadShareImage(elements: ShareImageElements): Promise<void> {
+  const buttonSnapshot = snapshotActionButton(elements.downloadButton)
+  setActionButtonBusy(
+    elements.downloadButton,
+    '下载中...',
+    'spinner-border spinner-border-sm',
+  )
   let objectUrl: string | null = null
   let link: HTMLAnchorElement | null = null
   try {
@@ -418,9 +469,12 @@ async function downloadShareImage(elements: ShareImageElements): Promise<void> {
     link.href = objectUrl
     document.body.appendChild(link)
     link.click()
+    setActionButtonSuccess(elements.downloadButton, '下载已开始')
+    scheduleActionButtonRestore(elements.downloadButton, buttonSnapshot)
     showMessage('图片下载已开始！', 'success')
   } catch (error) {
     console.error('Unable to download the share image.', error)
+    restoreActionButton(elements.downloadButton, buttonSnapshot)
     showMessage('下载失败，请右键点击图片另存为', 'danger')
   } finally {
     link?.remove()
@@ -468,6 +522,13 @@ function initializeShareImage(root: HTMLElement): void {
   if (!elements) {
     return
   }
+  synchronizeGenerateAvailability(elements)
+  root.addEventListener('share:content-revealed', () => {
+    synchronizeGenerateAvailability(elements)
+  })
+  elements.modal.addEventListener('hidden.bs.modal', () => {
+    elements.generateButton.focus({ preventScroll: true })
+  })
   elements.generateButton.addEventListener('click', () => {
     void generateShareImage(elements)
   })

@@ -1,7 +1,8 @@
+{% load share_urls %}
 <div class="card-img-top position-relative share-preview" data-preview-frame>
     <div class="ratio ratio-4x3">
         <img
-            src="/n/board/{{ share.strategy_code }}"
+            src="{{ share.strategy_code|board_preview_url }}"
             class="share-preview__image{% if share.is_spoiler or share.is_nsfw %} blur-content{% endif %}"
             loading="lazy"
             alt="{{ share.title }} 的战术板预览"

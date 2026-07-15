@@ -1,0 +1,62 @@
+{% if related_collections %}
+<section class="share-detail-side-panel share-detail-collections" aria-labelledby="share-detail-collections-title">
+    <header class="share-detail-side-panel__header">
+        <i class="bi bi-collection" aria-hidden="true"></i>
+        <h2 id="share-detail-collections-title">所属合集</h2>
+    </header>
+    <div class="share-detail-collections__list">
+        {% for related in related_collections %}
+        {% with collection=related.collection %}
+        <details
+            class="share-detail-collection"
+            data-related-collection="{{ collection.id }}"
+            {% if selected_collection_id == collection.id|stringformat:'s' %}open{% endif %}>
+            <summary>
+                <span class="share-detail-collection__summary-copy">
+                    <span class="share-detail-collection__title">{{ collection.title }}</span>
+                    <span class="share-detail-collection__author">由 {{ collection.author.profile.get_display_name }} 整理</span>
+                </span>
+                <span class="share-detail-collection__summary-meta">
+                    {{ related.visible_item_count }} 项
+                    <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                </span>
+            </summary>
+            <div class="share-detail-collection__body">
+                <ol class="share-detail-collection__items">
+                    {% for item in related.visible_items %}
+                    <li>
+                        {% if item.share.share_id == current_share.share_id %}
+                        <span class="share-detail-collection__item is-current" aria-current="page">
+                            <span class="share-detail-collection__position">{{ item.visible_position }}</span>
+                            <span class="share-detail-collection__item-title">{{ item.share.title }}</span>
+                            <span class="share-detail-collection__current-label">当前</span>
+                        </span>
+                        {% else %}
+                        <a
+                            class="share-detail-collection__item"
+                            href="{% url 'share_detail' item.share.share_id %}?collection_id={{ collection.id }}">
+                            <span class="share-detail-collection__position">{{ item.visible_position }}</span>
+                            <span class="share-detail-collection__item-title">{{ item.share.title }}</span>
+                        </a>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                    {% if related.visible_item_count > 5 %}
+                    <li>
+                        <a class="share-detail-collection__all" href="{% url 'collection_detail' collection.id %}">
+                            查看全部 {{ related.visible_item_count }} 个内容
+                        </a>
+                    </li>
+                    {% endif %}
+                </ol>
+                <a class="share-detail-collection__open" href="{% url 'collection_detail' collection.id %}">
+                    打开合集
+                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </a>
+            </div>
+        </details>
+        {% endwith %}
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

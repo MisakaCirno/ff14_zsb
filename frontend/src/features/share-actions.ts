@@ -1,38 +1,4 @@
-import { copyText } from '../core/clipboard'
-import { getCsrfToken } from '../core/csrf'
-import { showMessage } from '../core/notify'
-
-function recordCopy(shareId: string): void {
-  const csrfToken = getCsrfToken()
-  if (!csrfToken) {
-    return
-  }
-
-  void fetch(`/share/${encodeURIComponent(shareId)}/copy/`, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': csrfToken,
-    },
-  }).catch(() => undefined)
-}
-
-function showCopiedButton(button: HTMLButtonElement): void {
-  const originalChildren = Array.from(button.childNodes, (node) => node.cloneNode(true))
-  const icon = document.createElement('i')
-  icon.className = 'bi bi-check'
-  icon.setAttribute('aria-hidden', 'true')
-  button.replaceChildren(icon)
-  button.classList.remove('btn-outline-primary')
-  button.classList.add('btn-success')
-
-  window.setTimeout(() => {
-    button.replaceChildren(...originalChildren)
-    button.classList.remove('btn-success')
-    button.classList.add('btn-outline-primary')
-  }, 2000)
-}
+import { performShareCopy } from './share-copy'
 
 function copyStrategyCode(button: HTMLButtonElement): void {
   const code = button.dataset.copyCode
@@ -40,12 +6,14 @@ function copyStrategyCode(button: HTMLButtonElement): void {
     return
   }
 
-  void copyText(code, () => {
-    showCopiedButton(button)
-    showMessage('战术板代码已复制', 'success')
-    if (button.dataset.shareId) {
-      recordCopy(button.dataset.shareId)
-    }
+  const compactFeedback = (button.textContent ?? '').trim() === ''
+  void performShareCopy({
+    button,
+    compactFeedback,
+    manualLabel: '战术板代码',
+    recordUrl: button.dataset.recordCopyUrl,
+    successMessage: '战术板代码已复制',
+    text: code,
   })
 }
 
@@ -54,14 +22,11 @@ function copyQqGroup(button: HTMLButtonElement): void {
   if (!qqGroup) {
     return
   }
-  const originalText = button.textContent ?? ''
-
-  void copyText(qqGroup, () => {
-    showMessage(`QQ群号 ${qqGroup} 已复制到剪贴板！`, 'success')
-    button.textContent = '已复制！'
-    window.setTimeout(() => {
-      button.textContent = originalText
-    }, 2000)
+  void performShareCopy({
+    button,
+    manualLabel: 'QQ群号',
+    successMessage: `QQ群号 ${qqGroup} 已复制到剪贴板！`,
+    text: qqGroup,
   })
 }
 

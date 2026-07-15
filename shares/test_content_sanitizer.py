@@ -5,7 +5,7 @@ from django.template.loader import get_template
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
-from .content_sanitizer import sanitize_rich_text
+from .content_sanitizer import sanitize_nested_rich_text, sanitize_rich_text
 from .models import Announcement, Share
 
 
@@ -56,6 +56,19 @@ class RichTextSanitizerTests(TestCase):
 
         cleaned = sanitize_rich_text('<p><strong>安全</strong></p>')
         self.assertEqual(sanitize_rich_text(cleaned), cleaned)
+
+    def test_nested_rich_text_rebases_headings_below_its_host_section(self):
+        cleaned = sanitize_nested_rich_text(
+            '<h2 class="ql-align-center">阶段</h2>'
+            '<h3>细节</h3><h6>补充</h6>'
+            '<script>bad()</script>',
+        )
+
+        self.assertIn('<h4 class="ql-align-center">阶段</h4>', cleaned)
+        self.assertIn('<h5>细节</h5>', cleaned)
+        self.assertIn('<h6>补充</h6>', cleaned)
+        self.assertNotIn('<h2', cleaned)
+        self.assertNotIn('bad()', cleaned)
 
 
 class ClientRenderingSafetyTests(SimpleTestCase):
