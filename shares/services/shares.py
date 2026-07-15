@@ -127,7 +127,11 @@ def update_share_from_form(*, form, actor):
     for field_name in changed_fields:
         setattr(share, field_name, form.cleaned_data[field_name])
 
-    share.status = _submission_status(actor, share.visibility)
+    share.status = (
+        Share.Status.PENDING
+        if share.is_restricted
+        else _submission_status(actor, share.visibility)
+    )
     share.review_feedback = ''
     share.reviewed_at = None
     share.reviewed_by = None

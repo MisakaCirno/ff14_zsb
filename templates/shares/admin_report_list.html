@@ -26,12 +26,11 @@
                             <span class="badge bg-danger me-2">{{ share.pending_count }} 条举报</span>
                             <span class="fw-bold me-2">{{ share.title }}</span>
                             <small class="text-muted">ID: {{ share.share_id }}</small>
+                            {% if share.is_restricted %}
+                            <span class="badge bg-dark ms-2">{{ share.get_restriction_state_display }}</span>
+                            {% endif %}
                             <span class="ms-auto text-muted small">
-                                作者: {% if share.author %}
-                                <a href="{% url 'user_public_profile' share.author.username %}" class="text-decoration-none text-muted" target="_blank">
-                                    {{ share.author.username }}
-                                </a>
-                                {% else %}匿名{% endif %}
+                                作者: {% if share.author %}{{ share.author.username }}{% else %}匿名{% endif %}
                             </span>
                         </div>
                     </button>
@@ -44,10 +43,15 @@
                                 <a href="{% url 'share_detail' share.share_id %}" target="_blank" class="btn btn-outline-primary btn-sm">
                                     <i class="bi bi-box-arrow-up-right"></i> 查看分享详情
                                 </a>
+                                {% if share.author %}
+                                <a href="{% url 'user_public_profile' share.author.username %}" target="_blank" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-person"></i> 查看作者资料
+                                </a>
+                                {% endif %}
                             </div>
                             <div class="btn-group">
                                 <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#resolveAllReportsModal{{ share.share_id }}">
-                                    <i class="bi bi-check-circle"></i> 认可所有举报 (下架分享)
+                                    <i class="bi bi-check-circle"></i> {% if share.is_restricted %}认可并更新限制{% else %}认可所有举报（下架分享）{% endif %}
                                 </button>
                                 <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#dismissAllReportsModal{{ share.share_id }}">
                                     <i class="bi bi-x-circle"></i> 驳回所有举报
@@ -60,13 +64,18 @@
                                 <form method="post" action="{% url 'admin_resolve_share_reports' share.share_id 'resolve' %}" class="modal-content">
                                     {% csrf_token %}
                                     <div class="modal-header">
-                                        <h5 class="modal-title" id="resolveAllReportsModalLabel{{ share.share_id }}">认可所有举报</h5>
+                                        <h5 class="modal-title" id="resolveAllReportsModalLabel{{ share.share_id }}">{% if share.is_restricted %}认可举报并更新现有限制{% else %}认可所有举报{% endif %}</h5>
                                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
                                     </div>
                                     <div class="modal-body">
                                         <p class="text-muted small mb-2">分享：{{ share.title }}</p>
-                                        <label class="form-label" for="resolveAllReason{{ share.share_id }}">处理说明</label>
-                                        <textarea id="resolveAllReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="请填写下架依据，举报人和分享作者会收到站内信。"></textarea>
+                                        {% if share.is_restricted %}
+                                        <div class="alert alert-warning py-2 small">
+                                            <strong>当前{{ share.get_restriction_state_display }}：</strong>{{ share.restriction_reason }}
+                                        </div>
+                                        {% endif %}
+                                        <label class="form-label" for="resolveAllReason{{ share.share_id }}">{% if share.is_restricted %}新的处理说明{% else %}处理说明{% endif %}</label>
+                                        <textarea id="resolveAllReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="{% if share.is_restricted %}新的说明会替换当前限制原因，并通知举报人和分享作者。{% else %}请填写下架依据，举报人和分享作者会收到站内信。{% endif %}"></textarea>
                                     </div>
                                     <div class="modal-footer">
                                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
@@ -107,7 +116,7 @@
                                 <li class="list-group-item bg-light py-2">
                                     <div class="d-flex justify-content-between">
                                         <div>
-                                            <span class="fw-bold">{{ log.user.username }}</span> 
+                                            <span class="fw-bold">{{ log.user.username|default:'已删除账户' }}</span>
                                             <span class="badge bg-secondary ms-1" style="font-size: 0.75em;">{{ log.get_action_display }}</span>
                                         </div>
                                         <small class="text-muted">{{ log.created_at|date:"Y-m-d H:i" }}</small>
@@ -128,7 +137,7 @@
                             <div class="list-group-item">
                                 <div class="d-flex w-100 justify-content-between">
                                     <h6 class="mb-1">
-                                        <i class="bi bi-person"></i> {{ report.reporter.username }}
+                                        <i class="bi bi-person"></i> {{ report.reporter.username|default:'已删除账户' }}
                                     </h6>
                                     <small class="text-muted">{{ report.created_at|date:"Y-m-d H:i" }}</small>
                                 </div>
@@ -149,7 +158,7 @@
                                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
                                         </div>
                                         <div class="modal-body">
-                                            <p class="text-muted small mb-2">举报人：{{ report.reporter.username }}</p>
+                                            <p class="text-muted small mb-2">举报人：{{ report.reporter.username|default:'已删除账户' }}</p>
                                             <div class="border rounded p-2 bg-light small mb-3">{{ report.reason }}</div>
                                             <label class="form-label" for="dismissReportReason{{ report.id }}">处理说明</label>
                                             <textarea id="dismissReportReason{{ report.id }}" name="reason" class="form-control" rows="4" required placeholder="请填写驳回依据，举报人会收到站内信。"></textarea>

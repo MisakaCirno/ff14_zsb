@@ -24,6 +24,8 @@ def can_view_share(user, share):
     """Apply the direct-link visibility policy for one share."""
     if is_moderator(user) or is_owner(user, share):
         return True
+    if share.is_restricted:
+        return False
     if share.visibility == Share.Visibility.PRIVATE:
         return False
     if share.visibility not in {Share.Visibility.PUBLIC, Share.Visibility.UNLISTED}:
@@ -40,6 +42,7 @@ def viewable_share_queryset(user, queryset=None):
         return queryset
 
     visibility_filter = Q(
+        restriction_state=Share.RestrictionState.CLEAR,
         visibility__in={Share.Visibility.PUBLIC, Share.Visibility.UNLISTED},
         status__in={Share.Status.APPROVED, Share.Status.PENDING},
     )
@@ -57,6 +60,7 @@ def public_share_queryset(queryset=None):
     if not isinstance(queryset, QuerySet):
         raise TypeError('queryset must be a Django QuerySet')
     return queryset.filter(
+        restriction_state=Share.RestrictionState.CLEAR,
         visibility=Share.Visibility.PUBLIC,
         status=Share.Status.APPROVED,
     )
@@ -64,6 +68,8 @@ def public_share_queryset(queryset=None):
 
 def share_api_denial_status(share):
     """Hide moderation state while preserving the existing private-content 403 contract."""
+    if share.is_restricted:
+        return 404
     if share.visibility == Share.Visibility.PRIVATE:
         return 403
     return 404

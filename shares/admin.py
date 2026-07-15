@@ -18,10 +18,24 @@ class AnnouncementAdmin(admin.ModelAdmin):
 @admin.register(Share)
 class ShareAdmin(admin.ModelAdmin):
     form = ShareAdminForm
-    list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'status', 'views', 'copies', 'created_at']
-    list_filter = ['visibility', 'status', 'created_at', 'author']
+    list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'status', 'restriction_state', 'views', 'copies', 'created_at']
+    list_filter = ['visibility', 'status', 'restriction_state', 'created_at', 'author']
     search_fields = ['title', 'share_id', 'description', 'author__username', 'author__profile__nickname']
-    readonly_fields = ['share_id', 'created_at', 'updated_at', 'views', 'copies']
+    readonly_fields = [
+        'share_id',
+        'status',
+        'review_feedback',
+        'reviewed_at',
+        'reviewed_by',
+        'restriction_state',
+        'restriction_reason',
+        'restricted_at',
+        'restricted_by',
+        'created_at',
+        'updated_at',
+        'views',
+        'copies',
+    ]
     date_hierarchy = 'created_at'
     list_per_page = 20
     
@@ -31,6 +45,14 @@ class ShareAdmin(admin.ModelAdmin):
         }),
         ('审核信息', {
             'fields': ('review_feedback', 'reviewed_at', 'reviewed_by')
+        }),
+        ('活动限制（请通过审核中心操作）', {
+            'fields': (
+                'restriction_state',
+                'restriction_reason',
+                'restricted_at',
+                'restricted_by',
+            )
         }),
         ('内容', {
             'fields': ('strategy_code', 'description')
@@ -44,7 +66,8 @@ class ShareAdmin(admin.ModelAdmin):
     def get_author_display(self, obj):
         """显示作者昵称或用户名"""
         if obj.author:
-            return obj.author.profile.get_display_name()
+            profile = getattr(obj.author, 'profile', None)
+            return profile.get_display_name() if profile else obj.author.username
         return "匿名用户"
     get_author_display.short_description = '作者'
     get_author_display.admin_order_field = 'author__username'
@@ -122,7 +145,22 @@ class ReportAdmin(admin.ModelAdmin):
     list_display = ['share', 'reporter', 'status', 'created_at', 'resolved_at', 'resolved_by']
     list_filter = ['status', 'created_at', 'resolved_at']
     search_fields = ['share__title', 'share__share_id', 'reporter__username', 'reason', 'resolution_reason']
-    readonly_fields = ['created_at', 'resolved_at']
+    readonly_fields = [
+        'share',
+        'reporter',
+        'reason',
+        'status',
+        'created_at',
+        'resolved_at',
+        'resolved_by',
+        'resolution_reason',
+    ]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(SiteMessage)

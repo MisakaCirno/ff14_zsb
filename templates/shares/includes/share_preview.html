@@ -42,9 +42,19 @@
 
     <div class="position-absolute top-0 end-0 m-2 share-preview__meta">
         {% if preview_variant == 'review' %}
+        {% if share.is_restricted %}
+        <span class="badge bg-danger">
+            <i class="bi bi-shield-lock-fill"></i> {{ share.get_restriction_state_display }}
+        </span>
+        {% elif share.status == 'pending' %}
         <span class="badge bg-warning text-dark">
             <i class="bi bi-hourglass-split"></i> 待审核
         </span>
+        {% else %}
+        <span class="badge bg-success">
+            <i class="bi bi-check-circle"></i> 已审核
+        </span>
+        {% endif %}
         {% else %}
             {% if preview_variant == 'management' %}
                 {% if share.status == 'pending' %}

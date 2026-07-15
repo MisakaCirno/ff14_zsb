@@ -80,6 +80,12 @@ class Share(models.Model):
         APPROVED = 'approved', '已通过'
         REJECTED = 'rejected', '已拒绝'
 
+    class RestrictionState(models.TextChoices):
+        CLEAR = 'clear', '无限制'
+        REVIEW_REJECTED = 'review_rejected', '审核拒绝限制'
+        REPORT_TAKEDOWN = 'report_takedown', '举报下架限制'
+        LEGACY_PRIVATE = 'legacy_private', '历史私密待确认'
+
     class Category(models.TextChoices):
         ENTERTAINMENT = 'entertainment', '娱乐'
         COMBAT = 'combat', '战斗'
@@ -107,6 +113,22 @@ class Share(models.Model):
     review_feedback = models.TextField(blank=True, verbose_name='最近一次审核反馈')
     reviewed_at = models.DateTimeField(null=True, blank=True, verbose_name='审核时间')
     reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_shares', verbose_name='审核人')
+    restriction_state = models.CharField(
+        max_length=20,
+        choices=RestrictionState.choices,
+        default=RestrictionState.CLEAR,
+        verbose_name='内容限制状态',
+    )
+    restriction_reason = models.TextField(blank=True, verbose_name='内容限制原因')
+    restricted_at = models.DateTimeField(null=True, blank=True, verbose_name='内容限制时间')
+    restricted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='restricted_shares',
+        verbose_name='内容限制操作人',
+    )
     
     is_spoiler = models.BooleanField(default=False, verbose_name='可能包含剧透')
     is_nsfw = models.BooleanField(default=False, verbose_name='可能令人不适')
@@ -121,7 +143,7 @@ class Share(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(
-                fields=['visibility', 'status', '-created_at'],
+                fields=['restriction_state', 'visibility', 'status', '-created_at'],
                 name='share_feed_idx',
             ),
             models.Index(
@@ -178,6 +200,38 @@ class Share(models.Model):
                 ),
                 name='share_reviewer_has_time',
             ),
+            models.CheckConstraint(
+                condition=models.Q(restriction_state__in=[
+                    'clear',
+                    'review_rejected',
+                    'report_takedown',
+                    'legacy_private',
+                ]),
+                name='share_restriction_state_valid',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        restriction_state='clear',
+                        restriction_reason='',
+                        restricted_at__isnull=True,
+                        restricted_by__isnull=True,
+                    )
+                    | (
+                        ~models.Q(restriction_state='clear')
+                        & ~models.Q(restriction_reason='')
+                        & models.Q(restricted_at__isnull=False)
+                    )
+                ),
+                name='share_restriction_metadata',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(status='rejected')
+                    | ~models.Q(restriction_state='clear')
+                ),
+                name='share_rejected_restricted',
+            ),
         ]
         verbose_name = '战术板分享'
         verbose_name_plural = '战术板分享'
@@ -229,11 +283,22 @@ class Share(models.Model):
         from django.urls import reverse
         return reverse('share_detail', kwargs={'share_id': self.share_id})
 
+    @property
+    def is_restricted(self):
+        return self.restriction_state != self.RestrictionState.CLEAR
+
 
 class Report(models.Model):
     """举报模型"""
     share = models.ForeignKey(Share, on_delete=models.CASCADE, related_name='reports', verbose_name='被举报分享')
-    reporter = models.ForeignKey(User, on_delete=models.CASCADE, related_name='submitted_reports', verbose_name='举报人')
+    reporter = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='submitted_reports',
+        verbose_name='举报人',
+    )
     reason = models.TextField(verbose_name='举报原因')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='举报时间')
     
@@ -312,6 +377,7 @@ class SiteMessage(models.Model):
         REPORT_DISMISSED = 'report_dismissed', '举报未采纳'
         REPORT_RESOLVED = 'report_resolved', '举报已处理'
         SHARE_TAKEDOWN = 'share_takedown', '分享被下架'
+        SHARE_RESTORED = 'share_restored', '分享限制已解除'
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='site_messages', verbose_name='收件人')
     sender = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_site_messages', verbose_name='发件人')
@@ -431,13 +497,22 @@ class CollectionItem(models.Model):
 class ShareLog(models.Model):
     """分享操作日志模型"""
     share = models.ForeignKey(Share, on_delete=models.CASCADE, related_name='logs', verbose_name='关联分享')
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='share_logs', verbose_name='操作人')
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='share_logs',
+        verbose_name='操作人',
+    )
     
     class ActionType(models.TextChoices):
         CREATE = 'create', '创建分享'
         EDIT = 'edit', '编辑分享'
         REVIEW_APPROVE = 'approve', '审核通过'
         REVIEW_REJECT = 'reject', '审核拒绝'
+        RESTRICTION_CONFIRM = 'confirm_restriction', '确认维持内容限制'
+        RESTRICTION_RELEASE = 'release_restriction', '解除内容限制'
         ADD_TO_COLLECTION = 'add_collection', '加入合集'
         REMOVE_FROM_COLLECTION = 'remove_collection', '移出合集'
         REPORT_HANDLE = 'report_handle', '处理举报'
@@ -464,5 +539,6 @@ class ShareLog(models.Model):
         verbose_name_plural = '操作日志'
 
     def __str__(self):
-        return f"{self.user.username} - {self.get_action_display()} - {self.share.title}"
+        username = self.user.username if self.user else '已删除账户'
+        return f"{username} - {self.get_action_display()} - {self.share.title}"
 

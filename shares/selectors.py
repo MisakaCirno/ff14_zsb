@@ -171,7 +171,8 @@ def unread_site_message_count(user):
 def admin_task_counts():
     return {
         'pending_reviews_count': Share.objects.filter(
-            status=Share.Status.PENDING,
+            Q(status=Share.Status.PENDING)
+            | ~Q(restriction_state=Share.RestrictionState.CLEAR)
         ).count(),
         'pending_reports_count': Share.objects.annotate(
             pending_count=Count(

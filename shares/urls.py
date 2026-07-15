@@ -47,6 +47,8 @@ urlpatterns = [
     path('staff/reviews/logs/', moderation.admin_review_logs, name='admin_review_logs'),
     path('staff/reviews/<str:share_id>/approve/', moderation.admin_approve_share, name='admin_approve_share'),
     path('staff/reviews/<str:share_id>/reject/', moderation.admin_reject_share, name='admin_reject_share'),
+    path('staff/restrictions/<str:share_id>/confirm/', moderation.admin_confirm_share_restriction, name='admin_confirm_share_restriction'),
+    path('staff/restrictions/<str:share_id>/release/', moderation.admin_release_share_restriction, name='admin_release_share_restriction'),
     
     # 举报处理
     path('share/<str:share_id>/report/', moderation.report_share, name='report_share'),

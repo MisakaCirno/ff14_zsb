@@ -186,6 +186,105 @@ class ShareWriteWorkflowTests(TestCase):
         self.assertIsNone(share.reviewed_at)
         self.assertIsNone(share.reviewed_by)
 
+    def test_restricted_edit_preserves_restriction_and_requires_review_for_all_authors_and_visibilities(self):
+        cases = (
+            ('regular-public', self.author, Share.Visibility.PUBLIC, Share.Visibility.UNLISTED),
+            ('regular-unlisted', self.author, Share.Visibility.UNLISTED, Share.Visibility.PRIVATE),
+            ('regular-private', self.author, Share.Visibility.PRIVATE, Share.Visibility.PUBLIC),
+            ('staff-public', self.admin, Share.Visibility.PUBLIC, Share.Visibility.PRIVATE),
+            ('staff-unlisted', self.admin, Share.Visibility.UNLISTED, Share.Visibility.PUBLIC),
+            ('staff-private', self.admin, Share.Visibility.PRIVATE, Share.Visibility.UNLISTED),
+        )
+        for case_name, actor, visibility, target_visibility in cases:
+            with self.subTest(case=case_name):
+                restricted_at = timezone.now()
+                share = self.create_share(
+                    title=f'{case_name} 原标题',
+                    strategy_code=f'[stgy:{case_name}]',
+                    author=actor,
+                    visibility=visibility,
+                    review_feedback='旧审核反馈',
+                    reviewed_at=restricted_at,
+                    reviewed_by=self.admin,
+                    restriction_state=Share.RestrictionState.REPORT_TAKEDOWN,
+                    restriction_reason='举报下架限制必须保留',
+                    restricted_at=restricted_at,
+                    restricted_by=self.admin,
+                )
+                self.client.force_login(actor)
+
+                response = self.client.post(
+                    reverse('edit_share', args=[share.share_id]),
+                    self.edit_form_data(
+                        share,
+                        title=f'{case_name} 修改后',
+                        visibility=target_visibility,
+                    ),
+                )
+
+                self.assertEqual(response.status_code, 302)
+                share.refresh_from_db()
+                self.assertEqual(share.title, f'{case_name} 修改后')
+                self.assertEqual(share.visibility, target_visibility)
+                self.assertEqual(share.status, Share.Status.PENDING)
+                self.assertEqual(
+                    share.restriction_state,
+                    Share.RestrictionState.REPORT_TAKEDOWN,
+                )
+                self.assertEqual(
+                    share.restriction_reason,
+                    '举报下架限制必须保留',
+                )
+                self.assertEqual(share.restricted_at, restricted_at)
+                self.assertEqual(share.restricted_by, self.admin)
+                self.assertEqual(share.review_feedback, '')
+                self.assertIsNone(share.reviewed_at)
+                self.assertIsNone(share.reviewed_by)
+
+    def test_legacy_private_cannot_use_private_classification_after_visibility_change(self):
+        restricted_at = timezone.now()
+        share = self.create_share(
+            visibility=Share.Visibility.PRIVATE,
+            restriction_state=Share.RestrictionState.LEGACY_PRIVATE,
+            restriction_reason='历史私密状态来源待人工确认',
+            restricted_at=restricted_at,
+        )
+        self.client.force_login(self.author)
+
+        response = self.client.post(
+            reverse('edit_share', args=[share.share_id]),
+            self.edit_form_data(
+                share,
+                visibility=Share.Visibility.PUBLIC,
+            ),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        share.refresh_from_db()
+        self.assertEqual(share.visibility, Share.Visibility.PUBLIC)
+        self.assertEqual(share.status, Share.Status.PENDING)
+        self.assertEqual(
+            share.restriction_state,
+            Share.RestrictionState.LEGACY_PRIVATE,
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse('admin_release_share_restriction', args=[share.share_id]),
+            {'reason': '不能把公开内容分类为作者私密'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        share.refresh_from_db()
+        self.assertEqual(
+            share.restriction_state,
+            Share.RestrictionState.LEGACY_PRIVATE,
+        )
+        self.assertFalse(ShareLog.objects.filter(
+            share=share,
+            action=ShareLog.ActionType.RESTRICTION_RELEASE,
+        ).exists())
+
     def test_no_change_edit_preserves_review_state_and_timestamp(self):
         reviewed_at = timezone.now()
         share = self.create_share(
@@ -289,10 +388,13 @@ class ShareWriteWorkflowTests(TestCase):
         moderated_at = timezone.now()
         Share.objects.filter(pk=share.pk).update(
             status=Share.Status.REJECTED,
-            visibility=Share.Visibility.PRIVATE,
             review_feedback='并发审核结果',
             reviewed_at=moderated_at,
             reviewed_by=self.admin,
+            restriction_state=Share.RestrictionState.REVIEW_REJECTED,
+            restriction_reason='并发审核结果',
+            restricted_at=moderated_at,
+            restricted_by=self.admin,
             updated_at=moderated_at,
         )
 
@@ -309,8 +411,13 @@ class ShareWriteWorkflowTests(TestCase):
         share.refresh_from_db()
         self.assertEqual(share.title, '已有分享')
         self.assertEqual(share.status, Share.Status.REJECTED)
-        self.assertEqual(share.visibility, Share.Visibility.PRIVATE)
+        self.assertEqual(share.visibility, Share.Visibility.PUBLIC)
         self.assertEqual(share.review_feedback, '并发审核结果')
+        self.assertEqual(
+            share.restriction_state,
+            Share.RestrictionState.REVIEW_REJECTED,
+        )
+        self.assertEqual(share.restriction_reason, '并发审核结果')
 
     def test_missing_or_invalid_edit_version_cannot_write(self):
         share = self.create_share()

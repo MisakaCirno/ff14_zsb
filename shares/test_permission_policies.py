@@ -27,12 +27,20 @@ class SharePermissionPolicyTests(TestCase):
         self.staff = User.objects.create_user(username='staff', password='password123', is_staff=True)
 
     def make_share(self, *, visibility, status):
+        restriction = {}
+        if status == Share.Status.REJECTED:
+            restriction = {
+                'restriction_state': Share.RestrictionState.REVIEW_REJECTED,
+                'restriction_reason': '测试审核拒绝',
+                'restricted_at': timezone.now(),
+            }
         return Share.objects.create(
             title=f'{visibility}-{status}',
             strategy_code='[stgy:policy]',
             author=self.author,
             visibility=visibility,
             status=status,
+            **restriction,
         )
 
     def test_direct_link_share_access_matrix(self):
@@ -107,6 +115,32 @@ class SharePermissionPolicyTests(TestCase):
         self.assertTrue(is_moderator(self.staff))
         self.assertFalse(is_moderator(self.other))
 
+    def test_active_restriction_overrides_visibility_and_review_status(self):
+        for status in (Share.Status.APPROVED, Share.Status.PENDING):
+            with self.subTest(status=status):
+                share = Share.objects.create(
+                    title=f'restricted-{status}',
+                    strategy_code=f'[stgy:restricted-{status}]',
+                    author=self.author,
+                    visibility=Share.Visibility.PUBLIC,
+                    status=status,
+                    restriction_state=Share.RestrictionState.REPORT_TAKEDOWN,
+                    restriction_reason='确认违规',
+                    restricted_at=timezone.now(),
+                    restricted_by=self.staff,
+                )
+                self.assertFalse(can_view_share(self.anonymous, share))
+                self.assertFalse(can_view_share(self.other, share))
+                self.assertTrue(can_view_share(self.author, share))
+                self.assertTrue(can_view_share(self.staff, share))
+                self.assertFalse(
+                    viewable_share_queryset(self.other).filter(pk=share.pk).exists(),
+                )
+                self.assertFalse(
+                    public_share_queryset().filter(pk=share.pk).exists(),
+                )
+                self.assertEqual(share_api_denial_status(share), 404)
+
 
 class PermissionEnforcementTests(TestCase):
     def setUp(self):
@@ -115,12 +149,20 @@ class PermissionEnforcementTests(TestCase):
         self.staff = User.objects.create_user(username='staff', password='password123', is_staff=True)
 
     def make_share(self, title, *, visibility, status=Share.Status.APPROVED):
+        restriction = {}
+        if status == Share.Status.REJECTED:
+            restriction = {
+                'restriction_state': Share.RestrictionState.REVIEW_REJECTED,
+                'restriction_reason': '测试审核拒绝',
+                'restricted_at': timezone.now(),
+            }
         return Share.objects.create(
             title=title,
             strategy_code=f'[stgy:{title}]',
             author=self.author,
             visibility=visibility,
             status=status,
+            **restriction,
         )
 
     def test_hidden_share_cannot_be_read_or_mutated_by_other_user(self):

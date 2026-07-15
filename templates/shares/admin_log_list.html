@@ -55,7 +55,7 @@
                         <td>
                             <div class="d-flex align-items-center">
                                 <i class="bi bi-person-fill text-muted me-2"></i>
-                                <span>{{ log.user.username }}</span>
+                                <span>{{ log.user.username|default:'已删除账户' }}</span>
                             </div>
                         </td>
                         <td>

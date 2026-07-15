@@ -49,6 +49,8 @@ class SafeMethodContractTests(TestCase):
             reverse('mark_all_site_messages_read'),
             reverse('admin_approve_share', args=[self.share.share_id]),
             reverse('admin_reject_share', args=[self.share.share_id]),
+            reverse('admin_confirm_share_restriction', args=[self.share.share_id]),
+            reverse('admin_release_share_restriction', args=[self.share.share_id]),
             reverse('admin_resolve_report', args=[self.report.pk, 'dismiss']),
             reverse('admin_resolve_share_reports', args=[self.share.share_id, 'dismiss']),
             reverse(

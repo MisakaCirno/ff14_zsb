@@ -27,6 +27,13 @@ class ShareAccessContractTests(TestCase):
         is_nsfw=False,
         views=0,
     ):
+        restriction = {}
+        if status == Share.Status.REJECTED:
+            restriction = {
+                'restriction_state': Share.RestrictionState.REVIEW_REJECTED,
+                'restriction_reason': '测试审核拒绝',
+                'restricted_at': timezone.now(),
+            }
         return Share.objects.create(
             title=title,
             strategy_code=code,
@@ -37,6 +44,7 @@ class ShareAccessContractTests(TestCase):
             is_spoiler=is_spoiler,
             is_nsfw=is_nsfw,
             views=views,
+            **restriction,
         )
 
     def test_public_approved_share_is_visible_anonymously(self):
@@ -601,12 +609,20 @@ class OverlayApiContractTests(TestCase):
         visibility=Share.Visibility.PUBLIC,
         status=Share.Status.APPROVED,
     ):
+        restriction = {}
+        if status == Share.Status.REJECTED:
+            restriction = {
+                'restriction_state': Share.RestrictionState.REVIEW_REJECTED,
+                'restriction_reason': '测试审核拒绝',
+                'restricted_at': timezone.now(),
+            }
         return Share.objects.create(
             title=title,
             strategy_code=code,
             author=self.author,
             visibility=visibility,
             status=status,
+            **restriction,
         )
 
     def assert_private_json_response(self, response):

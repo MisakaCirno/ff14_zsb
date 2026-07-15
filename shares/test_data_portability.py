@@ -1,9 +1,12 @@
 import json
+from datetime import timedelta
+from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.contrib.auth.models import Group, Permission, User
+from django.core import serializers
 from django.test import TestCase
 from django.utils import timezone
 
@@ -20,9 +23,12 @@ from .models import (
 from .services.data_portability import (
     DATASET_FORMAT,
     DATASET_VERSION,
+    ENTITY_SPECS,
     IMPORT_REPORT_FILENAME,
     MANIFEST_FILENAME,
+    V1_ENTITY_FIELDS,
     DataPortabilityError,
+    database_matches_manifest,
     export_dataset,
     import_dataset,
     validate_dataset,
@@ -103,6 +109,59 @@ class DataPortabilityTests(TestCase):
         manifest = export_dataset(dataset)
         return dataset, manifest
 
+    def downgrade_to_v1(self, dataset: Path) -> dict:
+        manifest_path = dataset / MANIFEST_FILENAME
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        manifest['format_version'] = 1
+        for spec in ENTITY_SPECS:
+            data_path = dataset / spec.filename
+            with data_path.open('w', encoding='utf-8', newline='\n') as stream:
+                serializers.serialize(
+                    'jsonl',
+                    spec.model._default_manager.order_by(spec.model._meta.pk.name),
+                    stream=stream,
+                    use_natural_foreign_keys=True,
+                    fields=V1_ENTITY_FIELDS[spec.name],
+                )
+            manifest['entities'][spec.name]['sha256'] = sha256(
+                data_path.read_bytes()
+            ).hexdigest()
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + '\n',
+            encoding='utf-8',
+            newline='\n',
+        )
+        return manifest
+
+    def test_version_1_schema_and_digest_ignore_future_model_fields(self):
+        from .services import data_portability
+
+        with TemporaryDirectory() as temporary:
+            dataset, _ = self.export_to(Path(temporary))
+            manifest = self.downgrade_to_v1(dataset)
+            current_serialized_fields = data_portability._current_serialized_fields
+
+            def fields_with_future_addition(spec):
+                return {
+                    *current_serialized_fields(spec),
+                    f'future_{spec.name}_field',
+                }
+
+            with patch.object(
+                data_portability,
+                '_current_serialized_fields',
+                side_effect=fields_with_future_addition,
+            ):
+                validation = validate_dataset(dataset)
+                self.assertTrue(validation.valid, validation.as_dict())
+                self.assertTrue(database_matches_manifest(manifest))
+
+            self.assertEqual(
+                set(V1_ENTITY_FIELDS),
+                {spec.name for spec in ENTITY_SPECS},
+            )
+            self.assertNotIn('restriction_state', V1_ENTITY_FIELDS['shares'])
+
     def clear_portable_data(self):
         SiteMessage.objects.all().delete()
         ShareLog.objects.all().delete()
@@ -159,6 +218,13 @@ class DataPortabilityTests(TestCase):
         password_hash = self.author.password
         share_pk = self.share.pk
         report_pk = self.report.pk
+        restricted_at = timezone.now().replace(microsecond=123000)
+        Share.objects.filter(pk=share_pk).update(
+            restriction_state=Share.RestrictionState.REPORT_TAKEDOWN,
+            restriction_reason='管理员确认下架',
+            restricted_at=restricted_at,
+            restricted_by=self.author,
+        )
         with TemporaryDirectory() as temporary:
             dataset, _ = self.export_to(Path(temporary))
             self.clear_portable_data()
@@ -175,6 +241,13 @@ class DataPortabilityTests(TestCase):
             self.assertEqual(share.share_id, '2a3b4c5d')
             self.assertEqual(list(share.likes.values_list('username', flat=True)), ['reporter'])
             self.assertEqual(list(share.favorites.values_list('username', flat=True)), ['author'])
+            self.assertEqual(
+                share.restriction_state,
+                Share.RestrictionState.REPORT_TAKEDOWN,
+            )
+            self.assertEqual(share.restriction_reason, '管理员确认下架')
+            self.assertEqual(share.restricted_at, restricted_at)
+            self.assertEqual(share.restricted_by, author)
             self.assertEqual(report.resolution_reason, '已核查')
             self.assertEqual(SiteMessage.objects.get().related_report_id, report_pk)
 
@@ -190,6 +263,310 @@ class DataPortabilityTests(TestCase):
             new_share.delete()
             new_user.delete()
             self.assertEqual(import_dataset(dataset), 'already_imported')
+
+    def test_version_1_import_preserves_legacy_data_and_derives_restrictions(self):
+        base_time = (timezone.now() - timedelta(days=5)).replace(microsecond=0)
+        Report.objects.filter(pk=self.report.pk).update(
+            status=Report.Status.RESOLVED,
+            resolved_at=base_time,
+            resolved_by=self.author,
+            resolution_reason='  管理员确认违规  ',
+        )
+        approval_after_report = ShareLog.objects.create(
+            share=self.share,
+            user=self.author,
+            action=ShareLog.ActionType.REVIEW_APPROVE,
+        )
+        ShareLog.objects.filter(pk=approval_after_report.pk).update(
+            created_at=base_time + timedelta(days=4)
+        )
+
+        currently_rejected = Share.objects.create(
+            title='当前审核拒绝',
+            strategy_code='[stgy:current-rejected]',
+            author=self.author,
+            status=Share.Status.REJECTED,
+            visibility=Share.Visibility.PRIVATE,
+            review_feedback='  审核元数据原因  ',
+            reviewed_at=base_time + timedelta(days=1),
+            reviewed_by=self.author,
+            restriction_state=Share.RestrictionState.REVIEW_REJECTED,
+            restriction_reason='审核元数据原因',
+            restricted_at=base_time + timedelta(days=1),
+            restricted_by=self.author,
+        )
+        current_reject_log = ShareLog.objects.create(
+            share=currently_rejected,
+            user=self.reporter,
+            action=ShareLog.ActionType.REVIEW_REJECT,
+            details='日志原因不应覆盖审核元数据',
+        )
+        ShareLog.objects.filter(pk=current_reject_log.pk).update(created_at=base_time)
+
+        historically_rejected = Share.objects.create(
+            title='历史拒绝后被作者编辑',
+            strategy_code='[stgy:historical-rejected]',
+            author=self.author,
+            status=Share.Status.APPROVED,
+        )
+        old_approval = ShareLog.objects.create(
+            share=historically_rejected,
+            user=self.author,
+            action=ShareLog.ActionType.REVIEW_APPROVE,
+        )
+        newest_reject = ShareLog.objects.create(
+            share=historically_rejected,
+            user=self.reporter,
+            action=ShareLog.ActionType.REVIEW_REJECT,
+            details='  历史拒绝原因  ',
+        )
+        # Equal timestamps use the later primary key, matching the DB migration.
+        ShareLog.objects.filter(pk=old_approval.pk).update(
+            created_at=base_time + timedelta(days=2)
+        )
+        ShareLog.objects.filter(pk=newest_reject.pk).update(
+            created_at=base_time + timedelta(days=2)
+        )
+
+        historically_cleared = Share.objects.create(
+            title='拒绝后经管理员通过',
+            strategy_code='[stgy:historical-cleared]',
+            author=self.author,
+            status=Share.Status.APPROVED,
+        )
+        old_reject = ShareLog.objects.create(
+            share=historically_cleared,
+            user=self.reporter,
+            action=ShareLog.ActionType.REVIEW_REJECT,
+            details='已解除的旧原因',
+        )
+        newest_approval = ShareLog.objects.create(
+            share=historically_cleared,
+            user=self.author,
+            action=ShareLog.ActionType.REVIEW_APPROVE,
+        )
+        # Here the approval has the later primary key, so the restriction is clear.
+        ShareLog.objects.filter(pk=old_reject.pk).update(
+            created_at=base_time + timedelta(days=3)
+        )
+        ShareLog.objects.filter(pk=newest_approval.pk).update(
+            created_at=base_time + timedelta(days=3)
+        )
+
+        legacy_private = Share.objects.create(
+            title='旧版私密来源待确认',
+            strategy_code='[stgy:legacy-private-review]',
+            author=self.author,
+            status=Share.Status.APPROVED,
+            visibility=Share.Visibility.PRIVATE,
+            restriction_state=Share.RestrictionState.LEGACY_PRIVATE,
+            restriction_reason='历史私密状态来源待人工确认',
+            restricted_at=base_time + timedelta(days=4),
+        )
+        legacy_private_updated_at = legacy_private.updated_at.replace(
+            microsecond=(legacy_private.updated_at.microsecond // 1000) * 1000,
+        )
+
+        with TemporaryDirectory() as temporary:
+            dataset, _ = self.export_to(Path(temporary))
+            manifest = self.downgrade_to_v1(dataset)
+            validation = validate_dataset(dataset)
+
+            self.assertTrue(validation.valid, validation.as_dict())
+            self.assertEqual(validation.as_dict()['format_version'], 1)
+            self.assertTrue(validation.warnings)
+
+            share_pk = self.share.pk
+            current_pk = currently_rejected.pk
+            historical_pk = historically_rejected.pk
+            cleared_pk = historically_cleared.pk
+            legacy_private_pk = legacy_private.pk
+            self.clear_portable_data()
+
+            self.assertEqual(import_dataset(dataset), 'imported')
+            report_restricted = Share.objects.get(pk=share_pk)
+            current_restricted = Share.objects.get(pk=current_pk)
+            historical_restricted = Share.objects.get(pk=historical_pk)
+            cleared = Share.objects.get(pk=cleared_pk)
+            imported_legacy_private = Share.objects.get(pk=legacy_private_pk)
+
+            self.assertEqual(
+                report_restricted.restriction_state,
+                Share.RestrictionState.REPORT_TAKEDOWN,
+            )
+            self.assertEqual(report_restricted.restriction_reason, '管理员确认违规')
+            self.assertEqual(report_restricted.restricted_at, base_time)
+            self.assertEqual(report_restricted.restricted_by.username, 'author')
+            self.assertEqual(
+                current_restricted.restriction_state,
+                Share.RestrictionState.REVIEW_REJECTED,
+            )
+            self.assertEqual(current_restricted.restriction_reason, '审核元数据原因')
+            self.assertEqual(
+                current_restricted.restricted_at,
+                base_time + timedelta(days=1),
+            )
+            self.assertEqual(current_restricted.restricted_by.username, 'author')
+            self.assertEqual(
+                historical_restricted.restriction_state,
+                Share.RestrictionState.REVIEW_REJECTED,
+            )
+            self.assertEqual(historical_restricted.restriction_reason, '历史拒绝原因')
+            self.assertEqual(
+                historical_restricted.restricted_at,
+                base_time + timedelta(days=2),
+            )
+            self.assertEqual(historical_restricted.restricted_by.username, 'reporter')
+            self.assertEqual(cleared.restriction_state, Share.RestrictionState.CLEAR)
+            self.assertEqual(cleared.restriction_reason, '')
+            self.assertIsNone(cleared.restricted_at)
+            self.assertIsNone(cleared.restricted_by)
+            self.assertEqual(
+                imported_legacy_private.restriction_state,
+                Share.RestrictionState.LEGACY_PRIVATE,
+            )
+            self.assertEqual(
+                imported_legacy_private.restriction_reason,
+                '历史私密状态来源待人工确认',
+            )
+            self.assertEqual(
+                imported_legacy_private.restricted_at,
+                legacy_private_updated_at,
+            )
+            self.assertIsNone(imported_legacy_private.restricted_by)
+
+            self.assertEqual(
+                list(report_restricted.likes.values_list('username', flat=True)),
+                ['reporter'],
+            )
+            self.assertEqual(
+                list(report_restricted.favorites.values_list('username', flat=True)),
+                ['author'],
+            )
+            self.assertEqual(
+                Report.objects.get(pk=self.report.pk).resolution_reason,
+                '  管理员确认违规  ',
+            )
+            self.assertTrue(database_matches_manifest(manifest))
+            self.assertEqual(import_dataset(dataset), 'already_imported')
+
+            Share.objects.filter(pk=share_pk).update(restriction_reason='被篡改')
+            self.assertFalse(database_matches_manifest(manifest))
+            with self.assertRaises(DataPortabilityError):
+                import_dataset(dataset)
+
+    def test_version_1_rejects_deleted_audit_actors_but_version_2_allows_them(self):
+        ShareLog.objects.filter(share=self.share).update(user=None)
+        Report.objects.filter(pk=self.report.pk).update(reporter=None)
+        with TemporaryDirectory() as temporary:
+            dataset, _ = self.export_to(Path(temporary))
+
+            self.assertTrue(validate_dataset(dataset).valid)
+            self.downgrade_to_v1(dataset)
+            report = validate_dataset(dataset)
+
+            self.assertFalse(report.valid)
+            share_log_errors = [
+                item['errors']
+                for item in report.quarantined_records
+                if item['entity'] == 'share_logs'
+            ]
+            self.assertTrue(share_log_errors)
+            self.assertIn('version 1 share log has no user', share_log_errors[0])
+            report_errors = [
+                item['errors']
+                for item in report.quarantined_records
+                if item['entity'] == 'reports'
+            ]
+            self.assertTrue(report_errors)
+            self.assertIn('version 1 report has no reporter', report_errors[0])
+
+    def test_version_2_round_trip_preserves_multiple_reports_with_deleted_reporters(self):
+        reporters = [
+            User.objects.create_user(username=f'deleted-reporter-{index}')
+            for index in range(2)
+        ]
+        pending_reports = [
+            Report.objects.create(
+                share=self.share,
+                reporter=reporter,
+                reason=f'待处理举报 {index}',
+            )
+            for index, reporter in enumerate(reporters)
+        ]
+        report_ids = {report.pk for report in pending_reports}
+        for reporter in reporters:
+            reporter.delete()
+
+        self.assertEqual(
+            Report.objects.filter(pk__in=report_ids, reporter=None).count(),
+            2,
+        )
+        with TemporaryDirectory() as temporary:
+            dataset, _ = self.export_to(Path(temporary))
+            validation = validate_dataset(dataset)
+            self.assertTrue(validation.valid, validation.as_dict())
+            self.clear_portable_data()
+
+            self.assertEqual(import_dataset(dataset), 'imported')
+
+        self.assertEqual(
+            Report.objects.filter(pk__in=report_ids, reporter=None).count(),
+            2,
+        )
+
+    def test_version_1_uses_safe_fallback_restriction_reasons(self):
+        restricted_at = timezone.now().replace(microsecond=0)
+        report_share = Share.objects.create(
+            title='缺少举报处理说明',
+            strategy_code='[stgy:missing-report-resolution]',
+            author=self.author,
+            restriction_state=Share.RestrictionState.REPORT_TAKEDOWN,
+            restriction_reason='历史举报下架记录未保存处理说明',
+            restricted_at=restricted_at,
+        )
+        Report.objects.create(
+            share=report_share,
+            reporter=self.reporter,
+            reason='用户举报原文不可作为管理员处理依据',
+            status=Report.Status.RESOLVED,
+            resolved_at=restricted_at,
+            resolution_reason='',
+        )
+        rejected_share = Share.objects.create(
+            title='缺少审核拒绝原因',
+            strategy_code='[stgy:missing-review-reason]',
+            author=self.author,
+            status=Share.Status.REJECTED,
+            visibility=Share.Visibility.PRIVATE,
+            restriction_state=Share.RestrictionState.REVIEW_REJECTED,
+            restriction_reason='历史审核拒绝记录未保存原因',
+            restricted_at=restricted_at,
+        )
+
+        with TemporaryDirectory() as temporary:
+            dataset, _ = self.export_to(Path(temporary))
+            self.downgrade_to_v1(dataset)
+            report_pk = report_share.pk
+            rejected_pk = rejected_share.pk
+            self.clear_portable_data()
+
+            self.assertEqual(import_dataset(dataset), 'imported')
+            imported_report_share = Share.objects.get(pk=report_pk)
+            imported_rejected_share = Share.objects.get(pk=rejected_pk)
+            self.assertEqual(
+                imported_report_share.restriction_reason,
+                '历史举报下架记录未保存处理说明',
+            )
+            self.assertNotEqual(
+                imported_report_share.restriction_reason,
+                '用户举报原文不可作为管理员处理依据',
+            )
+            self.assertEqual(
+                imported_rejected_share.restriction_reason,
+                '历史审核拒绝记录未保存原因',
+            )
+            self.assertIsNotNone(imported_rejected_share.restricted_at)
 
     def test_import_error_rolls_back_all_portable_rows_and_writes_report(self):
         with TemporaryDirectory() as temporary:

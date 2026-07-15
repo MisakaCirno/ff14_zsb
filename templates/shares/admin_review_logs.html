@@ -38,7 +38,7 @@
                         <td>
                             <div class="d-flex align-items-center">
                                 <i class="bi bi-person-fill text-muted me-2"></i>
-                                <span>{{ log.user.username }}</span>
+                                <span>{{ log.user.username|default:'已删除账户' }}</span>
                             </div>
                         </td>
                         <td>
@@ -46,6 +46,8 @@
                             <span class="badge bg-success bg-opacity-10 text-success border border-success">审核通过</span>
                             {% elif log.action == 'reject' %}
                             <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">审核拒绝</span>
+                            {% elif log.action == 'release_restriction' %}
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary">解除限制</span>
                             {% else %}
                             <span class="badge bg-secondary">{{ log.get_action_display }}</span>
                             {% endif %}

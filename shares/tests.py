@@ -266,8 +266,16 @@ class SiteMessageWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 302)
         share.refresh_from_db()
         self.assertEqual(share.status, Share.Status.REJECTED)
-        self.assertEqual(share.visibility, Share.Visibility.PRIVATE)
+        self.assertEqual(share.visibility, Share.Visibility.PUBLIC)
         self.assertEqual(share.review_feedback, '包含不适合公开展示的内容')
+        self.assertEqual(
+            share.restriction_state,
+            Share.RestrictionState.REVIEW_REJECTED,
+        )
+        self.assertEqual(
+            share.restriction_reason,
+            '包含不适合公开展示的内容',
+        )
 
         message = SiteMessage.objects.get(recipient=self.author)
         self.assertEqual(message.message_type, SiteMessage.MessageType.SHARE_REJECTED)

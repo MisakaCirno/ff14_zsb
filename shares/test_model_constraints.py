@@ -47,6 +47,19 @@ class ModelConstraintTests(TestCase):
             reviewed_by=self.admin,
         )
 
+    def test_share_restriction_state_is_constrained(self):
+        self.assert_update_rejected(restriction_state='invalid')
+        self.assert_update_rejected(
+            restriction_state=Share.RestrictionState.REPORT_TAKEDOWN,
+            restriction_reason='',
+            restricted_at=None,
+        )
+        self.assert_update_rejected(
+            restriction_state=Share.RestrictionState.CLEAR,
+            restriction_reason='无限制状态不能保留原因',
+        )
+        self.assert_update_rejected(status=Share.Status.REJECTED)
+
     def test_only_one_pending_report_per_reporter_and_share(self):
         first = Report.objects.create(
             share=self.share,

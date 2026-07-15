@@ -84,6 +84,34 @@ class ReportResolutionForm(forms.Form):
     )
 
 
+class RestrictionReleaseForm(forms.Form):
+    """管理员解除活动内容限制时填写审计说明。"""
+    reason = forms.CharField(
+        label='解除说明',
+        min_length=2,
+        max_length=STAFF_REASON_MAX_LENGTH,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': '请填写解除限制的复核依据，分享作者会收到这段说明。',
+        }),
+    )
+
+
+class RestrictionConfirmationForm(forms.Form):
+    """管理员确认继续维持活动内容限制时填写审计说明。"""
+    reason = forms.CharField(
+        label='确认说明',
+        min_length=2,
+        max_length=STAFF_REASON_MAX_LENGTH,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': '请填写继续维持限制的复核依据，分享作者会收到这段说明。',
+        }),
+    )
+
+
 class ShareForm(forms.ModelForm):
     """分享创建/编辑表单"""
     strategy_code = forms.CharField(

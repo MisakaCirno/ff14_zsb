@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from hashlib import sha256
 from io import StringIO
 import json
 import os
 from pathlib import Path
 import shutil
+from types import MappingProxyType
 from typing import Any
 from uuid import uuid4
 
@@ -18,10 +20,26 @@ from django.utils import timezone
 
 
 DATASET_FORMAT = 'ffxivshare-jsonl'
-DATASET_VERSION = 1
+DATASET_VERSION = 2
+SUPPORTED_DATASET_VERSIONS = frozenset({1, DATASET_VERSION})
 MANIFEST_FILENAME = 'manifest.json'
 VALIDATION_REPORT_FILENAME = 'validation-report.json'
 IMPORT_REPORT_FILENAME = 'import-report.json'
+
+V1_SHARE_LOG_ACTIONS = frozenset({
+    'create',
+    'edit',
+    'approve',
+    'reject',
+    'add_collection',
+    'remove_collection',
+    'report_handle',
+    'delete',
+    'other',
+})
+HISTORICAL_REPORT_REASON_FALLBACK = '历史举报下架记录未保存处理说明'
+HISTORICAL_REVIEW_REASON_FALLBACK = '历史审核拒绝记录未保存原因'
+HISTORICAL_PRIVATE_REASON_FALLBACK = '历史私密状态来源待人工确认'
 
 
 @dataclass(frozen=True)
@@ -49,6 +67,115 @@ ENTITY_SPECS = (
 )
 ENTITY_BY_NAME = {spec.name: spec for spec in ENTITY_SPECS}
 
+# Dataset schemas are public migration contracts, not projections of whichever
+# Django models happen to be installed when an import runs.  Keep every v1
+# entity explicit so later model fields cannot silently become required by the
+# historical validator or enter the v1 database digest.
+V1_ENTITY_FIELDS = MappingProxyType({
+    'groups': frozenset({
+        'name',
+        'permissions',
+    }),
+    'users': frozenset({
+        'password',
+        'last_login',
+        'is_superuser',
+        'username',
+        'first_name',
+        'last_name',
+        'email',
+        'is_staff',
+        'is_active',
+        'date_joined',
+        'groups',
+        'user_permissions',
+    }),
+    'user_profiles': frozenset({
+        'user',
+        'nickname',
+        'bio',
+        'home_feed_mode',
+        'created_at',
+        'updated_at',
+    }),
+    'shares': frozenset({
+        'share_id',
+        'title',
+        'strategy_code',
+        'description',
+        'author',
+        'created_at',
+        'updated_at',
+        'category',
+        'visibility',
+        'status',
+        'review_feedback',
+        'reviewed_at',
+        'reviewed_by',
+        'is_spoiler',
+        'is_nsfw',
+        'is_original',
+        'views',
+        'copies',
+        'likes',
+        'favorites',
+    }),
+    'collections': frozenset({
+        'title',
+        'description',
+        'author',
+        'created_at',
+        'updated_at',
+        'is_public',
+    }),
+    'collection_items': frozenset({
+        'collection',
+        'share',
+        'order',
+        'added_at',
+    }),
+    'reports': frozenset({
+        'share',
+        'reporter',
+        'reason',
+        'created_at',
+        'status',
+        'resolved_at',
+        'resolved_by',
+        'resolution_reason',
+    }),
+    'share_logs': frozenset({
+        'share',
+        'user',
+        'action',
+        'details',
+        'created_at',
+    }),
+    'announcements': frozenset({
+        'title',
+        'content',
+        'is_active',
+        'created_at',
+        'updated_at',
+    }),
+    'site_messages': frozenset({
+        'recipient',
+        'sender',
+        'message_type',
+        'title',
+        'content',
+        'related_share',
+        'related_report',
+        'metadata',
+        'created_at',
+        'read_at',
+        'archived_at',
+    }),
+})
+
+if frozenset(V1_ENTITY_FIELDS) != frozenset(ENTITY_BY_NAME):
+    raise RuntimeError('The frozen v1 schema must cover every portable entity.')
+
 
 class DataPortabilityError(RuntimeError):
     pass
@@ -60,6 +187,22 @@ class ParsedRecord:
     line: int
     pk: Any
     fields: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class RestrictionProjection:
+    state: str = 'clear'
+    reason: str = ''
+    restricted_at: Any = None
+    restricted_by: Any = None
+
+    def as_serialized_fields(self) -> dict[str, Any]:
+        return {
+            'restriction_state': self.state,
+            'restriction_reason': self.reason,
+            'restricted_at': self.restricted_at,
+            'restricted_by': self.restricted_by,
+        }
 
 
 @dataclass
@@ -76,9 +219,14 @@ class ValidationReport:
         return not self.errors and not self.quarantined_records
 
     def as_dict(self) -> dict[str, Any]:
+        source_version = (
+            self.manifest.get('format_version')
+            if isinstance(self.manifest, dict)
+            else DATASET_VERSION
+        )
         return {
             'format': DATASET_FORMAT,
-            'format_version': DATASET_VERSION,
+            'format_version': source_version,
             'generated_at': timezone.now().isoformat(),
             'dataset': self.dataset,
             'valid': self.valid,
@@ -110,12 +258,17 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
             temporary.unlink()
 
 
-def _serialize_queryset(queryset, stream) -> None:
+def _serialize_queryset(queryset, stream, *, fields: set[str] | None = None) -> None:
+    options: dict[str, Any] = {
+        'stream': stream,
+        'use_natural_foreign_keys': True,
+    }
+    if fields is not None:
+        options['fields'] = fields
     serializers.serialize(
         'jsonl',
         queryset.iterator(chunk_size=1000),
-        stream=stream,
-        use_natural_foreign_keys=True,
+        **options,
     )
 
 
@@ -186,7 +339,7 @@ def export_dataset(output_directory: str | Path, *, overwrite: bool = False) -> 
         raise
 
 
-def _expected_serialized_fields(spec: EntitySpec) -> set[str]:
+def _current_serialized_fields(spec: EntitySpec) -> set[str]:
     fields = {
         field.name
         for field in spec.model._meta.local_fields
@@ -200,9 +353,24 @@ def _expected_serialized_fields(spec: EntitySpec) -> set[str]:
     return fields
 
 
-def _record_schema_errors(spec: EntitySpec, fields: dict[str, Any]) -> list[str]:
+def _expected_serialized_fields(
+    spec: EntitySpec,
+    *,
+    dataset_version: int = DATASET_VERSION,
+) -> set[str]:
+    if dataset_version == 1:
+        return set(V1_ENTITY_FIELDS[spec.name])
+    return _current_serialized_fields(spec)
+
+
+def _record_schema_errors(
+    spec: EntitySpec,
+    fields: dict[str, Any],
+    *,
+    dataset_version: int,
+) -> list[str]:
     errors: list[str] = []
-    expected = _expected_serialized_fields(spec)
+    expected = _expected_serialized_fields(spec, dataset_version=dataset_version)
     missing = sorted(expected - fields.keys())
     extra = sorted(fields.keys() - expected)
     if missing:
@@ -236,6 +404,12 @@ def _record_schema_errors(spec: EntitySpec, fields: dict[str, Any]) -> list[str]
             allowed = {choice[0] for choice in model_field.flatchoices}
             if converted not in allowed:
                 errors.append(f'{model_field.name} is not an allowed choice')
+    if (
+        dataset_version == 1
+        and spec.name == 'share_logs'
+        and fields.get('action') not in V1_SHARE_LOG_ACTIONS
+    ):
+        errors.append('action is not available in dataset version 1')
     return errors
 
 
@@ -245,6 +419,159 @@ def _natural_user(value: Any) -> str | None:
     if isinstance(value, list) and len(value) == 1 and isinstance(value[0], str):
         return value[0]
     return None
+
+
+def _timestamp(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    else:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _record_tiebreaker(record: ParsedRecord) -> tuple[int, Any]:
+    if isinstance(record.pk, int) and not isinstance(record.pk, bool):
+        return (0, record.pk)
+    return (1, repr(record.pk))
+
+
+def _latest_record(
+    records: list[ParsedRecord],
+    *,
+    timestamp_field: str,
+) -> ParsedRecord | None:
+    if not records:
+        return None
+    minimum = datetime.min.replace(tzinfo=UTC)
+    return max(
+        records,
+        key=lambda record: (
+            _timestamp(record.fields.get(timestamp_field)) or minimum,
+            _record_tiebreaker(record),
+        ),
+    )
+
+
+def _record_event_key(
+    record: ParsedRecord,
+    *,
+    timestamp_field: str,
+) -> tuple[datetime, tuple[int, Any]]:
+    return (
+        _timestamp(record.fields.get(timestamp_field))
+        or datetime.min.replace(tzinfo=UTC),
+        _record_tiebreaker(record),
+    )
+
+
+def _clean_reason(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ''
+
+
+def _derive_v1_restrictions(
+    records: dict[str, list[ParsedRecord]],
+) -> dict[Any, RestrictionProjection]:
+    reports_by_share: dict[Any, list[ParsedRecord]] = {}
+    for report in records['reports']:
+        if report.fields.get('status') != 'resolved':
+            continue
+        reports_by_share.setdefault(report.fields.get('share'), []).append(report)
+
+    rejects_by_share: dict[Any, list[ParsedRecord]] = {}
+    approvals_by_share: dict[Any, list[ParsedRecord]] = {}
+    for log in records['share_logs']:
+        target = None
+        if log.fields.get('action') == 'reject':
+            target = rejects_by_share
+        elif log.fields.get('action') == 'approve':
+            target = approvals_by_share
+        if target is not None:
+            target.setdefault(log.fields.get('share'), []).append(log)
+
+    projections: dict[Any, RestrictionProjection] = {}
+    for share in records['shares']:
+        fields = share.fields
+        share_pk = share.pk
+        latest_report = _latest_record(
+            reports_by_share.get(share_pk, []),
+            timestamp_field='resolved_at',
+        )
+        if latest_report is not None:
+            report_fields = latest_report.fields
+            projections[share_pk] = RestrictionProjection(
+                state='report_takedown',
+                reason=(
+                    _clean_reason(report_fields.get('resolution_reason'))
+                    or HISTORICAL_REPORT_REASON_FALLBACK
+                ),
+                restricted_at=(
+                    report_fields.get('resolved_at')
+                    or report_fields.get('created_at')
+                    or fields.get('updated_at')
+                ),
+                restricted_by=report_fields.get('resolved_by'),
+            )
+            continue
+
+        latest_reject = _latest_record(
+            rejects_by_share.get(share_pk, []),
+            timestamp_field='created_at',
+        )
+        latest_approval = _latest_record(
+            approvals_by_share.get(share_pk, []),
+            timestamp_field='created_at',
+        )
+        currently_rejected = fields.get('status') == 'rejected'
+        reject_is_latest = (
+            latest_reject is not None
+            and (
+                latest_approval is None
+                or _record_event_key(
+                    latest_reject,
+                    timestamp_field='created_at',
+                )
+                > _record_event_key(
+                    latest_approval,
+                    timestamp_field='created_at',
+                )
+            )
+        )
+        if currently_rejected or reject_is_latest:
+            reject_fields = latest_reject.fields if latest_reject is not None else {}
+            projections[share_pk] = RestrictionProjection(
+                state='review_rejected',
+                reason=_clean_reason(fields.get('review_feedback'))
+                or _clean_reason(reject_fields.get('details'))
+                or HISTORICAL_REVIEW_REASON_FALLBACK,
+                restricted_at=fields.get('reviewed_at')
+                or reject_fields.get('created_at')
+                or fields.get('updated_at'),
+                restricted_by=fields.get('reviewed_by')
+                or reject_fields.get('user'),
+            )
+            continue
+
+        if fields.get('visibility') == 'private':
+            projections[share_pk] = RestrictionProjection(
+                state='legacy_private',
+                reason=HISTORICAL_PRIVATE_REASON_FALLBACK,
+                restricted_at=(
+                    fields.get('updated_at')
+                    or fields.get('created_at')
+                ),
+                restricted_by=None,
+            )
+            continue
+
+        projections[share_pk] = RestrictionProjection()
+    return projections
 
 
 def _add_error(
@@ -273,6 +600,8 @@ def _check_duplicate(
 def _validate_cross_entity(
     records: dict[str, list[ParsedRecord]],
     errors_by_record: dict[tuple[str, int], list[str]],
+    *,
+    dataset_version: int,
 ) -> None:
     user_names: dict[str, ParsedRecord] = {}
     group_names: dict[str, ParsedRecord] = {}
@@ -310,7 +639,7 @@ def _validate_cross_entity(
         share_id = fields.get('share_id')
         if isinstance(share_id, str):
             _check_duplicate(share_ids, share_id, record, 'share_id', errors_by_record)
-        for field_name in ('author', 'reviewed_by'):
+        for field_name in ('author', 'reviewed_by', 'restricted_by'):
             reference = fields.get(field_name)
             username = _natural_user(reference)
             if reference is not None and (username is None or username not in user_names):
@@ -329,6 +658,25 @@ def _validate_cross_entity(
                 _add_error(errors_by_record, record, 'pending share contains review metadata')
         if fields.get('reviewed_by') is not None and fields.get('reviewed_at') is None:
             _add_error(errors_by_record, record, 'reviewer is set without review time')
+        restriction_state = fields.get('restriction_state')
+        if restriction_state == 'clear':
+            if (
+                fields.get('restriction_reason') != ''
+                or fields.get('restricted_at') is not None
+                or fields.get('restricted_by') is not None
+            ):
+                _add_error(errors_by_record, record, 'clear share contains restriction metadata')
+        elif restriction_state in {
+            'review_rejected',
+            'report_takedown',
+            'legacy_private',
+        }:
+            if not _clean_reason(fields.get('restriction_reason')):
+                _add_error(errors_by_record, record, 'restricted share has no reason')
+            if fields.get('restricted_at') is None:
+                _add_error(errors_by_record, record, 'restricted share has no restriction time')
+        if fields.get('status') == 'rejected' and restriction_state == 'clear':
+            _add_error(errors_by_record, record, 'rejected share has no active restriction')
 
     for record in records['collections']:
         username = _natural_user(record.fields.get('author'))
@@ -364,10 +712,13 @@ def _validate_cross_entity(
     for record in records['reports']:
         fields = record.fields
         share_id = fields.get('share')
-        reporter = _natural_user(fields.get('reporter'))
+        reporter_reference = fields.get('reporter')
+        reporter = _natural_user(reporter_reference)
         if share_id not in share_pks:
             _add_error(errors_by_record, record, 'report references an unknown share')
-        if reporter is None or reporter not in user_names:
+        if dataset_version == 1 and reporter_reference is None:
+            _add_error(errors_by_record, record, 'version 1 report has no reporter')
+        elif reporter_reference is not None and reporter not in user_names:
             _add_error(errors_by_record, record, 'report references an unknown reporter')
         resolver = fields.get('resolved_by')
         resolver_name = _natural_user(resolver)
@@ -380,21 +731,25 @@ def _validate_cross_entity(
                 or fields.get('resolution_reason') != ''
             ):
                 _add_error(errors_by_record, record, 'pending report contains resolution data')
-            _check_duplicate(
-                pending_reports,
-                (share_id, reporter),
-                record,
-                'pending report',
-                errors_by_record,
-            )
+            if reporter_reference is not None:
+                _check_duplicate(
+                    pending_reports,
+                    (share_id, reporter),
+                    record,
+                    'pending report',
+                    errors_by_record,
+                )
         elif fields.get('resolved_at') is None:
             _add_error(errors_by_record, record, 'finished report has no resolution time')
 
     for record in records['share_logs']:
         if record.fields.get('share') not in share_pks:
             _add_error(errors_by_record, record, 'share log references an unknown share')
-        username = _natural_user(record.fields.get('user'))
-        if username is None or username not in user_names:
+        reference = record.fields.get('user')
+        username = _natural_user(reference)
+        if dataset_version == 1 and reference is None:
+            _add_error(errors_by_record, record, 'version 1 share log has no user')
+        elif reference is not None and (username is None or username not in user_names):
             _add_error(errors_by_record, record, 'share log references an unknown user')
 
     for record in records['site_messages']:
@@ -430,13 +785,29 @@ def validate_dataset(dataset_directory: str | Path) -> ValidationReport:
     except (OSError, json.JSONDecodeError) as exc:
         report.errors.append(f'Invalid manifest: {exc}')
         return report
+    if not isinstance(manifest, dict):
+        report.errors.append('Manifest must be an object')
+        return report
     report.manifest = manifest
     if manifest.get('format') != DATASET_FORMAT:
         report.errors.append(f'Unsupported dataset format: {manifest.get("format")!r}')
-    if manifest.get('format_version') != DATASET_VERSION:
+    source_version = manifest.get('format_version')
+    if (
+        not isinstance(source_version, int)
+        or isinstance(source_version, bool)
+        or source_version not in SUPPORTED_DATASET_VERSIONS
+    ):
         report.errors.append(
-            f'Unsupported dataset version: {manifest.get("format_version")!r}'
+            f'Unsupported dataset version: {source_version!r}'
         )
+        schema_version = DATASET_VERSION
+    else:
+        schema_version = source_version
+        if source_version == 1:
+            report.warnings.append(
+                'Dataset version 1 will be upgraded with persistent moderation '
+                'restrictions during import.'
+            )
 
     manifest_entities = manifest.get('entities')
     if not isinstance(manifest_entities, dict):
@@ -507,7 +878,11 @@ def validate_dataset(dataset_directory: str | Path) -> ValidationReport:
                 if not isinstance(payload.get('fields'), dict):
                     record_errors.append('fields must be an object')
                 else:
-                    record_errors.extend(_record_schema_errors(spec, record.fields))
+                    record_errors.extend(_record_schema_errors(
+                        spec,
+                        record.fields,
+                        dataset_version=schema_version,
+                    ))
                 if record_errors:
                     errors_by_record[(spec.name, line_number)] = record_errors
                 if record.pk is not None:
@@ -527,7 +902,17 @@ def validate_dataset(dataset_directory: str | Path) -> ValidationReport:
                 f'found {len(records[spec.name])}'
             )
 
-    _validate_cross_entity(records, errors_by_record)
+    if schema_version == 1:
+        projections = _derive_v1_restrictions(records)
+        for record in records['shares']:
+            projection = projections.get(record.pk)
+            if projection is not None:
+                record.fields.update(projection.as_serialized_fields())
+    _validate_cross_entity(
+        records,
+        errors_by_record,
+        dataset_version=schema_version,
+    )
     existing_quarantine = {
         (item['entity'], item['line'])
         for item in report.quarantined_records
@@ -550,21 +935,163 @@ def write_validation_report(report: ValidationReport, path: str | Path) -> None:
     _write_json_atomic(Path(path).expanduser().resolve(), report.as_dict())
 
 
-def _database_entity_digest(spec: EntitySpec) -> tuple[int, str]:
+def _database_entity_digest(
+    spec: EntitySpec,
+    *,
+    dataset_version: int,
+) -> tuple[int, str]:
     queryset = spec.model._default_manager.order_by(spec.model._meta.pk.name)
     count = queryset.count()
     stream = StringIO(newline='\n')
-    _serialize_queryset(queryset, stream)
+    fields = (
+        _expected_serialized_fields(spec, dataset_version=1)
+        if dataset_version == 1
+        else None
+    )
+    _serialize_queryset(queryset, stream, fields=fields)
     return count, sha256(stream.getvalue().encode('utf-8')).hexdigest()
 
 
+def _database_v1_restrictions_match() -> bool:
+    records: dict[str, list[ParsedRecord]] = {
+        'shares': [],
+        'reports': [],
+        'share_logs': [],
+    }
+    actual_shares: dict[Any, tuple[str, str, Any, str | None]] = {}
+    Share = ENTITY_BY_NAME['shares'].model
+    for line_number, row in enumerate(Share._default_manager.values(
+        'pk',
+        'status',
+        'review_feedback',
+        'reviewed_at',
+        'reviewed_by__username',
+        'visibility',
+        'created_at',
+        'updated_at',
+        'restriction_state',
+        'restriction_reason',
+        'restricted_at',
+        'restricted_by__username',
+    ).iterator(chunk_size=1000), start=1):
+        records['shares'].append(ParsedRecord(
+            entity='shares',
+            line=line_number,
+            pk=row['pk'],
+            fields={
+                'status': row['status'],
+                'review_feedback': row['review_feedback'],
+                'reviewed_at': row['reviewed_at'],
+                'reviewed_by': (
+                    [row['reviewed_by__username']]
+                    if row['reviewed_by__username'] is not None
+                    else None
+                ),
+                'visibility': row['visibility'],
+                'created_at': row['created_at'],
+                'updated_at': row['updated_at'],
+            },
+        ))
+        actual_shares[row['pk']] = (
+            row['restriction_state'],
+            row['restriction_reason'],
+            row['restricted_at'],
+            row['restricted_by__username'],
+        )
+
+    Report = ENTITY_BY_NAME['reports'].model
+    for line_number, row in enumerate(Report._default_manager.filter(
+        status='resolved'
+    ).values(
+        'pk',
+        'share_id',
+        'status',
+        'created_at',
+        'resolved_at',
+        'resolved_by__username',
+        'resolution_reason',
+    ).iterator(chunk_size=1000), start=1):
+        records['reports'].append(ParsedRecord(
+            entity='reports',
+            line=line_number,
+            pk=row['pk'],
+            fields={
+                'share': row['share_id'],
+                'status': row['status'],
+                'created_at': row['created_at'],
+                'resolved_at': row['resolved_at'],
+                'resolved_by': (
+                    [row['resolved_by__username']]
+                    if row['resolved_by__username'] is not None
+                    else None
+                ),
+                'resolution_reason': row['resolution_reason'],
+            },
+        ))
+
+    ShareLog = ENTITY_BY_NAME['share_logs'].model
+    for line_number, row in enumerate(ShareLog._default_manager.filter(
+        action__in=['approve', 'reject']
+    ).values(
+        'pk',
+        'share_id',
+        'user__username',
+        'action',
+        'details',
+        'created_at',
+    ).iterator(chunk_size=1000), start=1):
+        records['share_logs'].append(ParsedRecord(
+            entity='share_logs',
+            line=line_number,
+            pk=row['pk'],
+            fields={
+                'share': row['share_id'],
+                'user': (
+                    [row['user__username']]
+                    if row['user__username'] is not None
+                    else None
+                ),
+                'action': row['action'],
+                'details': row['details'],
+                'created_at': row['created_at'],
+            },
+        ))
+
+    expected = _derive_v1_restrictions(records)
+    if set(actual_shares) != set(expected):
+        return False
+    for share_pk, projection in expected.items():
+        state, reason, restricted_at, restricted_by = actual_shares[share_pk]
+        expected_user = _natural_user(projection.restricted_by)
+        if (
+            state != projection.state
+            or reason != projection.reason
+            or _timestamp(restricted_at) != _timestamp(projection.restricted_at)
+            or restricted_by != expected_user
+        ):
+            return False
+    return True
+
+
 def database_matches_manifest(manifest: dict[str, Any]) -> bool:
+    dataset_version = manifest.get('format_version')
+    if (
+        not isinstance(dataset_version, int)
+        or isinstance(dataset_version, bool)
+        or dataset_version not in SUPPORTED_DATASET_VERSIONS
+    ):
+        return False
     metadata_by_entity = manifest.get('entities', {})
     for spec in ENTITY_SPECS:
         metadata = metadata_by_entity.get(spec.name, {})
-        count, digest = _database_entity_digest(spec)
+        count, digest = _database_entity_digest(
+            spec,
+            dataset_version=dataset_version,
+        )
         if count != metadata.get('count') or digest != metadata.get('sha256'):
             return False
+    if dataset_version == 1 and not _database_v1_restrictions_match():
+        return False
     return True
 
 
@@ -582,6 +1109,38 @@ def _reset_imported_sequences() -> None:
     with connection.cursor() as cursor:
         for sql in sql_statements:
             cursor.execute(sql)
+
+
+def _load_v1_restriction_projections(
+    root: Path,
+) -> dict[Any, RestrictionProjection]:
+    records: dict[str, list[ParsedRecord]] = {
+        'shares': [],
+        'reports': [],
+        'share_logs': [],
+    }
+    for entity_name in records:
+        spec = ENTITY_BY_NAME[entity_name]
+        with (root / spec.filename).open('r', encoding='utf-8') as stream:
+            for line_number, line in enumerate(stream, start=1):
+                payload = json.loads(line)
+                records[entity_name].append(ParsedRecord(
+                    entity=entity_name,
+                    line=line_number,
+                    pk=payload['pk'],
+                    fields=payload['fields'],
+                ))
+    return _derive_v1_restrictions(records)
+
+
+def _upgrade_v1_share_line(
+    line: str,
+    projections: dict[Any, RestrictionProjection],
+) -> str:
+    payload = json.loads(line)
+    projection = projections[payload['pk']]
+    payload['fields'].update(projection.as_serialized_fields())
+    return json.dumps(payload, ensure_ascii=False) + '\n'
 
 
 def import_dataset(
@@ -602,6 +1161,7 @@ def import_dataset(
             f'Dataset validation failed; see quarantine report: {validation_path}'
         )
     assert validation.manifest is not None
+    source_version = validation.manifest['format_version']
 
     if _database_has_portable_data():
         if database_matches_manifest(validation.manifest):
@@ -619,6 +1179,11 @@ def import_dataset(
         )
 
     import_quarantine: list[dict[str, Any]] = []
+    v1_projections = (
+        _load_v1_restriction_projections(root)
+        if source_version == 1
+        else {}
+    )
     try:
         with transaction.atomic():
             for spec in ENTITY_SPECS:
@@ -627,7 +1192,15 @@ def import_dataset(
                     for line_number, line in enumerate(stream, start=1):
                         try:
                             with transaction.atomic():
-                                objects = list(serializers.deserialize('jsonl', line))
+                                serialized_line = (
+                                    _upgrade_v1_share_line(line, v1_projections)
+                                    if source_version == 1 and spec.name == 'shares'
+                                    else line
+                                )
+                                objects = list(serializers.deserialize(
+                                    'jsonl',
+                                    serialized_line,
+                                ))
                                 if len(objects) != 1:
                                     raise ValueError('expected exactly one serialized object')
                                 objects[0].save(save_m2m=True)
