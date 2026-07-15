@@ -20,6 +20,12 @@ from shares.forms import (
 )
 from shares.models import UserProfile
 from shares.rate_limits import consume_rate_limit, get_client_ip
+from shares.services.profiles import (
+    ProfileBioTooLongError,
+    ProfileEditConflictError,
+    ProfileUnavailableError,
+    update_user_profile_from_form,
+)
 
 
 def _get_safe_auth_return_url(request):
@@ -189,20 +195,50 @@ def user_logout(request):
 @login_required
 def profile_edit(request):
     """编辑个人资料"""
+    profile = UserProfile.objects.filter(user=request.user).first()
+    if profile is None:
+        profile = UserProfile(user=request.user)
+    response_status = 200
+
     if request.method == 'POST':
-        profile, _ = UserProfile.objects.get_or_create(user=request.user)
         form = UserProfileForm(request.POST, instance=profile)
         if form.is_valid():
-            form.save()
-            messages.success(request, '个人资料更新成功！')
-            return redirect('profile_edit')
+            try:
+                result = update_user_profile_from_form(
+                    form=form,
+                    actor=request.user,
+                )
+            except ProfileBioTooLongError:
+                form.add_error('bio', '个人简介过长，请缩短后重新提交。')
+            except ProfileEditConflictError:
+                response_status = 409
+                form.add_error(
+                    None,
+                    '个人资料已在此页面打开后发生变化，请刷新后重新编辑。',
+                )
+            except ProfileUnavailableError:
+                response_status = 409
+                form.add_error(
+                    None,
+                    '个人资料暂时不可用，请刷新后重试。',
+                )
+            else:
+                profile = result.profile
+                if result.changed:
+                    messages.success(request, '个人资料更新成功！')
+                else:
+                    messages.info(request, '个人资料没有修改。')
+                return redirect('profile_edit')
+        elif 'version' in form.errors:
+            response_status = 409
     else:
-        try:
-            profile = request.user.profile
-        except UserProfile.DoesNotExist:
-            profile = UserProfile(user=request.user)
         form = UserProfileForm(instance=profile)
-    return render(request, 'shares/profile_edit.html', {'form': form, 'profile': profile})
+    return render(
+        request,
+        'shares/profile_edit.html',
+        {'form': form, 'profile': profile},
+        status=response_status,
+    )
 
 
 @sensitive_post_parameters('old_password', 'new_password1', 'new_password2')

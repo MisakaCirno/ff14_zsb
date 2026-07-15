@@ -32,8 +32,9 @@
 
 ### 信号处理
 使用 Django 信号自动为新用户创建 UserProfile：
-- 用户注册时自动创建关联的 UserProfile
-- 现有用户通过脚本批量创建 UserProfile
+- 正常创建用户时幂等创建关联的 UserProfile
+- `0023_userprofile_integrity` 迁移只补齐历史缺失记录，已有资料保持不变
+- 保存用户、登录或修改密码不会再次保存资料，也不会污染资料更新时间
 
 ### 新增页面和路由
 
@@ -89,9 +90,7 @@
 
 已完成的迁移：
 ```bash
-python manage.py makemigrations  # 创建迁移文件
-python manage.py migrate          # 应用迁移
-python create_profiles.py         # 为现有用户创建 UserProfile
+python manage.py migrate  # 自动补齐历史缺失的 UserProfile
 ```
 
 ## 文件变更清单
@@ -99,14 +98,16 @@ python create_profiles.py         # 为现有用户创建 UserProfile
 ### 新增文件
 - `templates/shares/profile_edit.html` - 个人资料编辑页面
 - `templates/shares/password_change.html` - 密码修改页面
-- `create_profiles.py` - 批量创建用户资料脚本
 - `shares/migrations/0002_userprofile.py` - 数据库迁移文件
+- `shares/migrations/0023_userprofile_integrity.py` - 无损补齐历史缺失资料
+- `shares/signals.py` - 新用户资料创建信号
+- `shares/services/profiles.py` - 资料事务和并发更新服务
 
 ### 修改文件
-- `shares/models.py` - 添加 UserProfile 模型和信号处理
+- `shares/models.py` - 添加 UserProfile 模型
 - `shares/admin.py` - 添加 UserProfile 管理后台
 - `shares/forms.py` - 添加资料编辑和密码修改表单
-- `shares/views.py` - 添加 profile_edit 和 password_change 视图
+- `shares/web/accounts.py` - 添加 profile_edit 和 password_change 视图
 - `shares/urls.py` - 添加新页面的 URL 路由
 - `templates/base.html` - 改进导航栏，添加用户下拉菜单
 - `templates/shares/index.html` - 显示昵称而非用户名
@@ -127,6 +128,10 @@ python create_profiles.py         # 为现有用户创建 UserProfile
 - 只有登录用户才能访问个人资料页面
 - 使用 `@login_required` 装饰器保护视图
 - 用户只能修改自己的资料
+- 前台和管理后台的编辑提交都携带资料版本；旧页面不能覆盖较新的昵称、简介或主页浏览模式
+- 管理后台禁止单独新增、删除或改绑资料记录，避免破坏用户与资料的一对一关系
+- 历史超长简介会原样保留，不会在迁移中截断；新增长简介仍执行当前长度限制
+- 未修改的历史昵称和简介会逐字保留（包括首尾空白）；只有实际修改的新文本执行首尾空白规范化
 
 ## 测试建议
 

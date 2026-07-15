@@ -4,10 +4,12 @@ from django.contrib.auth.forms import (
     PasswordChangeForm,
     UserCreationForm,
 )
+from django.core.exceptions import ValidationError
 from .models import Share, UserProfile, Report, Collection
 from .validation import (
     COLLECTION_DESCRIPTION_MAX_LENGTH,
     PROFILE_BIO_MAX_LENGTH,
+    PROFILE_MISSING_VERSION,
     REPORT_REASON_MAX_LENGTH,
     RICH_TEXT_MAX_LENGTH,
     STAFF_REASON_MAX_LENGTH,
@@ -220,12 +222,41 @@ class EditShareForm(ShareForm):
             self.fields['version'].initial = self.instance.updated_at
 
 
+def _normalize_profile_form_newlines(value):
+    return value.replace('\r\n', '\n').replace('\r', '\n')
+
+
+def profile_text_matches_stored_value(submitted, stored):
+    """Treat browser-normalized textarea newlines as the same stored text."""
+    return (
+        _normalize_profile_form_newlines(submitted)
+        == _normalize_profile_form_newlines(stored)
+    )
+
+
+class UserProfileVersionField(forms.DateTimeField):
+    """A timestamp version with a disjoint token for an absent profile row."""
+
+    def to_python(self, value):
+        if value == PROFILE_MISSING_VERSION:
+            return PROFILE_MISSING_VERSION
+        return super().to_python(value)
+
+
 class UserProfileForm(forms.ModelForm):
     """用户资料编辑表单"""
+    version = UserProfileVersionField(
+        required=True,
+        widget=forms.HiddenInput(),
+        error_messages={
+            'required': '资料页面缺少版本信息，请刷新后重新提交。',
+            'invalid': '资料页面版本无效，请刷新后重新提交。',
+        },
+    )
     bio = forms.CharField(
         label='个人简介',
         required=False,
-        max_length=PROFILE_BIO_MAX_LENGTH,
+        strip=False,
         widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '介绍一下自己（可选）'}),
     )
 
@@ -242,6 +273,59 @@ class UserProfileForm(forms.ModelForm):
             'bio': '个人简介',
             'home_feed_mode': '主页浏览模式',
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Preserve an unchanged legacy value byte-for-byte. Changed values are
+        # normalized explicitly in the clean methods below.
+        self.fields['nickname'].strip = False
+        if self.instance and self.instance.pk:
+            self.fields['version'].initial = self.instance.updated_at
+        else:
+            self.fields['version'].initial = PROFILE_MISSING_VERSION
+
+    def clean_nickname(self):
+        nickname = self.cleaned_data['nickname']
+        if (
+            self.instance
+            and self.instance.pk
+            and nickname == self.instance.nickname
+        ):
+            return nickname
+        return nickname.strip()
+
+    def clean_bio(self):
+        """Grandfather legacy long biographies without accepting new ones."""
+        bio = self.cleaned_data['bio']
+        if (
+            self.instance
+            and self.instance.pk
+            and profile_text_matches_stored_value(bio, self.instance.bio)
+        ):
+            return self.instance.bio
+
+        bio = bio.strip()
+        if len(bio) <= PROFILE_BIO_MAX_LENGTH:
+            return bio
+
+        # Let the locked mutation service report a version conflict first when
+        # an old page submits a formerly-valid long biography. The service
+        # repeats the length check against the authoritative locked row.
+        if self.instance and self.instance.pk:
+            raw_version = self.data.get(self.add_prefix('version'))
+            try:
+                submitted_version = self.fields['version'].to_python(raw_version)
+            except ValidationError:
+                submitted_version = None
+            if (
+                submitted_version is not None
+                and submitted_version != self.instance.updated_at
+            ):
+                return bio
+
+        raise ValidationError(
+            f'个人简介不能超过 {PROFILE_BIO_MAX_LENGTH} 个字符。'
+        )
 
 
 def _add_form_control_class(field):

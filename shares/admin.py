@@ -1,9 +1,23 @@
 from django.contrib import admin
+from django.contrib.admin.utils import unquote
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.db import transaction
 
-from .admin_forms import AnnouncementAdminForm, ShareAdminForm
+from .admin_forms import AnnouncementAdminForm, ShareAdminForm, UserProfileAdminForm
 from .models import Share, UserProfile, Announcement, Report, SiteMessage
+
+
+def _lock_admin_object(model, object_id):
+    try:
+        return (
+            model._default_manager.select_for_update()
+            .filter(pk=unquote(object_id))
+            .first()
+        )
+    except (TypeError, ValueError, ValidationError):
+        return None
 
 
 @admin.register(Announcement)
@@ -90,10 +104,16 @@ class ShareAdmin(admin.ModelAdmin):
 class UserProfileInline(admin.StackedInline):
     """用户资料内联编辑"""
     model = UserProfile
+    form = UserProfileAdminForm
     can_delete = False
+    extra = 0
+    max_num = 1
     verbose_name = '用户资料'
     verbose_name_plural = '用户资料'
-    fields = ['nickname', 'bio']
+    fields = ['nickname', 'bio', 'version']
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class UserAdmin(BaseUserAdmin):
@@ -102,6 +122,27 @@ class UserAdmin(BaseUserAdmin):
     list_display = ['username', 'get_nickname', 'email', 'is_staff', 'is_active', 'date_joined']
     list_filter = ['is_staff', 'is_active', 'date_joined']
     search_fields = ['username', 'email', 'profile__nickname']
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        if request.method == 'POST' and object_id is not None:
+            with transaction.atomic():
+                user = _lock_admin_object(User, object_id)
+                if user is not None:
+                    UserProfile.objects.select_for_update().filter(
+                        user_id=user.pk,
+                    ).first()
+                return super().changeform_view(
+                    request,
+                    object_id,
+                    form_url,
+                    extra_context,
+                )
+        return super().changeform_view(
+            request,
+            object_id,
+            form_url,
+            extra_context,
+        )
     
     def get_nickname(self, obj):
         """显示昵称"""
@@ -116,17 +157,41 @@ admin.site.register(User, UserAdmin)
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
+    form = UserProfileAdminForm
     list_display = ['user', 'nickname', 'get_share_count', 'created_at', 'updated_at']
     search_fields = ['user__username', 'nickname', 'bio']
     list_filter = ['created_at']
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['user', 'created_at', 'updated_at']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        if request.method == 'POST' and object_id is not None:
+            with transaction.atomic():
+                _lock_admin_object(UserProfile, object_id)
+                return super().changeform_view(
+                    request,
+                    object_id,
+                    form_url,
+                    extra_context,
+                )
+        return super().changeform_view(
+            request,
+            object_id,
+            form_url,
+            extra_context,
+        )
     
     fieldsets = (
         ('用户信息', {
             'fields': ('user',)
         }),
         ('个人资料', {
-            'fields': ('nickname', 'bio')
+            'fields': ('nickname', 'bio', 'version')
         }),
         ('时间信息', {
             'fields': ('created_at', 'updated_at'),
