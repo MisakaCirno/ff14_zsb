@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.admin.utils import unquote
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
@@ -6,7 +6,8 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 
 from .admin_forms import AnnouncementAdminForm, ShareAdminForm, UserProfileAdminForm
-from .models import Share, UserProfile, Announcement, Report, SiteMessage
+from .models import Share, ShareLog, UserProfile, Announcement, Report, SiteMessage
+from .services.audit import log_share_action
 
 
 def _lock_admin_object(model, object_id):
@@ -87,18 +88,111 @@ class ShareAdmin(admin.ModelAdmin):
     get_author_display.admin_order_field = 'author__username'
     
     actions = ['make_public', 'make_private']
-    
+
+    def _record_visibility_change(self, request, share, *, visibility):
+        visibility_label = {
+            Share.Visibility.PUBLIC: '公开',
+            Share.Visibility.PRIVATE: '私有',
+        }[visibility]
+        details = f'Django Admin 批量操作：可见性改为“{visibility_label}”。'
+        log_share_action(
+            request.user,
+            share,
+            ShareLog.ActionType.EDIT,
+            details,
+        )
+        self.log_change(request, share, details)
+
+    @staticmethod
+    def _locked_selected_shares(queryset):
+        selected_pks = list(queryset.values_list('pk', flat=True))
+        return (
+            Share.objects.select_for_update()
+            .filter(pk__in=selected_pks)
+            .order_by('pk')
+        )
+
+    @admin.action(
+        permissions=['change'],
+        description='设为公开（仅限审核通过且无限制）',
+    )
     def make_public(self, request, queryset):
-        """批量设为公开"""
-        updated = queryset.update(is_public=True)
-        self.message_user(request, f'已将 {updated} 个分享设为公开')
-    make_public.short_description = '设为公开'
-    
+        """Publish eligible shares without changing moderation evidence."""
+        updated = 0
+        already_public = 0
+        restricted = 0
+        not_approved = 0
+
+        with transaction.atomic():
+            shares = self._locked_selected_shares(queryset)
+            for share in shares:
+                if share.restriction_state != Share.RestrictionState.CLEAR:
+                    restricted += 1
+                    continue
+                if share.status != Share.Status.APPROVED:
+                    not_approved += 1
+                    continue
+                if share.visibility == Share.Visibility.PUBLIC:
+                    already_public += 1
+                    continue
+
+                share.visibility = Share.Visibility.PUBLIC
+                share.save(update_fields=['visibility', 'updated_at'])
+                self._record_visibility_change(
+                    request,
+                    share,
+                    visibility=Share.Visibility.PUBLIC,
+                )
+                updated += 1
+
+        summary = (
+            f'批量公开完成：已更新 {updated} 个；'
+            f'已是公开 {already_public} 个；'
+            f'因仍有内容限制而跳过 {restricted} 个；'
+            f'因尚未审核通过而跳过 {not_approved} 个。'
+        )
+        if restricted or not_approved:
+            summary += ' 请先在审核中心完成审核或解除内容限制。'
+        self.message_user(
+            request,
+            summary,
+            level=(
+                messages.WARNING
+                if restricted or not_approved
+                else messages.SUCCESS
+            ),
+        )
+
+    @admin.action(permissions=['change'], description='设为私有')
     def make_private(self, request, queryset):
-        """批量设为私有"""
-        updated = queryset.update(is_public=False)
-        self.message_user(request, f'已将 {updated} 个分享设为私有')
-    make_private.short_description = '设为私有'
+        """Tighten visibility without changing moderation evidence."""
+        updated = 0
+        already_private = 0
+
+        with transaction.atomic():
+            shares = self._locked_selected_shares(queryset)
+            for share in shares:
+                if share.visibility == Share.Visibility.PRIVATE:
+                    already_private += 1
+                    continue
+
+                share.visibility = Share.Visibility.PRIVATE
+                share.save(update_fields=['visibility', 'updated_at'])
+                self._record_visibility_change(
+                    request,
+                    share,
+                    visibility=Share.Visibility.PRIVATE,
+                )
+                updated += 1
+
+        self.message_user(
+            request,
+            (
+                f'批量设为私有完成：已更新 {updated} 个；'
+                f'已是私有 {already_private} 个。'
+            ),
+            level=messages.SUCCESS,
+        )
 
 
 class UserProfileInline(admin.StackedInline):
