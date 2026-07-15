@@ -7,6 +7,8 @@ import { initializeShareInteractions } from './share-interactions'
 type InteractionKind = 'favorite' | 'like'
 type ReactionTab = 'favorites' | 'likes'
 
+const requestXhrs = new WeakMap<HTMLButtonElement, object>()
+
 function createInteractionButton(kind: InteractionKind, shareId = 'share-1'): HTMLButtonElement {
   const button = document.createElement('button')
   button.id = `btn-${kind}-${shareId}`
@@ -22,6 +24,13 @@ function dispatchFailure(
   xhr: object,
 ): void {
   button.dispatchEvent(new CustomEvent(eventName, {
+    bubbles: true,
+    detail: { elt: button, requestConfig: { elt: button }, xhr },
+  }))
+}
+
+function dispatchBeforeSend(button: HTMLButtonElement, xhr: object = {}): void {
+  button.dispatchEvent(new CustomEvent('htmx:beforeSend', {
     bubbles: true,
     detail: { elt: button, requestConfig: { elt: button }, xhr },
   }))
@@ -55,14 +64,20 @@ function createReactionSection(
   return section
 }
 
-function startRemovalRequest(button: HTMLButtonElement, focus = true): void {
+function startRemovalRequest(
+  button: HTMLButtonElement,
+  focus = true,
+  xhr: object = {},
+): void {
   if (focus) {
     button.focus()
   }
   button.dispatchEvent(new CustomEvent('htmx:beforeRequest', {
     bubbles: true,
-    detail: { elt: button, requestConfig: { elt: button } },
+    detail: { elt: button, requestConfig: { elt: button }, xhr },
   }))
+  requestXhrs.set(button, xhr)
+  dispatchBeforeSend(button, xhr)
 }
 
 function dispatchRemoval(kind: InteractionKind, shareId: string): void {
@@ -72,9 +87,13 @@ function dispatchRemoval(kind: InteractionKind, shareId: string): void {
   }))
 }
 
-function finishInteractionRequest(button: HTMLButtonElement): void {
-  document.dispatchEvent(new CustomEvent('htmx:afterRequest', {
-    detail: { requestConfig: { elt: button } },
+function finishInteractionRequest(
+  button: HTMLButtonElement,
+  xhr: object = requestXhrs.get(button) ?? {},
+): void {
+  button.dispatchEvent(new CustomEvent('htmx:afterRequest', {
+    bubbles: true,
+    detail: { elt: button, requestConfig: { elt: button }, xhr },
   }))
 }
 
@@ -118,8 +137,10 @@ describe('share interactions', () => {
     const button = createInteractionButton('like')
     const xhr = { responseText: 'server secret must not be shown' }
 
+    dispatchBeforeSend(button, xhr)
     dispatchFailure(button, 'htmx:responseError', xhr)
     dispatchFailure(button, 'htmx:timeout', xhr)
+    finishInteractionRequest(button, xhr)
 
     const notifications = document.querySelectorAll('[data-notification]')
     expect(notifications).toHaveLength(1)
@@ -127,6 +148,25 @@ describe('share interactions', () => {
     expect(notifications[0]?.textContent).toContain('点赞未完成，请稍后重试。')
     expect(notifications[0]?.textContent).not.toContain('server secret')
     expect(button.getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('keeps request-scoped listeners isolated by xhr identity', async () => {
+    const button = createInteractionButton('favorite')
+    const firstXhr = {}
+    const secondXhr = {}
+    dispatchBeforeSend(button, firstXhr)
+    dispatchBeforeSend(button, secondXhr)
+
+    finishInteractionRequest(button, firstXhr)
+    await Promise.resolve()
+    button.remove()
+
+    finishInteractionRequest(button, secondXhr)
+    dispatchFailure(button, 'htmx:sendError', secondXhr)
+
+    const notifications = document.querySelectorAll('[data-notification]')
+    expect(notifications).toHaveLength(1)
+    expect(notifications[0]?.textContent).toContain('收藏未完成，请稍后重试。')
   })
 
   it('uses the favorite message for a send error and ignores unrelated requests', () => {
@@ -352,5 +392,76 @@ describe('share interactions', () => {
     finishSectionSettle(replacement)
 
     expect(document.activeElement).toBe(document.body)
+  })
+
+  it.each([
+    ['htmx:responseError', true],
+    ['htmx:sendError', false],
+    ['htmx:timeout', false],
+  ] as const)(
+    'reports %s after another request detaches the interaction button',
+    async (eventName, failureBeforeAfterRequest) => {
+      const oldSection = createReactionSection('likes', 'like', ['a', 'b', 'c'])
+      document.body.appendChild(oldSection)
+      const buttonA = oldSection.querySelector<HTMLButtonElement>('#btn-like-a')!
+      const buttonB = oldSection.querySelector<HTMLButtonElement>('#btn-like-b')!
+      const xhrA = {}
+      const xhrB = { responseText: 'private detached request diagnostics' }
+
+      startRemovalRequest(buttonA, false, xhrA)
+      startRemovalRequest(buttonB, true, xhrB)
+      dispatchRemoval('like', 'a')
+      finishInteractionRequest(buttonA, xhrA)
+
+      const replacement = createReactionSection('likes', 'like', ['b', 'c'])
+      oldSection.replaceWith(replacement)
+      finishSectionSettle(replacement)
+      expect(buttonB.isConnected).toBe(false)
+
+      if (failureBeforeAfterRequest) {
+        dispatchFailure(buttonB, eventName, xhrB)
+        finishInteractionRequest(buttonB, xhrB)
+      } else {
+        finishInteractionRequest(buttonB, xhrB)
+        dispatchFailure(buttonB, eventName, xhrB)
+      }
+
+      const notifications = document.querySelectorAll('[data-notification]')
+      expect(notifications).toHaveLength(1)
+      expect(notifications[0]?.textContent).toContain('点赞未完成，请稍后重试。')
+      expect(notifications[0]?.textContent).not.toContain('private detached request diagnostics')
+
+      await Promise.resolve()
+      dispatchFailure(buttonB, eventName, {})
+      expect(document.querySelectorAll('[data-notification]')).toHaveLength(1)
+
+      dispatchRemoval('like', 'b')
+      const finalReplacement = createReactionSection('likes', 'like', ['c'])
+      replacement.replaceWith(finalReplacement)
+      finishSectionSettle(finalReplacement)
+      expect(document.activeElement).toBe(document.body)
+    },
+  )
+
+  it('clears a detached request focus plan on afterRequest without a removal trigger', async () => {
+    const oldSection = createReactionSection('favorites', 'favorite', ['a', 'b'])
+    document.body.appendChild(oldSection)
+    const button = oldSection.querySelector<HTMLButtonElement>('#btn-favorite-a')!
+    const xhr = {}
+    startRemovalRequest(button, true, xhr)
+
+    const replacement = createReactionSection('favorites', 'favorite', ['b'])
+    oldSection.replaceWith(replacement)
+    expect(button.isConnected).toBe(false)
+    finishInteractionRequest(button, xhr)
+    await Promise.resolve()
+
+    dispatchRemoval('favorite', 'a')
+    const finalReplacement = createReactionSection('favorites', 'favorite', ['b'])
+    replacement.replaceWith(finalReplacement)
+    finishSectionSettle(finalReplacement)
+
+    expect(document.activeElement).toBe(document.body)
+    expect(document.querySelector('[data-notification]')).toBeNull()
   })
 })

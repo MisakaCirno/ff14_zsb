@@ -24,6 +24,11 @@ interface PendingReactionFocus {
 }
 
 const interactionSelector = '[data-share-interaction]'
+const interactionFailureEventNames = [
+  'htmx:responseError',
+  'htmx:sendError',
+  'htmx:timeout',
+] as const
 const failureMessages: Record<ShareInteractionKind, string> = {
   favorite: '收藏未完成，请稍后重试。',
   like: '点赞未完成，请稍后重试。',
@@ -295,6 +300,52 @@ function completeInteractionRequest(event: Event): void {
   }
 }
 
+function observeInteractionRequestLifecycle(event: Event): void {
+  const detail = (event as CustomEvent<HtmxFailureDetail>).detail
+  const button = getInteractionButton(event, detail)
+  if (!button) {
+    return
+  }
+
+  const requestIdentity = failureIdentity(event, detail)
+  let cleanupScheduled = false
+  const belongsToObservedRequest = (requestEvent: Event): boolean => {
+    const requestDetail = (requestEvent as CustomEvent<HtmxFailureDetail>).detail
+    return failureIdentity(requestEvent, requestDetail) === requestIdentity
+  }
+  const reportDirectFailure = (requestEvent: Event): void => {
+    if (!belongsToObservedRequest(requestEvent)) {
+      return
+    }
+    reportInteractionFailure(requestEvent)
+  }
+  const cleanup = (): void => {
+    for (const eventName of interactionFailureEventNames) {
+      button.removeEventListener(eventName, reportDirectFailure)
+    }
+    button.removeEventListener('htmx:afterRequest', completeDirectRequest)
+  }
+  const completeDirectRequest = (requestEvent: Event): void => {
+    if (!belongsToObservedRequest(requestEvent)) {
+      return
+    }
+    completeInteractionRequest(requestEvent)
+    if (cleanupScheduled) {
+      return
+    }
+    cleanupScheduled = true
+
+    // HTMX dispatches afterRequest before sendError/timeout. Keep this request's
+    // direct listeners alive until those synchronous terminal events finish.
+    queueMicrotask(cleanup)
+  }
+
+  for (const eventName of interactionFailureEventNames) {
+    button.addEventListener(eventName, reportDirectFailure)
+  }
+  button.addEventListener('htmx:afterRequest', completeDirectRequest)
+}
+
 function cancelFocusRestoreAfterUserMove(event: Event): void {
   if (!latestReactionFocusKey || !(event.target instanceof HTMLElement)) {
     return
@@ -370,15 +421,12 @@ export function initializeShareInteractions(): void {
   }
   initialized = true
 
-  for (const eventName of [
-    'htmx:responseError',
-    'htmx:sendError',
-    'htmx:timeout',
-  ]) {
+  for (const eventName of interactionFailureEventNames) {
     document.addEventListener(eventName, reportInteractionFailure)
     document.addEventListener(eventName, reportReactionRefreshFailure)
   }
   document.addEventListener('htmx:beforeRequest', prepareReactionFocusBeforeRequest)
+  document.addEventListener('htmx:beforeSend', observeInteractionRequestLifecycle)
   document.addEventListener('htmx:afterRequest', completeInteractionRequest)
   document.addEventListener('share-like-removed', (event) => {
     activateReactionFocusPlan('like', event)
