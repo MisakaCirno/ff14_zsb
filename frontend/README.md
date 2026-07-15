@@ -26,6 +26,8 @@ npm --prefix frontend run verify
 npm --prefix frontend test
 ```
 
+行为测试使用 Vitest 与 jsdom，覆盖剪贴板超时和手动复制、内容警告揭示、分享图模态焦点、Canvas 字素簇截断，以及点赞／收藏的失败反馈、权威列表刷新、并发响应和焦点恢复。测试不替代浏览器回归；涉及真实 HTMX 交换、Bootstrap 模态或响应式布局的改动仍需在隔离数据库中验收。
+
 开发监听构建：
 
 ```powershell

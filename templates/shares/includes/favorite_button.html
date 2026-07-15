@@ -12,6 +12,7 @@
         hx-swap="outerHTML"
         hx-sync="this:drop"
         hx-disabled-elt="this"
+        data-share-interaction="favorite"
         aria-label="收藏，当前 {{ favorites_count }} 个收藏"
         aria-pressed="{% if is_favorited %}true{% else %}false{% endif %}"
         title="{% if is_favorited %}取消收藏{% else %}收藏{% endif %}">

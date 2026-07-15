@@ -12,6 +12,7 @@
         hx-swap="outerHTML"
         hx-sync="this:drop"
         hx-disabled-elt="this"
+        data-share-interaction="like"
         aria-label="点赞，当前 {{ likes_count }} 个点赞"
         aria-pressed="{% if is_liked %}true{% else %}false{% endif %}"
         title="{% if is_liked %}取消点赞{% else %}点赞{% endif %}">

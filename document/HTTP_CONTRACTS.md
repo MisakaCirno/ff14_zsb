@@ -58,10 +58,14 @@ HTMX 搜索遇到空查询、超长查询或精确分享 ID 时返回 `204` 和 
 - 已登录的普通请求未提交 `next` 时继续返回精确的原 JSON 字段：点赞为 `status`、`is_liked`、`likes_count`，收藏为 `status`、`is_favorited`、`favorites_count`。
 - 已登录的普通请求显式提交 `next` 时，安全的同源站内地址返回 `302`；非法、外站或不可解析的 `next` 回退到当前分享的 canonical detail 地址，不能形成开放重定向。
 - HTMX 请求必须指定 `fragment=card` 或 `fragment=detail`，返回与场景样式匹配的单个按钮 HTML，并由按钮以 `outerHTML` 替换自身；即使请求体同时包含 `next`，HTMX fragment 契约仍优先，不返回 `302`。
+- 成功完成 `target_state=inactive` 的 HTMX 请求会在按钮交换后通过 `HX-Trigger-After-Swap` 发送结构化事件：点赞为 `share-like-removed`，收藏为 `share-favorite-removed`，事件详情只包含对应 `shareId`；`active` 响应不发送移除事件。
+- “我的点赞／收藏”分区监听对应移除事件，并从 Paginator 解析后的实际页重新取得权威 section；响应只选择 `[data-my-content-shares]` 并以 `outerHTML` 更新列表、总数和分页。末页被清空时允许页面 URL 暂时保留原页码，但 section 的后续刷新地址必须改为服务端解析后的有效页。
 - 缺少或传入未知 fragment、缺少或传入未知目标状态时返回 `400`，且不得改变点赞或收藏关系。
 - 登录会话失效时，HTMX 请求返回 `204` 和 `HX-Redirect`；普通表单进入登录页。登录回跳只采用经过同源校验的当前页面、显式 `next` 或来源页，无安全候选时回退到 canonical detail，绝不能落到仅接受 `POST` 的点赞或收藏动作地址。
 
 响应按 `HX-Request` 和 `Cookie` 区分，并使用私有 `no-store` 缓存策略。CSRF 保护保持启用：原生表单携带 CSRF 字段，浏览器端仍由全局 HTMX 请求钩子注入 `X-CSRFToken`。
+
+浏览器端失败反馈使用固定文案，不读取或回显响应正文。点赞或收藏 POST 失败时保留原按钮状态；POST 已成功但“我的点赞／收藏”权威 section 刷新失败时，明确提示用户刷新页面，并清理待恢复焦点，不能把陈旧列表误报为已同步。
 
 R15 部署时必须同步发布后端与按钮模板。旧页面中的空请求体不会回退到有竞态的 toggle 语义，而会收到 `400`；用户刷新页面后即可获得携带显式目标状态的新按钮。该变更不影响“小抄儿”公开 API。
 

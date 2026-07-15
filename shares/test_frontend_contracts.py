@@ -165,6 +165,8 @@ class FrontendShellContractTests(TestCase):
             content,
         )
         self.assertIn('data-share-card', content)
+        self.assertIn('data-share-interaction="like"', content)
+        self.assertIn('data-share-interaction="favorite"', content)
         self.assertIn('aria-label="点赞，当前 0 个点赞"', content)
         self.assertIn('aria-label="收藏，当前 0 个收藏"', content)
         self.assertGreaterEqual(content.count('aria-pressed="false"'), 2)
@@ -198,6 +200,8 @@ class FrontendShellContractTests(TestCase):
             f'hx-post="/share/{self.share.share_id}/favorite/?fragment=detail"',
             content,
         )
+        self.assertIn('data-share-interaction="like"', content)
+        self.assertIn('data-share-interaction="favorite"', content)
         self.assertNotIn('toggleLike()', content)
         self.assertNotIn('toggleFavorite()', content)
         self.assertNotIn('function toggleLike', content)
@@ -458,6 +462,62 @@ class FrontendShellContractTests(TestCase):
                 self.assertIn(f'?tab={tab}&amp;page=2', content)
                 self.assertNotIn('href="?page=2"', content)
 
+    def test_my_reaction_sections_refresh_from_authoritative_resolved_page(self):
+        related_shares = [
+            Share.objects.create(
+                title=f'互动刷新契约 {index}',
+                strategy_code=f'[stgy:reaction-refresh-{index}]',
+                author=self.author,
+                visibility=Share.Visibility.PUBLIC,
+                status=Share.Status.APPROVED,
+            )
+            for index in range(13)
+        ]
+        self.author.liked_shares.add(*related_shares)
+        self.author.favorited_shares.add(*related_shares)
+        self.client.force_login(self.author)
+
+        for tab, event_name in (
+            ('likes', 'share-like-removed'),
+            ('favorites', 'share-favorite-removed'),
+        ):
+            with self.subTest(tab=tab):
+                response = self.client.get(reverse('my_shares'), {
+                    'tab': tab,
+                    'page': '999',
+                })
+                probe = _InteractionMarkupProbe()
+                probe.feed(response.content.decode())
+                sections = probe.matching(
+                    tag='section',
+                    attribute='data-my-content-shares',
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(len(sections), 1)
+                attrs = sections[0]['attrs']
+                self.assertEqual(attrs['data-my-content-section'], tab)
+                self.assertEqual(
+                    attrs['hx-get'],
+                    f'{reverse("my_shares")}?tab={tab}&page=2',
+                )
+                self.assertEqual(attrs['hx-trigger'], f'{event_name} from:body')
+                self.assertEqual(attrs['hx-select'], '[data-my-content-shares]')
+                self.assertEqual(attrs['hx-target'], 'this')
+                self.assertEqual(attrs['hx-swap'], 'outerHTML')
+                self.assertEqual(attrs['hx-sync'], 'this:replace')
+                heading = probe.matching(
+                    tag='h2', attribute='id', value='my-content-section-title',
+                )[0]
+                self.assertEqual(heading['attrs']['tabindex'], '-1')
+
+        for query in ({}, {'tab': 'collections'}):
+            with self.subTest(non_reaction_tab=query.get('tab', 'my_shares')):
+                response = self.client.get(reverse('my_shares'), query)
+                content = response.content.decode()
+                self.assertNotIn('share-like-removed from:body', content)
+                self.assertNotIn('share-favorite-removed from:body', content)
+
     def test_my_content_share_variants_keep_actions_separate(self):
         reactor = User.objects.create_user(username='reactor', password='password123')
         self.share.likes.add(reactor)
@@ -631,6 +691,11 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('window.showMessage', main_source)
         self.assertNotIn('window.fallbackCopyTextToClipboard', main_source)
         self.assertNotIn('window.updateHistoryDropdown', main_source)
+        self.assertIn(
+            "import { initializeShareInteractions } from './features/share-interactions'",
+            main_source,
+        )
+        self.assertIn('initializeShareInteractions()', main_source)
 
     def test_visit_history_uses_stable_dom_and_style_contracts(self):
         source = self.read_template('base.html')
@@ -1294,6 +1359,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 self.assertIn('value="{% if ', source)
                 self.assertIn('hx-sync="this:drop"', source)
                 self.assertIn('hx-disabled-elt="this"', source)
+                self.assertIn('data-share-interaction=', source)
+                self.assertNotIn('hx-on', source)
 
     def test_home_template_delegates_announcement_and_infinite_scroll(self):
         source = self.read_template('shares/index.html')

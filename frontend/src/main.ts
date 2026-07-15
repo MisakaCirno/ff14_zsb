@@ -12,6 +12,7 @@ import { initializeShareActions } from './features/share-actions'
 import { initializeShareDetails } from './features/share-detail'
 import { initializeShareEditors } from './features/share-editor'
 import { initializeShareImages } from './features/share-image'
+import { initializeShareInteractions } from './features/share-interactions'
 import { initializeVisitHistory } from './features/visit-history'
 import './styles/main.css'
 
@@ -51,4 +52,5 @@ initializeManualCopy()
 initializeShareEditors()
 initializeShareDetails()
 initializeShareImages()
+initializeShareInteractions()
 Alpine.start()

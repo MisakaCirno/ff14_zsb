@@ -1,3 +1,5 @@
+import json
+
 from django.db.models import F
 from django.http import HttpResponseBadRequest, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -22,6 +24,13 @@ INTERACTION_TARGET_STATES = {
     'active': True,
     'inactive': False,
 }
+
+
+def _add_removal_trigger(response, *, event_name, share_id):
+    response.headers['HX-Trigger-After-Swap'] = json.dumps({
+        event_name: {'shareId': share_id},
+    }, separators=(',', ':'))
+    return response
 
 
 def _interaction_target_state(request):
@@ -132,12 +141,19 @@ def toggle_like(request, share_id):
     except ShareInteractionUnavailableError:
         return _hidden_share_response()
     if is_htmx:
-        return render(request, 'shares/includes/like_button.html', {
+        response = render(request, 'shares/includes/like_button.html', {
             'share': result.share,
             'is_liked': result.is_active,
             'likes_count': result.count,
             'interaction_fragment': fragment,
         })
+        if not result.is_active:
+            _add_removal_trigger(
+                response,
+                event_name='share-like-removed',
+                share_id=result.share.share_id,
+            )
+        return response
     return _interaction_success_response(request, result, {
         'status': 'success',
         'is_liked': result.is_active,
@@ -166,12 +182,19 @@ def toggle_favorite(request, share_id):
     except ShareInteractionUnavailableError:
         return _hidden_share_response()
     if is_htmx:
-        return render(request, 'shares/includes/favorite_button.html', {
+        response = render(request, 'shares/includes/favorite_button.html', {
             'share': result.share,
             'is_favorited': result.is_active,
             'favorites_count': result.count,
             'interaction_fragment': fragment,
         })
+        if not result.is_active:
+            _add_removal_trigger(
+                response,
+                event_name='share-favorite-removed',
+                share_id=result.share.share_id,
+            )
+        return response
     return _interaction_success_response(request, result, {
         'status': 'success',
         'is_favorited': result.is_active,

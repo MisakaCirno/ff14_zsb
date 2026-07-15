@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
@@ -669,6 +670,41 @@ class InteractionWorkflowTests(TestCase):
         self.assertContains(response, '>1</span>')
         self.assertNotContains(response, 'w-50')
         self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
+
+    def test_hx_inactive_interactions_emit_relation_specific_refresh_events(self):
+        self.client.force_login(self.user)
+
+        cases = (
+            ('toggle_like', 'likes', 'share-like-removed'),
+            ('toggle_favorite', 'favorites', 'share-favorite-removed'),
+        )
+        for endpoint, relation_name, event_name in cases:
+            with self.subTest(endpoint=endpoint):
+                relation = getattr(self.share, relation_name)
+                relation.add(self.user)
+                url = reverse(endpoint, args=[self.share.share_id]) + '?fragment=card'
+
+                inactive_response = self.client.post(
+                    url,
+                    {'target_state': 'inactive'},
+                    HTTP_HX_REQUEST='true',
+                )
+
+                self.assertEqual(inactive_response.status_code, 200)
+                self.assertEqual(
+                    json.loads(inactive_response.headers['HX-Trigger-After-Swap']),
+                    {event_name: {'shareId': self.share.share_id}},
+                )
+                self.assertFalse(relation.filter(pk=self.user.pk).exists())
+
+                active_response = self.client.post(
+                    url,
+                    {'target_state': 'active'},
+                    HTTP_HX_REQUEST='true',
+                )
+                self.assertEqual(active_response.status_code, 200)
+                self.assertNotIn('HX-Trigger-After-Swap', active_response.headers)
+                self.assertTrue(relation.filter(pk=self.user.pk).exists())
 
     def test_favorite_endpoint_sets_explicit_state_idempotently(self):
         self.client.force_login(self.user)

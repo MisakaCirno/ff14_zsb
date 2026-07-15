@@ -55,11 +55,23 @@
     </nav>
 
     {% if current_tab != 'collections' %}
-    <section class="my-content-section" aria-labelledby="my-content-section-title" data-my-content-shares data-my-content-section="{{ current_tab }}">
+    <section
+        class="my-content-section"
+        aria-labelledby="my-content-section-title"
+        data-my-content-shares
+        data-my-content-section="{{ current_tab }}"
+        {% if current_tab == 'likes' or current_tab == 'favorites' %}
+        hx-get="{{ share_interaction_return_url }}"
+        hx-trigger="{% if current_tab == 'likes' %}share-like-removed{% else %}share-favorite-removed{% endif %} from:body"
+        hx-select="[data-my-content-shares]"
+        hx-target="this"
+        hx-swap="outerHTML"
+        hx-sync="this:replace"
+        {% endif %}>
         <header class="my-content-section__header">
             <div class="my-content-section__copy">
                 <p class="my-content-section__eyebrow">分享分区</p>
-                <h2 class="my-content-section__title" id="my-content-section-title">
+                <h2 class="my-content-section__title" id="my-content-section-title" tabindex="-1">
                     {% if current_tab == 'my_shares' %}
                     我创建的分享
                     {% elif current_tab == 'likes' %}
