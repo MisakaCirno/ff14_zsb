@@ -4,91 +4,86 @@
 {% block title %}站点动态 - 粘鼠板儿{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row justify-content-center">
-        <div class="col-lg-10">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2 class="mb-0"><i class="bi bi-megaphone"></i> 站点动态</h2>
-            </div>
+<section class="announcement-page" data-announcement-page aria-labelledby="announcement-page-title">
+    <header class="announcement-page__hero">
+        <p class="announcement-page__eyebrow">站点信息</p>
+        <h1 class="announcement-page__title" id="announcement-page-title">
+            <i class="bi bi-megaphone" aria-hidden="true"></i>
+            站点动态
+        </h1>
+        <p class="announcement-page__description">维护通知、功能更新和服务调整会按时间保留在这里。</p>
+    </header>
 
-            <div class="list-group shadow-sm">
-                {% for announcement in announcements %}
-                <div class="list-group-item list-group-item-action p-4 border-start-0 border-end-0 border-top-0 border-bottom {% if not announcement.is_active %}bg-light text-muted{% endif %}">
-                    <div class="d-flex w-100 justify-content-between align-items-center mb-2">
-                        <div class="d-flex align-items-center">
-                            <h5 class="mb-1 fw-bold {% if announcement.is_active %}text-primary{% endif %}">{{ announcement.title }}</h5>
-                            {% if not announcement.is_active %}
-                            <span class="badge bg-secondary ms-2">已隐藏</span>
-                            {% endif %}
+    <section class="announcement-page__feed" aria-labelledby="announcement-feed-title">
+        <header class="announcement-page__feed-header">
+            <div class="announcement-page__feed-copy">
+                <p class="announcement-page__feed-eyebrow">更新记录</p>
+                <h2 class="announcement-page__feed-title" id="announcement-feed-title">全部动态</h2>
+            </div>
+            <span class="announcement-page__count">
+                共 <strong>{{ announcements.paginator.count }}</strong> 条
+            </span>
+        </header>
+
+        {% if announcements %}
+        <ol class="announcement-list" data-announcement-list>
+            {% for announcement in announcements %}
+            <li class="announcement-list__item" data-announcement-item>
+                <article
+                    class="announcement-card{% if not announcement.is_active %} announcement-card--inactive{% endif %}"
+                    aria-labelledby="announcement-title-{{ announcement.id }}"
+                    data-announcement-state="{% if announcement.is_active %}active{% else %}hidden{% endif %}">
+                    <header class="announcement-card__header">
+                        <div class="announcement-card__heading">
+                            <div class="announcement-card__title-row">
+                                <h3 class="announcement-card__title" id="announcement-title-{{ announcement.id }}">{{ announcement.title }}</h3>
+                                {% if not announcement.is_active %}
+                                <span class="announcement-card__status">
+                                    <i class="bi bi-eye-slash" aria-hidden="true"></i>
+                                    已隐藏
+                                </span>
+                                {% endif %}
+                            </div>
+                            <time class="announcement-card__time" datetime="{{ announcement.created_at|date:'c' }}">
+                                <i class="bi bi-clock" aria-hidden="true"></i>
+                                {{ announcement.created_at|date:"Y-m-d H:i" }}
+                            </time>
                         </div>
-                        <div class="d-flex align-items-center">
-                            <small class="text-muted me-3">
-                                <i class="bi bi-clock"></i> {{ announcement.created_at|date:"Y-m-d H:i" }}
-                            </small>
-                            {% if user.is_staff or user.is_superuser %}
-                            <form method="post" action="{% url 'toggle_announcement_visibility' announcement.id %}" class="d-inline">
+
+                        {% if user.is_staff or user.is_superuser %}
+                        <div class="announcement-card__actions">
+                            <form method="post" action="{% url 'toggle_announcement_visibility' announcement.id %}" class="announcement-card__visibility-form">
                                 {% csrf_token %}
                                 <input type="hidden" name="is_active" value="{% if announcement.is_active %}0{% else %}1{% endif %}">
-                                <button type="submit" class="btn btn-sm {% if announcement.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}">
-                                {% if announcement.is_active %}
-                                <i class="bi bi-eye-slash"></i> 隐藏
-                                {% else %}
-                                <i class="bi bi-eye"></i> 显示
-                                {% endif %}
+                                <button
+                                    type="submit"
+                                    class="btn btn-sm announcement-card__visibility-toggle {% if announcement.is_active %}btn-outline-danger{% else %}btn-outline-success{% endif %}"
+                                    aria-label="{% if announcement.is_active %}隐藏{% else %}显示{% endif %}站点动态《{{ announcement.title }}》">
+                                    {% if announcement.is_active %}
+                                    <i class="bi bi-eye-slash" aria-hidden="true"></i>
+                                    隐藏
+                                    {% else %}
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
+                                    显示
+                                    {% endif %}
                                 </button>
                             </form>
-                            {% endif %}
                         </div>
-                    </div>
-                    <div class="mb-1 text-break announcement-content">{{ announcement.content|sanitize_html }}</div>
-                </div>
-                {% empty %}
-                <div class="list-group-item p-5 text-center text-muted">
-                    <i class="bi bi-inbox display-4 mb-3 d-block"></i>
-                    <p class="mb-0">暂无动态</p>
-                </div>
-                {% endfor %}
-            </div>
-
-            <!-- 分页 -->
-            {% if announcements.has_other_pages %}
-            <nav aria-label="Page navigation" class="mt-4">
-                <ul class="pagination justify-content-center">
-                    {% if announcements.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ announcements.previous_page_number }}" aria-label="Previous">
-                            <span aria-hidden="true">&laquo;</span>
-                        </a>
-                    </li>
-                    {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">&laquo;</span>
-                    </li>
-                    {% endif %}
-
-                    {% for num in announcements.paginator.page_range %}
-                        {% if announcements.number == num %}
-                        <li class="page-item active"><span class="page-link">{{ num }}</span></li>
-                        {% elif num > announcements.number|add:'-3' and num < announcements.number|add:'3' %}
-                        <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
                         {% endif %}
-                    {% endfor %}
+                    </header>
 
-                    {% if announcements.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ announcements.next_page_number }}" aria-label="Next">
-                            <span aria-hidden="true">&raquo;</span>
-                        </a>
-                    </li>
-                    {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">&raquo;</span>
-                    </li>
-                    {% endif %}
-                </ul>
-            </nav>
-            {% endif %}
+                    <div class="announcement-content announcement-card__content">{{ announcement.content|sanitize_html }}</div>
+                </article>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <div data-announcement-empty-state>
+            {% include 'shares/includes/empty_state.html' with icon='bi-megaphone' title='暂无站点动态' message='这里暂时没有可显示的动态，请稍后再来看看。' only %}
         </div>
-    </div>
-</div>
+        {% endif %}
+
+        {% include 'shares/includes/pagination.html' with page_obj=announcements aria_label='站点动态分页' nav_class='announcement-page__pagination' only %}
+    </section>
+</section>
 {% endblock %}
