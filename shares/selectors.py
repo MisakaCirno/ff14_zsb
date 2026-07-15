@@ -1,7 +1,18 @@
 from dataclasses import dataclass
 
-from django.db.models import Count, Exists, F, OuterRef, Q, Window
-from django.db.models.functions import RowNumber
+from django.db.models import (
+    BooleanField,
+    Count,
+    Exists,
+    F,
+    IntegerField,
+    OuterRef,
+    Q,
+    Subquery,
+    Value,
+    Window,
+)
+from django.db.models.functions import Coalesce, RowNumber
 
 from .models import Collection, CollectionItem, Report, Share, SiteMessage
 from .policies import can_view_collection, viewable_share_queryset
@@ -91,14 +102,9 @@ def related_collection_summaries(share, user):
     return summaries
 
 
-def annotate_share_cards(queryset, user):
-    """Add card statistics and current-user interaction state."""
-    queryset = queryset.select_related('author', 'author__profile').annotate(
-        likes_count=Count('likes', distinct=True),
-        favorites_count=Count('favorites', distinct=True),
-    )
+def _annotate_current_user_interactions(queryset, user):
     if user.is_authenticated:
-        queryset = queryset.annotate(
+        return queryset.annotate(
             is_liked=Exists(
                 Share.likes.through.objects.filter(
                     share_id=OuterRef('pk'),
@@ -112,7 +118,44 @@ def annotate_share_cards(queryset, user):
                 )
             ),
         )
-    return queryset
+    return queryset.annotate(
+        is_liked=Value(False, output_field=BooleanField()),
+        is_favorited=Value(False, output_field=BooleanField()),
+    )
+
+
+def annotate_share_cards(queryset, user):
+    """Add card statistics and current-user interaction state."""
+    queryset = queryset.select_related('author', 'author__profile').annotate(
+        likes_count=Count('likes', distinct=True),
+        favorites_count=Count('favorites', distinct=True),
+    )
+    return _annotate_current_user_interactions(queryset, user)
+
+
+def _interaction_count_subquery(through_model):
+    counts = through_model.objects.filter(
+        share_id=OuterRef('pk'),
+    ).order_by().values('share_id').annotate(
+        total=Count('pk'),
+    ).values('total')[:1]
+    return Coalesce(
+        Subquery(counts, output_field=IntegerField()),
+        Value(0),
+        output_field=IntegerField(),
+    )
+
+
+def share_detail_queryset(user):
+    """Return shares with all single-record detail presentation fields loaded."""
+    queryset = Share.objects.select_related(
+        'author',
+        'author__profile',
+    ).annotate(
+        likes_count=_interaction_count_subquery(Share.likes.through),
+        favorites_count=_interaction_count_subquery(Share.favorites.through),
+    )
+    return _annotate_current_user_interactions(queryset, user)
 
 
 def unread_site_message_count(user):

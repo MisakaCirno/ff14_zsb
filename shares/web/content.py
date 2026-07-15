@@ -7,8 +7,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from shares.forms import CreateShareForm, EditShareForm
 from shares.models import Collection, Share
 from shares.policies import can_view_share, is_moderator, viewable_share_queryset
+from shares.presentation import build_share_detail_view_model
 from shares.rate_limits import consume_rate_limit, request_identity
-from shares.selectors import annotate_share_cards, related_collection_summaries
+from shares.selectors import (
+    annotate_share_cards,
+    related_collection_summaries,
+    share_detail_queryset,
+)
 from shares.services.shares import (
     CollectionUnavailableError,
     ShareEditConflictError,
@@ -22,33 +27,33 @@ _MY_CONTENT_TABS = {'my_shares', 'collections', 'likes', 'favorites'}
 
 def share_detail(request, share_id):
     try:
-        share = Share.objects.get(share_id=share_id)
+        share = share_detail_queryset(request.user).get(share_id=share_id)
     except Share.DoesNotExist:
         return render(request, '404.html', status=404)
     if not can_view_share(request.user, share):
         messages.error(request, '该分享不存在或您没有权限访问')
         return redirect('index')
+    detail = build_share_detail_view_model(share, request.user)
     related_collections = related_collection_summaries(share, request.user)
     share_logs = (
         share.logs.select_related('user').order_by('-created_at')
-        if is_moderator(request.user)
+        if detail.actions.can_view_logs
         else None
     )
     user_collections = []
-    if request.user.is_authenticated and share.author == request.user:
+    if detail.actions.can_add_to_collection:
         user_collections = Collection.objects.filter(author=request.user).order_by('-updated_at')
-    is_liked = request.user.is_authenticated and share.likes.filter(id=request.user.id).exists()
-    is_favorited = request.user.is_authenticated and share.favorites.filter(id=request.user.id).exists()
     canonical_share_path = share.get_absolute_url()
     return render(request, 'shares/detail.html', {
         'share': share,
+        'detail': detail,
         'canonical_share_path': canonical_share_path,
         'canonical_share_url': request.build_absolute_uri(canonical_share_path),
         'related_collections': related_collections,
         'user_collections': user_collections,
         'share_logs': share_logs,
-        'is_liked': is_liked,
-        'is_favorited': is_favorited,
+        'is_liked': detail.is_liked,
+        'is_favorited': detail.is_favorited,
     })
 
 
