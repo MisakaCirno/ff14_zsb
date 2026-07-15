@@ -105,9 +105,11 @@
                     {% url 'create_share' as empty_action_url %}
                     {% include 'shares/includes/empty_state.html' with icon='bi-grid-1x2' title='还没有分享' message='创建第一个战术板分享，之后可以在这里查看它的状态。' action_url=empty_action_url action_label='创建分享' action_icon='bi-plus-circle' only %}
                 {% elif current_tab == 'likes' %}
-                    {% include 'shares/includes/empty_state.html' with icon='bi-heart' title='还没有点赞' message='浏览公开分享时，可以把喜欢的内容留在这里。' only %}
+                    {% url 'index' as empty_action_url %}
+                    {% include 'shares/includes/empty_state.html' with icon='bi-heart' title='还没有点赞' message='浏览公开分享时，可以把喜欢的内容留在这里。' action_url=empty_action_url action_label='浏览公开分享' action_icon='bi-compass' only %}
                 {% else %}
-                    {% include 'shares/includes/empty_state.html' with icon='bi-star' title='还没有收藏' message='收藏想要稍后查看的分享，它们会集中显示在这里。' only %}
+                    {% url 'index' as empty_action_url %}
+                    {% include 'shares/includes/empty_state.html' with icon='bi-star' title='还没有收藏' message='收藏想要稍后查看的分享，它们会集中显示在这里。' action_url=empty_action_url action_label='浏览公开分享' action_icon='bi-compass' only %}
                 {% endif %}
             </div>
             {% endfor %}
