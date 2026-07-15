@@ -46,9 +46,15 @@
 - **修改密码**: http://127.0.0.1:8000/profile/password/
 - **管理后台**: http://127.0.0.1:8000/admin/
 
-### 管理员账户
-- 用户名: `admin`
-- 密码: `admin123`
+### 创建管理员账户
+
+项目不提供默认管理员凭据。首次使用管理后台前，请在目标环境中交互创建超级用户：
+
+```bash
+python manage.py createsuperuser
+```
+
+按命令提示输入管理员用户名和强密码，不要把密码写入代码、文档或版本库。忘记密码时使用 `python manage.py changepassword <管理员用户名>` 交互重置。
 
 ### 启动服务器
 ```bash

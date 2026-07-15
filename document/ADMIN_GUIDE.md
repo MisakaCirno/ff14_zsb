@@ -12,8 +12,14 @@ http://127.0.0.1:8000/admin/
 ```
 
 ### 管理员账户
-- **用户名**: `admin`
-- **密码**: `admin123`
+
+项目不提供默认管理员用户名或密码。首次使用前，在目标环境中交互创建超级用户：
+
+```bash
+python manage.py createsuperuser
+```
+
+按命令提示设置独立强密码，不要把凭据写入代码、文档、工单或版本库。
 
 ## ✨ 增强功能
 
@@ -164,6 +170,8 @@ http://127.0.0.1:8000/admin/
 python manage.py createsuperuser
 ```
 
+用户名和密码均由命令交互输入；不要在命令行参数或脚本中硬编码密码。
+
 ### 创建普通员工
 1. 在用户列表创建新用户
 2. 勾选"职员状态"（允许登录管理后台）
@@ -199,11 +207,11 @@ python manage.py createsuperuser
 ## 🚨 注意事项
 
 ### 安全提示
-1. **修改默认密码**
+1. **安全轮换密码**
    ```bash
-   # 登录后台后，在右上角点击"修改密码"
-   或访问：http://127.0.0.1:8000/admin/password_change/
+   python manage.py changepassword <管理员用户名>
    ```
+   也可以登录后台后，在右上角点击“修改密码”。密码必须交互输入，不得记录在仓库中。
 
 2. **不要删除超级管理员**
    - 至少保留一个超级管理员账户
@@ -263,8 +271,10 @@ list_per_page = 20  # 修改为你想要的数量
 
 ### Q: 忘记管理员密码？
 ```bash
-python manage.py changepassword admin
+python manage.py changepassword <管理员用户名>
 ```
+
+该命令会交互请求新密码，不需要也不应把密码写进命令或脚本。
 
 ### Q: 如何添加新的模型到管理后台？
 在 `admin.py` 中注册：

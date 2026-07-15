@@ -173,9 +173,13 @@ python create_profiles.py         # 为现有用户创建 UserProfile
 
 ## 管理员账户
 
-默认管理员信息：
-- 用户名: `admin`
-- 密码: `admin123`
+项目不提供默认管理员用户名或密码。需要管理后台账户时，请在目标环境中交互创建：
+
+```bash
+python manage.py createsuperuser
+```
+
+忘记或需要轮换密码时，运行 `python manage.py changepassword <管理员用户名>` 并按提示输入新密码。不要把管理员密码写入代码、脚本、文档或版本库。
 
 可以通过个人资料页面设置管理员昵称。
 

@@ -2,8 +2,8 @@
 
 ## 访问信息
 - **地址**: http://127.0.0.1:8000/admin/
-- **用户名**: admin
-- **密码**: admin123
+- **凭据**: 项目不提供默认管理员用户名或密码
+- **首次创建**: `python manage.py createsuperuser`，按提示交互输入
 
 ## 主要功能
 
@@ -52,9 +52,11 @@
 ## 快速操作
 
 ### 修改管理员密码
+```bash
+python manage.py changepassword <管理员用户名>
 ```
-管理后台右上角 → 修改密码
-```
+
+也可以使用管理后台右上角的“修改密码”。新密码只在交互提示中输入。
 
 ### 创建新管理员
 ```bash
@@ -67,6 +69,6 @@ python manage.py createsuperuser
 ```
 
 ## 安全建议
-⚠️ 请尽快修改默认管理员密码！
+⚠️ 不要在代码、文档、脚本、工单或版本库中保存管理员密码。发现凭据可能泄露时，立即使用 `changepassword` 交互轮换并验证旧密码已失效。
 
 📖 **完整文档**: [ADMIN_GUIDE.md](ADMIN_GUIDE.md)
