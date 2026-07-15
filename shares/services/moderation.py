@@ -253,11 +253,19 @@ def release_share_restriction(*, share_id, moderator, reason):
 
 
 @transaction.atomic
-def confirm_share_restriction(*, share_id, moderator, reason):
+def confirm_share_restriction(
+    *,
+    share_id,
+    moderator,
+    reason,
+    expected_version,
+):
     reason = _required_reason(reason)
     share = Share.objects.select_for_update().select_related('author').get(
         share_id=share_id,
     )
+    if share.updated_at != expected_version:
+        return ShareModerationResult(share=share, outcome='stale')
     if not share.is_restricted:
         return ShareModerationResult(share=share, outcome='already_clear')
     if share.restriction_state not in {

@@ -152,6 +152,7 @@ class ShareRestrictionPreflightTests(TestCase):
             share_id=share.share_id,
             moderator=self.admin,
             reason='人工复核后确认继续下架',
+            expected_version=share.updated_at,
         )
         self.assertTrue(result.changed)
         call_command(

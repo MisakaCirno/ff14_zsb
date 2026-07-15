@@ -127,17 +127,20 @@ def admin_release_share_restriction(request, share_id):
 def admin_confirm_share_restriction(request, share_id):
     form = RestrictionConfirmationForm(request.POST)
     if not form.is_valid():
-        messages.error(request, '确认说明不能为空')
+        messages.error(request, '确认信息无效，请刷新页面后重新提交')
         return redirect('admin_review_list')
     try:
         result = confirm_share_restriction(
             share_id=share_id,
             moderator=request.user,
             reason=form.cleaned_data['reason'].strip(),
+            expected_version=form.cleaned_data['version'],
         )
     except Share.DoesNotExist as exc:
         raise Http404('Share not found') from exc
-    if result.outcome == 'already_clear':
+    if result.outcome == 'stale':
+        messages.info(request, '分享限制已发生变化，请刷新后重新确认')
+    elif result.outcome == 'already_clear':
         messages.info(request, f'分享 "{result.share.title}" 当前没有活动限制')
     elif result.outcome == 'requires_review':
         messages.warning(request, '审核拒绝限制必须通过重新审核流程处理')

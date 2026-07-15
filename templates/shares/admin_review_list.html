@@ -175,6 +175,7 @@
                 <div class="modal-dialog">
                     <form method="post" action="{% url 'admin_confirm_share_restriction' share.share_id %}" class="modal-content">
                         {% csrf_token %}
+                        <input type="hidden" name="version" value="{{ share.updated_at|date:'c' }}">
                         <div class="modal-header">
                             <h5 class="modal-title" id="confirmRestrictionModalLabel{{ share.share_id }}">确认继续维持内容限制</h5>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>

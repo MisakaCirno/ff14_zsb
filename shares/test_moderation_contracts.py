@@ -453,7 +453,10 @@ class ModerationWorkflowContractTests(TestCase):
 
         response = self.client.post(
             reverse('admin_confirm_share_restriction', args=[share.share_id]),
-            {'reason': '人工复核后确认继续下架'},
+            {
+                'reason': '人工复核后确认继续下架',
+                'version': share.updated_at.isoformat(),
+            },
         )
 
         self.assertRedirects(response, reverse('admin_review_list'))
@@ -475,6 +478,35 @@ class ModerationWorkflowContractTests(TestCase):
             related_share=share,
             message_type=SiteMessage.MessageType.SHARE_TAKEDOWN,
         ).exists())
+
+    def test_restriction_confirmation_replay_does_not_duplicate_audit_or_message(self):
+        share = self.create_share(
+            **self.restriction_fields(
+                state=Share.RestrictionState.REPORT_TAKEDOWN,
+                reason='等待首次复核',
+            ),
+        )
+        self.client.force_login(self.admin)
+        url = reverse('admin_confirm_share_restriction', args=[share.share_id])
+        payload = {
+            'reason': '确认继续限制',
+            'version': share.updated_at.isoformat(),
+        }
+
+        first = self.client.post(url, payload)
+        replay = self.client.post(url, payload)
+
+        self.assertRedirects(first, reverse('admin_review_list'))
+        self.assertRedirects(replay, reverse('admin_review_list'))
+        self.assertEqual(ShareLog.objects.filter(
+            share=share,
+            action=ShareLog.ActionType.RESTRICTION_CONFIRM,
+        ).count(), 1)
+        self.assertEqual(SiteMessage.objects.filter(
+            recipient=self.author,
+            related_share=share,
+            message_type=SiteMessage.MessageType.SHARE_TAKEDOWN,
+        ).count(), 1)
 
     def test_legacy_private_can_be_classified_without_approving_pending_content(self):
         share = self.create_share(

@@ -105,6 +105,14 @@ class RestrictionReleaseForm(forms.Form):
 
 class RestrictionConfirmationForm(forms.Form):
     """管理员确认继续维持活动内容限制时填写审计说明。"""
+    version = forms.DateTimeField(
+        required=True,
+        widget=forms.HiddenInput(),
+        error_messages={
+            'required': '页面缺少限制版本，请刷新后重新提交。',
+            'invalid': '限制版本无效，请刷新后重新提交。',
+        },
+    )
     reason = forms.CharField(
         label='确认说明',
         min_length=2,
