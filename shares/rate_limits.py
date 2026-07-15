@@ -14,6 +14,8 @@ DEFAULT_RATE_LIMIT_RULES = {
     'register_ip': (5, 60 * 60),
     'login_ip': (30, 10 * 60),
     'login_account': (100, 60 * 60),
+    'password_change_ip': (30, 60 * 60),
+    'password_change_user': (10, 60 * 60),
     'anonymous_create_ip': (10, 60 * 60),
     'authenticated_create_user': (60, 60 * 60),
     'report_user': (10, 60 * 60),

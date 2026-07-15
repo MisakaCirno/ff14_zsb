@@ -1,6 +1,9 @@
 from django import forms
-from django.contrib.auth.forms import PasswordChangeForm
-from django.contrib.auth.models import User
+from django.contrib.auth.forms import (
+    AuthenticationForm,
+    PasswordChangeForm,
+    UserCreationForm,
+)
 from .models import Share, UserProfile, Report, Collection
 from .validation import (
     COLLECTION_DESCRIPTION_MAX_LENGTH,
@@ -241,17 +244,57 @@ class UserProfileForm(forms.ModelForm):
         }
 
 
+def _add_form_control_class(field):
+    """Add the shared control class without replacing Django's auth widgets."""
+    classes = field.widget.attrs.get('class', '').split()
+    if 'form-control' not in classes:
+        classes.append('form-control')
+    field.widget.attrs['class'] = ' '.join(classes)
+
+
+class AccountRegistrationForm(UserCreationForm):
+    """Registration form that preserves Django's password-field semantics."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        placeholders = {
+            'username': '设置登录用户名',
+            'password1': '设置密码',
+            'password2': '再次输入密码',
+        }
+        for field_name, placeholder in placeholders.items():
+            field = self.fields[field_name]
+            _add_form_control_class(field)
+            field.widget.attrs['placeholder'] = placeholder
+
+
+class AccountLoginForm(AuthenticationForm):
+    """Login form with project styling layered onto Django's auth fields."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        placeholders = {
+            'username': '输入用户名',
+            'password': '输入密码',
+        }
+        for field_name, placeholder in placeholders.items():
+            field = self.fields[field_name]
+            _add_form_control_class(field)
+            field.widget.attrs['placeholder'] = placeholder
+
+
 class CustomPasswordChangeForm(PasswordChangeForm):
-    """自定义密码修改表单"""
-    old_password = forms.CharField(
-        label='当前密码',
-        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': '输入当前密码'})
-    )
-    new_password1 = forms.CharField(
-        label='新密码',
-        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': '输入新密码'})
-    )
-    new_password2 = forms.CharField(
-        label='确认新密码',
-        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': '再次输入新密码'})
-    )
+    """Password-change form that retains Django's validators and metadata."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        field_options = {
+            'old_password': ('当前密码', '输入当前密码'),
+            'new_password1': ('新密码', '输入新密码'),
+            'new_password2': ('确认新密码', '再次输入新密码'),
+        }
+        for field_name, (label, placeholder) in field_options.items():
+            field = self.fields[field_name]
+            field.label = label
+            _add_form_control_class(field)
+            field.widget.attrs['placeholder'] = placeholder

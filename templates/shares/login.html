@@ -19,12 +19,12 @@
                         
                         <div class="mb-3">
                             <label for="{{ form.username.id_for_label }}" class="form-label">用户名</label>
-                            <input type="text" name="username" class="form-control" id="{{ form.username.id_for_label }}" required>
+                            {{ form.username }}
                         </div>
 
                         <div class="mb-3">
                             <label for="{{ form.password.id_for_label }}" class="form-label">密码</label>
-                            <input type="password" name="password" class="form-control" id="{{ form.password.id_for_label }}" required>
+                            {{ form.password }}
                         </div>
 
                         {% if form.errors %}
@@ -41,7 +41,7 @@
                     </form>
                 </div>
                 <div class="card-footer text-center">
-                    还没有账号？ <a href="{% url 'register' %}">立即注册</a>
+                    还没有账号？ <a href="{{ register_url }}">立即注册</a>
                 </div>
             </div>
         </div>

@@ -13,6 +13,9 @@
                 <div class="card-body p-4">
                     <form method="post" class="registration-form">
                         {% csrf_token %}
+                        {% if next %}
+                        <input type="hidden" name="next" value="{{ next }}">
+                        {% endif %}
                         
                         <div class="mb-3">
                             <label for="{{ form.username.id_for_label }}" class="form-label">用户名</label>
@@ -52,7 +55,7 @@
                     </form>
                 </div>
                 <div class="card-footer text-center">
-                    已有账号？ <a href="{% url 'login' %}">立即登录</a>
+                    已有账号？ <a href="{{ login_url }}">立即登录</a>
                 </div>
             </div>
         </div>
