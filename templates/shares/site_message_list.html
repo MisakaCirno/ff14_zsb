@@ -1,73 +1,124 @@
 {% extends 'base.html' %}
 
-{% block title %}站内信{% endblock %}
+{% block title %}{{ mailbox_title }} - 站内信 - 粘鼠板儿{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row mb-4">
-        <div class="col-12 d-flex justify-content-between align-items-center">
-            <div>
-                <h1 class="h3 mb-1"><i class="bi bi-envelope text-primary"></i> 站内信</h1>
-                <p class="text-muted mb-0">审核与举报处理结果会在这里保留。</p>
-            </div>
-            {% if global_unread_site_messages_count > 0 %}
-            <form method="post" action="{% url 'mark_all_site_messages_read' %}">
+<section class="message-center-page" data-site-message-page data-mailbox="{{ mailbox }}" aria-labelledby="message-center-title">
+    <header class="message-center-hero">
+        <div class="message-center-hero__copy">
+            <p class="message-center-hero__eyebrow">账户通知</p>
+            <h1 class="message-center-hero__title" id="message-center-title">
+                <i class="bi bi-envelope" aria-hidden="true"></i>
+                站内信
+            </h1>
+            <p class="message-center-hero__description">审核、举报和内容限制的处理结果会安全保留在这里。</p>
+        </div>
+        <div class="message-center-hero__actions">
+            <span class="message-center-unread-count" aria-label="{{ global_unread_site_messages_count|default:0 }} 条未读站内信">
+                <i class="bi bi-envelope-exclamation" aria-hidden="true"></i>
+                <strong>{{ global_unread_site_messages_count|default:0 }}</strong>
+                条未读
+            </span>
+            {% if global_unread_site_messages_count > 0 and mailbox != 'archived' %}
+            <form method="post" action="{% url 'mark_all_site_messages_read' %}" class="message-center-bulk-form">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-outline-primary btn-sm">
-                    <i class="bi bi-check2-all"></i> 全部已读
+                <input type="hidden" name="mailbox" value="{{ mailbox }}">
+                <input type="hidden" name="page" value="{{ site_messages.number }}">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-check2-all" aria-hidden="true"></i>
+                    全部已读
                 </button>
             </form>
             {% endif %}
         </div>
-    </div>
+    </header>
 
-    <div class="card border-0 shadow-sm">
-        <div class="list-group list-group-flush">
-            {% for message in site_messages %}
-            <form method="post" action="{% url 'open_site_message' message.id %}" class="m-0" style="display: contents;">
-                {% csrf_token %}
-                <button type="submit" class="list-group-item list-group-item-action py-3 text-start {% if not message.is_read %}bg-light{% endif %}">
-                <div class="d-flex justify-content-between align-items-start gap-3">
-                    <div class="flex-grow-1">
-                        <div class="d-flex align-items-center gap-2 mb-1">
-                            {% if not message.is_read %}
-                            <span class="badge bg-primary">未读</span>
-                            {% endif %}
-                            <strong>{{ message.title }}</strong>
-                        </div>
-                        <div class="text-muted small text-truncate">{{ message.content|linebreaksbr|striptags }}</div>
-                    </div>
-                    <small class="text-muted text-nowrap">{{ message.created_at|date:"Y-m-d H:i" }}</small>
-                </div>
-                </button>
-            </form>
-            {% empty %}
-            <div class="text-center text-muted py-5">
-                <i class="bi bi-inbox fs-1 d-block mb-3"></i>
-                暂无站内信
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-
-    {% if site_messages.has_other_pages %}
-    <nav class="mt-4" aria-label="站内信分页">
-        <ul class="pagination justify-content-center">
-            {% if site_messages.has_previous %}
-            <li class="page-item"><a class="page-link" href="?page={{ site_messages.previous_page_number }}">上一页</a></li>
-            {% else %}
-            <li class="page-item disabled"><span class="page-link">上一页</span></li>
-            {% endif %}
-
-            <li class="page-item active"><span class="page-link">{{ site_messages.number }} / {{ site_messages.paginator.num_pages }}</span></li>
-
-            {% if site_messages.has_next %}
-            <li class="page-item"><a class="page-link" href="?page={{ site_messages.next_page_number }}">下一页</a></li>
-            {% else %}
-            <li class="page-item disabled"><span class="page-link">下一页</span></li>
-            {% endif %}
+    <nav class="message-center-nav" aria-label="站内信分区" data-site-message-nav>
+        <ul class="message-center-nav__list">
+            <li>
+                <a class="message-center-nav__link{% if mailbox == 'inbox' %} active{% endif %}" href="{% querystring mailbox='inbox' page=None %}"{% if mailbox == 'inbox' %} aria-current="page"{% endif %}>
+                    <i class="bi bi-inbox" aria-hidden="true"></i>
+                    收件箱
+                </a>
+            </li>
+            <li>
+                <a class="message-center-nav__link{% if mailbox == 'unread' %} active{% endif %}" href="{% querystring mailbox='unread' page=None %}"{% if mailbox == 'unread' %} aria-current="page"{% endif %}>
+                    <i class="bi bi-envelope-exclamation" aria-hidden="true"></i>
+                    未读消息
+                </a>
+            </li>
+            <li>
+                <a class="message-center-nav__link{% if mailbox == 'archived' %} active{% endif %}" href="{% querystring mailbox='archived' page=None %}"{% if mailbox == 'archived' %} aria-current="page"{% endif %}>
+                    <i class="bi bi-archive" aria-hidden="true"></i>
+                    归档箱
+                </a>
+            </li>
         </ul>
     </nav>
-    {% endif %}
-</div>
+
+    <section class="message-center-section" aria-labelledby="mailbox-title">
+        <header class="message-center-section__header">
+            <div>
+                <p class="message-center-section__eyebrow">消息分区</p>
+                <h2 class="message-center-section__title" id="mailbox-title">{{ mailbox_title }}</h2>
+                <p class="message-center-section__description">{{ mailbox_description }}</p>
+            </div>
+            <span class="message-center-section__count">
+                共 <strong>{{ site_messages.paginator.count }}</strong> 条
+            </span>
+        </header>
+
+        {% if site_messages %}
+        <ol class="message-center-list" data-site-message-list>
+            {% for message in site_messages %}
+            <li class="message-center-list__item">
+                <article class="message-summary{% if not message.is_read %} message-summary--unread{% endif %}{% if message.archived_at %} message-summary--archived{% endif %}" aria-labelledby="site-message-title-{{ message.pk }}" data-site-message-item data-read-state="{% if message.is_read %}read{% else %}unread{% endif %}">
+                    {% if not message.is_read %}
+                    <form method="post" action="{% url 'open_site_message' message.pk %}" class="message-summary__form">
+                        {% csrf_token %}
+                        <input type="hidden" name="mailbox" value="{{ mailbox }}">
+                        <input type="hidden" name="page" value="{{ site_messages.number }}">
+                        <button type="submit" class="message-summary__open message-summary__open--button">
+                            <span class="visually-hidden">标记为已读并查看：</span>
+                            {% include 'shares/includes/site_message_summary.html' with message=message only %}
+                        </button>
+                    </form>
+                    {% else %}
+                    <a class="message-summary__open" href="{% url 'site_message_detail' message.pk %}{% querystring mailbox=mailbox page=site_messages.number %}">
+                        {% include 'shares/includes/site_message_summary.html' with message=message only %}
+                    </a>
+                    {% endif %}
+                    <div class="message-summary__actions">
+                        <form method="post" action="{% url 'set_site_message_archive_state' message.pk %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="mailbox" value="{{ mailbox }}">
+                            <input type="hidden" name="page" value="{{ site_messages.number }}">
+                            {% if message.archived_at %}
+                            <input type="hidden" name="target_state" value="inbox">
+                            <button type="submit" class="btn btn-sm btn-outline-primary" aria-label="恢复《{{ message.title }}》到收件箱">
+                                <i class="bi bi-inbox" aria-hidden="true"></i>
+                                恢复
+                            </button>
+                            {% else %}
+                            <input type="hidden" name="target_state" value="archived">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="归档《{{ message.title }}》">
+                                <i class="bi bi-archive" aria-hidden="true"></i>
+                                归档
+                            </button>
+                            {% endif %}
+                        </form>
+                    </div>
+                </article>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <div data-site-message-empty-state>
+            {% include 'shares/includes/empty_state.html' with icon='bi-inbox' title=empty_title message=empty_message only %}
+        </div>
+        {% endif %}
+
+        {% include 'shares/includes/pagination.html' with page_obj=site_messages aria_label='站内信分页' nav_class='message-center-pagination' only %}
+    </section>
+</section>
 {% endblock %}

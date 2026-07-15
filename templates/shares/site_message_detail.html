@@ -1,45 +1,89 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ site_message.title }}{% endblock %}
+{% block title %}{{ site_message.title }} - 站内信 - 粘鼠板儿{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="mb-3">
-                <a href="{% url 'site_message_list' %}" class="btn btn-outline-secondary btn-sm">
-                    <i class="bi bi-arrow-left"></i> 返回站内信
-                </a>
-            </div>
-
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white border-bottom py-3">
-                    <div class="d-flex justify-content-between align-items-start gap-3">
-                        <div>
-                            <h1 class="h4 mb-2">{{ site_message.title }}</h1>
-                            <div class="text-muted small">
-                                {{ site_message.created_at|date:"Y-m-d H:i" }}
-                                {% if site_message.sender %}
-                                · {{ site_message.sender.username }}
-                                {% endif %}
-                            </div>
-                        </div>
-                        <span class="badge bg-secondary">{{ site_message.get_message_type_display }}</span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="lh-lg">{{ site_message.content|linebreaks }}</div>
-
-                    {% if site_message.related_share %}
-                    <div class="border-top mt-4 pt-3">
-                        <a href="{% url 'share_detail' site_message.related_share.share_id %}" class="btn btn-primary btn-sm">
-                            <i class="bi bi-box-arrow-up-right"></i> 查看相关分享
-                        </a>
-                    </div>
-                    {% endif %}
-                </div>
+<section class="message-center-page message-detail-page" data-site-message-page data-site-message-detail aria-labelledby="site-message-title">
+    <header class="message-detail-hero">
+        <a href="{{ back_url }}" class="btn btn-outline-secondary message-detail-hero__back">
+            <i class="bi bi-arrow-left" aria-hidden="true"></i>
+            返回站内信
+        </a>
+        <div class="message-detail-hero__copy">
+            <p class="message-detail-hero__eyebrow">站点通知</p>
+            <h1 class="message-detail-hero__title" id="site-message-title">{{ site_message.title }}</h1>
+            <div class="message-detail-hero__meta">
+                <span>{{ site_message.get_message_type_display }}</span>
+                <span aria-hidden="true">·</span>
+                <time datetime="{{ site_message.created_at|date:'c' }}">{{ site_message.created_at|date:"Y-m-d H:i" }}</time>
             </div>
         </div>
-    </div>
-</div>
+        <div class="message-detail-hero__status" aria-label="消息状态">
+            {% if site_message.is_read %}
+            <span class="message-status message-status--read"><i class="bi bi-check2" aria-hidden="true"></i> 已读</span>
+            {% else %}
+            <span class="message-status message-status--unread"><i class="bi bi-circle-fill" aria-hidden="true"></i> 未读</span>
+            {% endif %}
+            {% if site_message.archived_at %}
+            <span class="message-status message-status--archived"><i class="bi bi-archive" aria-hidden="true"></i> 已归档</span>
+            {% endif %}
+        </div>
+    </header>
+
+    <article class="message-detail-panel" aria-labelledby="message-body-title">
+        <header class="message-detail-panel__header">
+            <p class="message-detail-panel__eyebrow">通知正文</p>
+            <h2 class="message-detail-panel__title" id="message-body-title">详细内容</h2>
+        </header>
+        <div class="message-detail-panel__body">
+            <div class="message-detail-content">{{ site_message.content|linebreaks }}</div>
+
+            {% if related_share_url %}
+            <div class="message-detail-related">
+                <p>这条通知关联到一个你当前可以访问的分享。</p>
+                <a href="{{ related_share_url }}" class="btn btn-primary">
+                    <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                    查看相关分享
+                </a>
+            </div>
+            {% elif related_share_unavailable %}
+            <div class="message-detail-related message-detail-related--unavailable" role="note">
+                <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                相关分享当前已下架、受限或不可访问；通知正文仍会完整保留。
+            </div>
+            {% endif %}
+        </div>
+        <footer class="message-detail-actions">
+            {% if not site_message.is_read %}
+            <form method="post" action="{% url 'open_site_message' site_message.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="mailbox" value="{{ mailbox }}">
+                {% if page_number %}<input type="hidden" name="page" value="{{ page_number }}">{% endif %}
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check2" aria-hidden="true"></i>
+                    标记为已读
+                </button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'set_site_message_archive_state' site_message.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="mailbox" value="{{ mailbox }}">
+                {% if page_number %}<input type="hidden" name="page" value="{{ page_number }}">{% endif %}
+                {% if site_message.archived_at %}
+                <input type="hidden" name="target_state" value="inbox">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-inbox" aria-hidden="true"></i>
+                    恢复到收件箱
+                </button>
+                {% else %}
+                <input type="hidden" name="target_state" value="archived">
+                <button type="submit" class="btn btn-outline-secondary">
+                    <i class="bi bi-archive" aria-hidden="true"></i>
+                    归档消息
+                </button>
+                {% endif %}
+            </form>
+        </footer>
+    </article>
+</section>
 {% endblock %}

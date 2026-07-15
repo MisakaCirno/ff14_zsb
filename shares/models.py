@@ -367,7 +367,7 @@ class SiteMessage(models.Model):
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='site_messages', verbose_name='收件人')
     sender = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_site_messages', verbose_name='发件人')
     message_type = models.CharField(max_length=30, choices=MessageType.choices, verbose_name='消息类型')
-    title = models.CharField(max_length=200, verbose_name='标题')
+    title = models.CharField(max_length=255, verbose_name='标题')
     content = models.TextField(verbose_name='内容')
     related_share = models.ForeignKey(Share, on_delete=models.SET_NULL, null=True, blank=True, related_name='site_messages', verbose_name='关联分享')
     related_report = models.ForeignKey(Report, on_delete=models.SET_NULL, null=True, blank=True, related_name='site_messages', verbose_name='关联举报')
@@ -377,7 +377,7 @@ class SiteMessage(models.Model):
     archived_at = models.DateTimeField(null=True, blank=True, verbose_name='归档时间')
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ['-created_at', '-pk']
         indexes = [
             models.Index(fields=['recipient', 'read_at', '-created_at']),
             models.Index(

@@ -233,4 +233,26 @@ class SiteMessageAdmin(admin.ModelAdmin):
     list_display = ['title', 'recipient', 'message_type', 'created_at', 'read_at']
     list_filter = ['message_type', 'created_at', 'read_at']
     search_fields = ['title', 'content', 'recipient__username', 'sender__username']
-    readonly_fields = ['created_at', 'read_at']
+    readonly_fields = [
+        'recipient',
+        'sender',
+        'message_type',
+        'title',
+        'content',
+        'related_share',
+        'related_report',
+        'metadata',
+        'created_at',
+        'read_at',
+        'archived_at',
+    ]
+    actions = None
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

@@ -1,0 +1,15 @@
+<span class="message-summary__layout">
+    <span class="message-summary__main">
+        <span class="message-summary__badges">
+            {% if not message.is_read %}
+            <span class="message-status message-status--unread">未读</span>
+            {% else %}
+            <span class="message-status message-status--read">已读</span>
+            {% endif %}
+            <span class="message-status message-status--type">{{ message.get_message_type_display }}</span>
+        </span>
+        <strong class="message-summary__title" id="site-message-title-{{ message.pk }}">{{ message.title }}</strong>
+        <span class="message-summary__preview">{{ message.content_preview|linebreaksbr }}</span>
+    </span>
+    <time class="message-summary__time" datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:"Y-m-d H:i" }}</time>
+</span>

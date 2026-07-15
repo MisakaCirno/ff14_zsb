@@ -12,7 +12,7 @@ from django.db.models import (
     Value,
     Window,
 )
-from django.db.models.functions import Coalesce, RowNumber
+from django.db.models.functions import Coalesce, RowNumber, Substr
 
 from .models import Collection, CollectionItem, Report, Share, SiteMessage
 from .policies import can_view_collection, viewable_share_queryset
@@ -166,6 +166,23 @@ def unread_site_message_count(user):
         read_at__isnull=True,
         archived_at__isnull=True,
     ).count()
+
+
+def site_message_list_queryset(user, mailbox='inbox'):
+    """Return one stable, bounded-preview mailbox for the current user."""
+    queryset = SiteMessage.objects.filter(recipient=user)
+    if mailbox == 'archived':
+        queryset = queryset.filter(archived_at__isnull=False)
+    else:
+        queryset = queryset.filter(archived_at__isnull=True)
+        if mailbox == 'unread':
+            queryset = queryset.filter(read_at__isnull=True)
+    return queryset.annotate(
+        content_preview=Substr('content', 1, 240),
+    ).defer(
+        'content',
+        'metadata',
+    ).order_by('-created_at', '-pk')
 
 
 def admin_task_counts():

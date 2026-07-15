@@ -127,7 +127,7 @@
                         <div class="app-navbar__account">
                             {% if user.is_authenticated %}
                             <div class="dropdown">
-                                <button class="btn app-navbar__user dropdown-toggle position-relative{% if request.resolver_match.url_name == 'profile_edit' or request.resolver_match.url_name == 'password_change' or request.resolver_match.url_name == 'my_shares' %} active{% endif %}" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <button class="btn app-navbar__user dropdown-toggle position-relative{% if request.resolver_match.url_name == 'profile_edit' or request.resolver_match.url_name == 'password_change' or request.resolver_match.url_name == 'my_shares' or request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %} active{% endif %}" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     <i class="bi bi-person-circle" aria-hidden="true"></i>
                                     <span class="app-navbar__user-name">
                                         {{ user|user_display_name }}
@@ -152,7 +152,7 @@
                                     <li><a class="dropdown-item d-flex justify-content-between align-items-center{% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %} active{% endif %}" href="{% url 'site_message_list' %}" {% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %}aria-current="page"{% endif %}>
                                         <span><i class="bi bi-envelope" aria-hidden="true"></i> 站内信</span>
                                         {% if global_unread_site_messages_count > 0 %}
-                                        <span class="badge bg-danger rounded-pill">{{ global_unread_site_messages_count }}</span>
+                                        <span class="badge bg-danger rounded-pill" aria-label="{{ global_unread_site_messages_count }} 条未读站内信">{{ global_unread_site_messages_count }}</span>
                                         {% endif %}
                                     </a></li>
 
@@ -205,6 +205,7 @@
                         <a href="{% url 'profile_edit' %}">个人资料</a>
                         <a href="{% url 'password_change' %}">修改密码</a>
                         <a href="{% url 'my_shares' %}">我的内容</a>
+                        <a href="{% url 'site_message_list' %}">站内信{% if global_unread_site_messages_count > 0 %}（{{ global_unread_site_messages_count }} 条未读）{% endif %}</a>
                         <form method="post" action="{% url 'logout' %}">
                             {% csrf_token %}
                             <button type="submit">退出登录</button>

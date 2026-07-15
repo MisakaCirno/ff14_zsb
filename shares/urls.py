@@ -35,6 +35,7 @@ urlpatterns = [
     path('messages/', message_views.site_message_list, name='site_message_list'),
     path('messages/mark-all-read/', message_views.mark_all_site_messages_read, name='mark_all_site_messages_read'),
     path('messages/<int:message_id>/open/', message_views.open_site_message, name='open_site_message'),
+    path('messages/<int:message_id>/archive/', message_views.set_site_message_archive_state, name='set_site_message_archive_state'),
     path('messages/<int:message_id>/', message_views.site_message_detail, name='site_message_detail'),
     
     # 其他
