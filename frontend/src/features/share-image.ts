@@ -232,7 +232,7 @@ export function fitCanvasText(
   text: string,
   maxWidth: number,
 ): string {
-  if (maxWidth <= 0) {
+  if (!Number.isFinite(maxWidth) || maxWidth <= 0) {
     return ''
   }
   if (context.measureText(text).width <= maxWidth) {
@@ -244,7 +244,15 @@ export function fitCanvasText(
     return ''
   }
 
-  const characters = Array.from(text)
+  let characters = Array.from(text)
+  if (typeof Intl.Segmenter === 'function') {
+    try {
+      const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+      characters = Array.from(segmenter.segment(text), ({ segment }) => segment)
+    } catch {
+      // Keep the code-point fallback for incomplete or faulty implementations.
+    }
+  }
   let low = 0
   let high = characters.length
   while (low < high) {
