@@ -20,6 +20,12 @@ npm --prefix frontend ci
 npm --prefix frontend run verify
 ```
 
+仅运行前端行为测试：
+
+```powershell
+npm --prefix frontend test
+```
+
 开发监听构建：
 
 ```powershell
