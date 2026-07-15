@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load ui_components %}
 
 {% block title %}{{ collection.title }} - 合集详情{% endblock %}
 
@@ -49,7 +50,7 @@
                 <dt><i class="bi bi-person-circle" aria-hidden="true"></i> 创建者</dt>
                 <dd>
                     <a href="{% url 'user_public_profile' collection.author.username %}">
-                        {{ collection.author.profile.get_display_name }}
+                        {{ collection.author|user_display_name }}
                     </a>
                 </dd>
             </div>

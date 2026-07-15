@@ -18,6 +18,7 @@ from shares.presentation import (
     build_query_string,
     build_share_cards_next_query,
     build_share_cards_return_url,
+    build_user_presentation,
     get_home_feed_mode,
     is_htmx_request,
     redirect_response,
@@ -202,6 +203,7 @@ def user_public_profile(request, username):
         'shares': shares,
         'collections': collections,
         'current_tab': current_tab,
+        'author_presentation': build_user_presentation(author),
     })
 
 

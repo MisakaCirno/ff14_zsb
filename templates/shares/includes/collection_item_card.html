@@ -1,3 +1,4 @@
+{% load ui_components %}
 <li class="col collection-detail-item">
     <article class="card h-100 share-card card-hover collection-item-card" aria-labelledby="collection-item-title-{{ item.share.share_id }}" data-collection-item-card data-collection-item-position="{{ position }}">
         <a href="{% url 'share_detail' item.share.share_id %}?collection_id={{ collection.id }}" class="text-decoration-none share-preview__link" aria-label="查看《{{ item.share.title }}》详情">
@@ -18,7 +19,7 @@
                 <span class="collection-item-card__meta-item">
                     <i class="bi bi-person-circle" aria-hidden="true"></i>
                     {% if item.share.author %}
-                    <a href="{% url 'user_public_profile' item.share.author.username %}">{{ item.share.author.profile.get_display_name }}</a>
+                    <a href="{% url 'user_public_profile' item.share.author.username %}">{{ item.share.author|user_display_name }}</a>
                     {% else %}
                     <span>匿名用户</span>
                     {% endif %}

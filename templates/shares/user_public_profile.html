@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}{{ author.profile.get_display_name }} 的个人主页 - 粘鼠板儿{% endblock %}
+{% block title %}{{ author_presentation.display_name }} 的个人主页 - 粘鼠板儿{% endblock %}
 
 {% block content %}
 <div class="container-fluid public-profile-page" data-public-profile-page>
@@ -11,11 +11,11 @@
 
         <div class="public-profile-hero__identity">
             <p class="public-profile-hero__eyebrow">公开主页</p>
-            <h1 class="public-profile-hero__name">{{ author.profile.get_display_name }}</h1>
+            <h1 class="public-profile-hero__name">{{ author_presentation.display_name }}</h1>
             <p class="public-profile-hero__username">@{{ author.username }}</p>
             <p class="public-profile-hero__bio">
-                {% if author.profile.bio %}
-                {{ author.profile.bio }}
+                {% if author_presentation.bio %}
+                {{ author_presentation.bio }}
                 {% else %}
                 <span class="public-profile-hero__empty-bio">这位用户还没有填写简介。</span>
                 {% endif %}
@@ -52,7 +52,7 @@
 
     {% if current_tab == 'shares' %}
     <section class="public-profile-content" aria-labelledby="public-profile-shares-title" data-public-profile-shares>
-        <h2 class="visually-hidden" id="public-profile-shares-title">{{ author.profile.get_display_name }} 的公开分享</h2>
+        <h2 class="visually-hidden" id="public-profile-shares-title">{{ author_presentation.display_name }} 的公开分享</h2>
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
             {% for share in shares %}
             {% include 'shares/includes/share_card.html' with share=share card_variant='profile' viewer=user only %}
@@ -67,7 +67,7 @@
     </section>
     {% else %}
     <section class="public-profile-content" aria-labelledby="public-profile-collections-title" data-public-profile-collections>
-        <h2 class="visually-hidden" id="public-profile-collections-title">{{ author.profile.get_display_name }} 的公开合集</h2>
+        <h2 class="visually-hidden" id="public-profile-collections-title">{{ author_presentation.display_name }} 的公开合集</h2>
         <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
             {% for collection in collections %}
             {% include 'shares/includes/collection_card.html' with collection=collection card_variant='public' only %}

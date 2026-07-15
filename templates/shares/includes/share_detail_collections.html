@@ -1,3 +1,4 @@
+{% load ui_components %}
 {% if related_collections %}
 <section class="share-detail-side-panel share-detail-collections" aria-labelledby="share-detail-collections-title">
     <header class="share-detail-side-panel__header">
@@ -14,7 +15,7 @@
             <summary>
                 <span class="share-detail-collection__summary-copy">
                     <span class="share-detail-collection__title">{{ collection.title }}</span>
-                    <span class="share-detail-collection__author">由 {{ collection.author.profile.get_display_name }} 整理</span>
+                    <span class="share-detail-collection__author">由 {{ collection.author|user_display_name }} 整理</span>
                 </span>
                 <span class="share-detail-collection__summary-meta">
                     {{ related.visible_item_count }} 项

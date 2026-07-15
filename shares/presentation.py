@@ -12,6 +12,37 @@ from .preview_urls import build_board_preview_url
 
 
 @dataclass(frozen=True, slots=True)
+class UserPresentation:
+    display_name: str
+    bio: str
+    is_anonymous: bool
+
+
+def build_user_presentation(user):
+    if user is None:
+        return UserPresentation(
+            display_name='匿名用户',
+            bio='',
+            is_anonymous=True,
+        )
+
+    username = user.get_username()
+    try:
+        profile = user.profile
+    except UserProfile.DoesNotExist:
+        return UserPresentation(
+            display_name=username,
+            bio='',
+            is_anonymous=False,
+        )
+    return UserPresentation(
+        display_name=profile.nickname or username,
+        bio=profile.bio,
+        is_anonymous=False,
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class ShareDetailAuthorViewModel:
     display_name: str
     username: str | None
@@ -82,19 +113,12 @@ def _share_detail_author(share):
         )
 
     author = share.author
-    try:
-        profile = author.profile
-    except UserProfile.DoesNotExist:
-        display_name = author.username
-        bio = ''
-    else:
-        display_name = profile.get_display_name()
-        bio = profile.bio
+    author_presentation = build_user_presentation(author)
     return ShareDetailAuthorViewModel(
-        display_name=display_name,
+        display_name=author_presentation.display_name,
         username=author.username,
         profile_url=reverse('user_public_profile', args=[author.username]),
-        bio=bio,
+        bio=author_presentation.bio,
         is_anonymous=False,
     )
 

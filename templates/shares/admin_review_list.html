@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load ui_components %}
 
 {% block title %}审核列表{% endblock %}
 
@@ -47,7 +48,7 @@
                         <small class="text-muted">
                             <i class="bi bi-person"></i> 
                             {% if share.author %}<a href="{% url 'user_public_profile' share.author.username %}" class="text-decoration-none text-muted" target="_blank">
-                                {{ share.author.profile.nickname|default:share.author.username }}
+                                {{ share.author|user_display_name }}
                             </a>{% else %}匿名用户{% endif %}
                         </small>
                     </div>

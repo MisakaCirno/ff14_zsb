@@ -1,4 +1,4 @@
-{% load static vite_assets %}
+{% load static vite_assets ui_components %}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -130,11 +130,7 @@
                                 <button class="btn app-navbar__user dropdown-toggle position-relative" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     <i class="bi bi-person-circle" aria-hidden="true"></i>
                                     <span class="app-navbar__user-name">
-                                        {% if user.profile.nickname %}
-                                            {{ user.profile.nickname }}
-                                        {% else %}
-                                            {{ user.username }}
-                                        {% endif %}
+                                        {{ user|user_display_name }}
                                     </span>
 
                                     {% if has_admin_actions or has_user_notifications %}
