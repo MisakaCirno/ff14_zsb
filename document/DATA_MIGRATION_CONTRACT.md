@@ -50,6 +50,7 @@
 - ShareLog
 - Announcement
 - SiteMessage
+- Django Admin 操作日志
 
 ### UserProfile 完整性
 
@@ -64,11 +65,15 @@
 - 反向迁移在缩回 200 之前检查 201–255 字符的标题；发现任意记录即拒绝回滚。生产回滚继续恢复完整备份，不允许依赖字段缩窄来丢弃上线后数据。
 - 新通知统一通过站内信服务创建；服务只约束新标题的显示长度，完整通知正文、关联对象和元数据保持不变。导出、导入及摘要校验仍必须逐字段保留历史标题与正文。
 
-当前导出格式为 v2。新版本导入器同时接受历史 v1 和当前 v2：
+当前导出格式为 v3。新版本导入器同时接受历史 v1、v2 和当前 v3：
 
+- v3 使用规范化 JSONL、固定 UTC 六位微秒时间、显式自然键协议和冻结的语义结构指纹；同名字段改型、关系目标变化或编码协议变化必须发布新的数据集版本。
+- v3 保存 Django Admin 操作日志、完整 ContentType/Permission 目录、源 migration 投影和自增序列高水位。
+- v3 对数据库物理表进行完整分类；未知非空表和悬空的内嵌多对多记录一律阻止导出、导入或“已导入”判定。
+- `django_session` 不导出会话载荷。清单只记录总数、未过期数和最晚过期时间，切换时强制所有用户重新登录；目标会话表必须为空。
 - v2 显式保存 `Share` 的活动限制状态、原因、时间和操作人。
 - v1 缺少上述四个字段；导入器会从已认可举报、当前审核拒绝及审核日志时序确定性恢复。
-- v1 的十类实体字段表已经按版本显式冻结；后续模型新增字段不得改变 v1 校验或摘要。
+- v1、v2 的十类实体字段表已经按版本显式冻结；后续模型新增字段不得改变历史校验或摘要。
 - 任意已认可举报都优先恢复为举报下架限制；后续普通审核通过不会自动解除。
 - 没有已认可举报时，当前为拒绝状态，或最后一次拒绝晚于最后一次通过，恢复为审核拒绝限制。
 - 没有上述证据但旧数据为私密时，恢复为 `legacy_private` 待确认限制。它不把私密内容认定为违规，只在管理员查明来源前阻止旧下架内容被意外重新开放。
@@ -82,22 +87,29 @@
 
 ```powershell
 python manage.py export_site_data D:\migration\ffxivshare-export
-python manage.py validate_site_data D:\migration\ffxivshare-export
+python manage.py validate_site_data D:\migration\ffxivshare-export `
+  --report D:\migration\evidence\validation-report.json
 ```
 
 在已经执行完 migrations、且业务表为空的目标数据库中导入：
 
 ```powershell
-python manage.py import_site_data D:\migration\ffxivshare-export
+python manage.py import_site_data D:\migration\ffxivshare-export `
+  --report D:\migration\evidence\import-report.json `
+  --confirm-exclusive-target
 python manage.py preflight_share_restrictions --strict `
   --output D:\migration\share-restriction-preflight.json
 ```
 
 - 导出目录已存在时命令默认拒绝覆盖；只有显式传入 `--overwrite` 才会替换。
-- 校验结果写入 `validation-report.json`，导入结果写入 `import-report.json`。
-- 任何校验或导入错误都会列入隔离记录，并使整个导入事务回滚。
-- 目标库已有不同数据时拒绝导入；v2 使用完整文件摘要判断幂等，v1 使用旧字段投影摘要并额外校验推导后的限制语义，重复执行不会重复写入。
-- 导入保留主键、密码哈希、分享 ID、时间字段和所有关系，并按数据库后端重置自增序列。
+- 校验与导入报告必须显式写到数据集目录之外；导入和重复校验不得修改不可变源数据集。
+- `--confirm-exclusive-target` 是硬门禁：执行前必须停止所有目标应用写入者。命令仍会在锁内重新判定目标状态，并使用 SQLite exclusive locking mode 或 PostgreSQL session advisory lock 阻止并发导入；PostgreSQL advisory lock 不能替代停止应用服务的人工证明。
+- 业务行在独立 durable 事务中导入，并在提交前完成内容摘要校验；失败时业务行整体回滚，序列尚未修改。
+- 自增序列在业务事务提交后执行幂等、只升不降的第二阶段收尾。收尾中断时业务数据保持已提交，报告标记 `finalization_incomplete`；使用同一数据集重跑会从内容摘要匹配状态继续，禁止清空目标库重来。
+- 文件报告与数据库提交无法组成同一原子事务。命令会在写数据库前发布 `started` 证据；若最终证据写入失败，重跑会根据数据库摘要恢复 `already_imported` 证据。
+- 目标库已有不同数据时拒绝导入；v3 同时比较结构投影、依赖、migration、实体摘要和序列下限，v2 使用冻结字段摘要，v1 额外校验推导后的限制语义。
+- 导入保留主键、密码哈希、分享 ID、时间字段和所有关系；序列高于最低要求属于安全空洞，不得向下重置或复用已删除 ID。
+- 所有 R19 导入报告固定包含 `cutover_authorized=false`；只有后续 R20 切换验收才能授权正式切换。
 - 限制预检不会修改数据；它按举报认可、审核拒绝/通过、确认维持和解除限制的完整时序反向检查当前状态，并输出所有相关 `share_ids`，不截断为抽样列表。
 - 默认模式会报告待人工分类项；`--strict` 在任一历史私密来源或举报/通过时序歧义未处理时返回失败。
 - 对 `legacy_private`，管理员必须在审核中心选择“确认为历史下架”或“确认为作者私密”。前者写入 `confirm_restriction` 并继续 fail-closed，后者写入 `release_restriction`，且两者都保留原 `visibility`。
@@ -141,6 +153,6 @@ python manage.py preflight_share_restrictions --strict `
 python manage.py backup_database D:\FFXIVShareBackups\site-2026-07-11.sqlite3
 ```
 
-- 命令会对备份执行 `PRAGMA integrity_check`，并生成同名 `.sha256` 文件；已有文件默认拒绝覆盖。
+- 命令会对备份执行 `PRAGMA integrity_check` 和 `foreign_key_check`，并原子生成数据库、同名 `.sha256` 与 `.metadata.json` 证据集；已有任一输出时默认拒绝覆盖。
 - 备份应复制到另一物理存储，并定期在隔离环境中执行恢复、迁移、数据校验和关键流程冒烟。
 - PostgreSQL 使用 `requirements-postgres.txt` 和环境变量切换；CI 会在 PostgreSQL 16 上执行同一套迁移与测试。正式备份使用 `pg_dump`，不使用 SQLite 备份命令。
