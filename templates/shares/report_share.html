@@ -3,45 +3,50 @@
 {% block title %}举报分享 - {{ share.title }}{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="card">
-                <div class="card-header bg-danger text-white">
-                    <h4 class="mb-0"><i class="bi bi-flag-fill"></i> 举报分享</h4>
-                </div>
-                <div class="card-body">
-                    <h5 class="card-title">您正在举报：{{ share.title }}</h5>
-                    <p class="text-muted">ID: {{ share.share_id }}</p>
-                    
-                    <form method="post">
-                        {% csrf_token %}
-                        
-                        <div class="mb-3">
-                            <label for="{{ form.reason.id_for_label }}" class="form-label">
-                                {{ form.reason.label }} <span class="text-danger">*</span>
-                            </label>
-                            {{ form.reason }}
-                            <div class="form-text">
-                                请详细描述您举报的原因，例如：包含违规内容、垃圾广告、侵犯版权等。
-                            </div>
-                            {% if form.reason.errors %}
-                            <div class="text-danger small">{{ form.reason.errors }}</div>
-                            {% endif %}
-                        </div>
+<div class="container moderation-page moderation-report-page">
+    {% include 'shares/includes/moderation_page_header.html' with icon='bi bi-flag-fill' eyebrow='社区治理' title='举报分享' summary='请提供清晰、具体的情况说明，管理员会根据内容与站点规则进行核查。' only %}
 
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-danger">
-                                <i class="bi bi-flag"></i> 提交举报
-                            </button>
-                            <a href="{% url 'share_detail' share.share_id %}" class="btn btn-outline-secondary">
-                                <i class="bi bi-x-circle"></i> 取消
-                            </a>
-                        </div>
-                    </form>
-                </div>
-            </div>
+    <section class="moderation-panel moderation-report-submit" aria-labelledby="report-share-title">
+        <div class="moderation-report-subject">
+            <p class="moderation-report-subject__eyebrow">正在举报</p>
+            <h2 class="moderation-report-subject__title" id="report-share-title">{{ share.title }}</h2>
+            <p class="moderation-report-subject__meta">分享 ID：{{ share.share_id }}</p>
         </div>
-    </div>
+
+        <form method="post" class="moderation-report-form">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger" role="alert">
+                {% for error in form.non_field_errors %}<p class="mb-0">{{ error }}</p>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="moderation-report-field">
+                <label for="{{ form.reason.id_for_label }}" class="form-label">
+                    {{ form.reason.label }} <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                {{ form.reason }}
+                <p class="form-text" id="report-reason-help">
+                    {{ form.reason.help_text }}
+                </p>
+                {% if form.reason.errors %}
+                <ul class="moderation-report-field__errors" id="report-reason-errors" role="alert">
+                    {% for error in form.reason.errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+
+            <div class="moderation-action-grid moderation-report-form__actions">
+                <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-flag" aria-hidden="true"></i>
+                    提交举报
+                </button>
+                <a href="{% url 'share_detail' share.share_id %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle" aria-hidden="true"></i>
+                    取消并返回分享
+                </a>
+            </div>
+        </form>
+    </section>
 </div>
 {% endblock %}

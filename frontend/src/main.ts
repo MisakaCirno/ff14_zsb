@@ -7,6 +7,7 @@ import { initializeAnnouncement } from './features/announcement'
 import { initializeFormControls } from './features/form-controls'
 import { initializeInfiniteScrollStatus } from './features/infinite-scroll'
 import { initializeManualCopy } from './features/manual-copy'
+import { initializeModerationResolution } from './features/moderation-resolution'
 import { initializePreviewImages } from './features/preview-images'
 import { initializeShareActions } from './features/share-actions'
 import { initializeShareDetails } from './features/share-detail'
@@ -49,6 +50,7 @@ initializeShareActions()
 initializeAnnouncement()
 initializeInfiniteScrollStatus()
 initializeManualCopy()
+initializeModerationResolution()
 initializeShareEditors()
 initializeShareDetails()
 initializeShareImages()

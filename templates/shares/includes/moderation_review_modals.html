@@ -1,0 +1,105 @@
+{% with share=item.share %}
+{% if share.status == 'pending' and share.restriction_state != 'legacy_private' %}
+<div
+    class="modal fade"
+    id="rejectModal{{ share.share_id }}"
+    tabindex="-1"
+    aria-labelledby="rejectModalLabel{{ share.share_id }}"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="{% url 'admin_reject_share' share.share_id %}" class="modal-content">
+            {% csrf_token %}
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="rejectModalLabel{{ share.share_id }}">拒绝审核</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <p class="moderation-modal__context">分享：{{ share.title }}</p>
+                <label class="form-label" for="{{ item.reject_form.reason.id_for_label }}">
+                    {{ item.reject_form.reason.label }}
+                </label>
+                <p class="moderation-modal__help" id="review-reject-help-{{ share.share_id }}">
+                    用户会在站内信中看到这段说明。
+                </p>
+                {{ item.reject_form.reason }}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="submit" class="btn btn-danger">确认拒绝并通知用户</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% if share.restriction_state == 'report_takedown' or share.restriction_state == 'legacy_private' %}
+<div
+    class="modal fade"
+    id="confirmRestrictionModal{{ share.share_id }}"
+    tabindex="-1"
+    aria-labelledby="confirmRestrictionModalLabel{{ share.share_id }}"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="{% url 'admin_confirm_share_restriction' share.share_id %}" class="modal-content">
+            {% csrf_token %}
+            {{ item.confirmation_form.version }}
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="confirmRestrictionModalLabel{{ share.share_id }}">确认继续维持内容限制</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <p class="moderation-modal__context">分享：{{ share.title }}</p>
+                <p class="moderation-modal__reason"><strong>当前原因：</strong>{{ share.restriction_reason }}</p>
+                <label class="form-label" for="{{ item.confirmation_form.reason.id_for_label }}">
+                    {{ item.confirmation_form.reason.label }}
+                </label>
+                <p class="moderation-modal__help" id="review-confirm-help-{{ share.share_id }}">
+                    分享作者会收到这段复核说明。
+                </p>
+                {{ item.confirmation_form.reason }}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="submit" class="btn btn-danger">确认维持并通知作者</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% if share.is_restricted %}
+{% if share.status == 'approved' and share.restriction_state != 'legacy_private' or share.restriction_state == 'legacy_private' and share.visibility == 'private' and share.status != 'rejected' %}
+<div
+    class="modal fade"
+    id="releaseRestrictionModal{{ share.share_id }}"
+    tabindex="-1"
+    aria-labelledby="releaseRestrictionModalLabel{{ share.share_id }}"
+    aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="{% url 'admin_release_share_restriction' share.share_id %}" class="modal-content">
+            {% csrf_token %}
+            <div class="modal-header">
+                <h2 class="modal-title fs-5" id="releaseRestrictionModalLabel{{ share.share_id }}">解除内容限制</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <p class="moderation-modal__context">分享：{{ share.title }}</p>
+                <p class="moderation-modal__reason"><strong>当前原因：</strong>{{ share.restriction_reason }}</p>
+                <label class="form-label" for="{{ item.release_form.reason.id_for_label }}">
+                    {{ item.release_form.reason.label }}
+                </label>
+                <p class="moderation-modal__help" id="review-release-help-{{ share.share_id }}">
+                    分享作者会收到这段复核说明。
+                </p>
+                {{ item.release_form.reason }}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="submit" class="btn btn-success">确认解除并通知作者</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+{% endwith %}

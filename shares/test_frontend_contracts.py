@@ -939,7 +939,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn("'[data-account-error-summary]'", account_feature_source)
         self.assertIn('initializeAccountForms()', main_entry_source)
         self.assertIn(
-            'admin-tabs',
+            'moderation-tabs',
             self.read_template('shares/includes/admin_tabs.html'),
         )
         self.assertNotIn(
@@ -950,7 +950,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         for template_path in (
             'shares/includes/share_card.html',
             'shares/includes/collection_item_card.html',
-            'shares/admin_review_list.html',
+            'shares/includes/moderation_review_card.html',
         ):
             with self.subTest(template=template_path):
                 source = self.read_template(template_path)
@@ -1349,18 +1349,30 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('href="?page=', source)
 
     def test_admin_log_pages_use_shared_pagination_component(self):
+        admin_log_source = self.read_template('shares/admin_log_list.html')
+        self.assertIn(
+            "{% include 'shares/includes/pagination.html' with page_obj=logs",
+            admin_log_source,
+        )
+        self.assertNotIn('logs.paginator.page_range', admin_log_source)
+
+        audit_source = self.read_template(
+            'shares/includes/moderation_audit_log.html'
+        )
+        self.assertIn(
+            "{% include 'shares/includes/pagination.html' with page_obj=logs",
+            audit_source,
+        )
+        self.assertNotIn('logs.paginator.page_range', audit_source)
         for template_path in (
-            'shares/admin_log_list.html',
             'shares/admin_review_logs.html',
             'shares/admin_report_logs.html',
         ):
             with self.subTest(template=template_path):
-                source = self.read_template(template_path)
                 self.assertIn(
-                    "{% include 'shares/includes/pagination.html' with page_obj=logs",
-                    source,
+                    "shares/includes/moderation_audit_log.html",
+                    self.read_template(template_path),
                 )
-                self.assertNotIn('logs.paginator.page_range', source)
 
         my_shares_source = self.read_template('shares/my_shares.html')
         self.assertIn(
@@ -1542,7 +1554,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             ('shares/includes/share_card.html', "share=share preview_variant='standard'"),
             ('shares/includes/share_card.html', "share=share preview_variant='management'"),
             ('shares/includes/collection_item_card.html', "share=item.share preview_variant='standard'"),
-            ('shares/admin_review_list.html', "share=share preview_variant='review'"),
+            (
+                'shares/includes/moderation_review_card.html',
+                "share=share preview_variant='review'",
+            ),
         )
         for template_path, contract in call_sites:
             with self.subTest(template=template_path):
@@ -1555,7 +1570,9 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 self.assertNotIn('data-preview-frame', source)
 
         collection_source = self.read_template('shares/includes/collection_item_card.html')
-        review_source = self.read_template('shares/admin_review_list.html')
+        review_source = self.read_template(
+            'shares/includes/moderation_review_card.html'
+        )
         self.assertIn('?collection_id={{ collection.id }}', collection_source)
         self.assertNotIn('share-preview__link', review_source)
 

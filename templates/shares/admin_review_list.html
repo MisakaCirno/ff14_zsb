@@ -1,297 +1,39 @@
 {% extends 'base.html' %}
-{% load ui_components %}
 
 {% block title %}审核列表{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row mb-4">
-        <div class="col-12 text-center">
-            <h1 class="display-4 mb-3">
-                <i class="bi bi-shield-check text-primary"></i> 
-                后台管理
-            </h1>
-            <p class="lead text-muted mb-4">内容审核与管理中心</p>
-        </div>
-    </div>
+<div class="container moderation-page">
+    {% include 'shares/includes/moderation_page_header.html' with icon='bi bi-shield-check' eyebrow='内容治理' title='审核与限制队列' summary='集中处理待审核分享、历史限制确认和受限内容复核。所有操作都会保留审计记录，并向相关用户发送站内通知。' only %}
 
     {% include 'shares/includes/admin_tabs.html' %}
 
-    <!-- 统计信息 -->
-    <div class="row mb-4">
-        <div class="col-md-12">
-            <div class="card bg-light border-0">
-                <div class="card-body py-2 text-center">
-                    <small class="text-muted">
-                        <i class="bi bi-collection"></i> 共有 <strong>{{ shares.paginator.count }}</strong> 个待审核或受限分享
-                        {% if shares.has_other_pages %}
-                        | 第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页
-                        {% endif %}
-                    </small>
-                </div>
-            </div>
-        </div>
+    <div class="moderation-summary" role="status">
+        <p>
+            <i class="bi bi-collection" aria-hidden="true"></i>
+            共有 <strong>{{ shares.paginator.count }}</strong> 个待审核或受限分享
+        </p>
+        {% if shares.has_other_pages %}
+        <p>第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页</p>
+        {% endif %}
     </div>
 
-    <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
-        {% for share in shares %}
-        <div class="col">
-            <div class="card h-100 share-card card-hover">
-                <!-- 预览区域 -->
-                {% include 'shares/includes/share_preview.html' with share=share preview_variant='review' only %}
-                
-                <div class="card-body d-flex flex-column">
-                    <h5 class="card-title text-truncate mb-2" title="{{ share.title }}">
-                        <i class="bi bi-bookmark-fill text-primary"></i> {{ share.title }}
-                    </h5>
-                    <div class="mb-2">
-                        <small class="text-muted">
-                            <i class="bi bi-person"></i> 
-                            {% if share.author %}<a href="{% url 'user_public_profile' share.author.username %}" class="text-decoration-none text-muted" target="_blank">
-                                {{ share.author|user_display_name }}
-                            </a>{% else %}匿名用户{% endif %}
-                        </small>
-                    </div>
-                    <div class="mb-2">
-                        <small class="text-muted">
-                            <i class="bi bi-calendar3"></i> {{ share.created_at|date:"Y-m-d H:i" }}
-                        </small>
-                    </div>
-                    {% if share.description %}
-                    <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
-                        {{ share.description|striptags|truncatechars:60 }}
-                    </p>
-                    {% else %}
-                    <p class="card-text small text-muted flex-grow-1 mb-2" style="min-height: 40px;">
-                        <em>暂无描述</em>
-                    </p>
-                    {% endif %}
-
-                    {% if share.is_restricted %}
-                    <div class="alert alert-danger py-2 small" role="note">
-                        <strong>{{ share.get_restriction_state_display }}：</strong>
-                        {{ share.restriction_reason }}
-                    </div>
-                    {% endif %}
-
-                    <!-- 操作日志 -->
-                    <div class="border-top pt-2 mt-2">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <small class="fw-bold text-muted"><i class="bi bi-clock-history"></i> 历史记录</small>
-                        </div>
-                        <div class="bg-light rounded p-2" style="max-height: 80px; overflow-y: auto; font-size: 0.8em;">
-                            <ul class="list-unstyled mb-0">
-                                {% for log in share.share_logs %}
-                                <li class="mb-1 border-bottom border-light pb-1">
-                                    <div class="d-flex justify-content-between">
-                                        <span class="text-truncate" style="max-width: 120px;" title="{{ log.user.username|default:'已删除账户' }}">
-                                            <strong>{{ log.user.username|default:'已删除账户' }}</strong>
-                                        </span>
-                                        <span class="text-nowrap">{{ log.created_at|date:"m-d H:i" }}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span class="badge bg-secondary" style="font-size: 0.85em; transform: scale(0.9); transform-origin: left center;">{{ log.get_action_display }}</span>
-                                    </div>
-                                    {% if log.details %}
-                                    <div class="text-muted text-truncate" title="{{ log.details }}">{{ log.details }}</div>
-                                    {% endif %}
-                                </li>
-                                {% empty %}
-                                <li class="text-center text-muted">暂无记录</li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-footer bg-transparent border-0 pt-0">
-                    <div class="d-grid gap-2">
-                        <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary" target="_blank">
-                            <i class="bi bi-eye"></i> 查看详情
-                        </a>
-                        {% if share.restriction_state == 'legacy_private' %}
-                        <div class="btn-group" role="group" aria-label="确认《{{ share.title }}》的历史私密状态">
-                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#confirmRestrictionModal{{ share.share_id }}">
-                                <i class="bi bi-shield-lock"></i> 确认为历史下架
-                            </button>
-                            {% if share.visibility == 'private' %}
-                            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#releaseRestrictionModal{{ share.share_id }}">
-                                <i class="bi bi-person-lock"></i> 确认为作者私密
-                            </button>
-                            {% else %}
-                            <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">需通过审核后解除</span>
-                            {% endif %}
-                        </div>
-                        {% elif share.status == 'pending' %}
-                        <div class="btn-group" role="group" aria-label="审核《{{ share.title }}》">
-                            <form method="post" action="{% url 'admin_approve_share' share.share_id %}" class="d-inline-flex">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-success">
-                                    <i class="bi bi-check-circle"></i> {% if share.is_restricted %}通过并解除限制{% else %}通过{% endif %}
-                                </button>
-                            </form>
-                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal{{ share.share_id }}">
-                                <i class="bi bi-x-circle"></i> 拒绝
-                            </button>
-                        </div>
-                        {% elif share.is_restricted and share.status == 'approved' %}
-                        <div class="btn-group" role="group" aria-label="复核《{{ share.title }}》的内容限制">
-                            {% if share.restriction_state == 'report_takedown' %}
-                            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#confirmRestrictionModal{{ share.share_id }}">
-                                <i class="bi bi-shield-check"></i> 确认维持
-                            </button>
-                            {% endif %}
-                            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#releaseRestrictionModal{{ share.share_id }}">
-                                <i class="bi bi-unlock"></i> 解除限制
-                            </button>
-                        </div>
-                        {% else %}
-                        <p class="small text-muted mb-0">等待作者修改并重新提交审核。</p>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-            {% if share.status == 'pending' and share.restriction_state != 'legacy_private' %}<div class="modal fade" id="rejectModal{{ share.share_id }}" tabindex="-1" aria-labelledby="rejectModalLabel{{ share.share_id }}" aria-hidden="true">
-                <div class="modal-dialog">
-                    <form method="post" action="{% url 'admin_reject_share' share.share_id %}" class="modal-content">
-                        {% csrf_token %}
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="rejectModalLabel{{ share.share_id }}">拒绝审核</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p class="text-muted small mb-2">分享：{{ share.title }}</p>
-                            <label class="form-label" for="rejectReason{{ share.share_id }}">拒绝原因</label>
-                            <textarea id="rejectReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="请说明审核未通过的原因，用户会在站内信中看到这段说明。"></textarea>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                            <button type="submit" class="btn btn-danger">确认拒绝并通知用户</button>
-                        </div>
-                    </form>
-                </div>
-            </div>{% endif %}
-            {% if share.restriction_state == 'report_takedown' or share.restriction_state == 'legacy_private' %}
-            <div class="modal fade" id="confirmRestrictionModal{{ share.share_id }}" tabindex="-1" aria-labelledby="confirmRestrictionModalLabel{{ share.share_id }}" aria-hidden="true">
-                <div class="modal-dialog">
-                    <form method="post" action="{% url 'admin_confirm_share_restriction' share.share_id %}" class="modal-content">
-                        {% csrf_token %}
-                        <input type="hidden" name="version" value="{{ share.updated_at|date:'c' }}">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="confirmRestrictionModalLabel{{ share.share_id }}">确认继续维持内容限制</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p class="text-muted small">分享：{{ share.title }}</p>
-                            <p class="small"><strong>当前原因：</strong>{{ share.restriction_reason }}</p>
-                            <label class="form-label" for="confirmRestrictionReason{{ share.share_id }}">确认说明</label>
-                            <textarea id="confirmRestrictionReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="请填写继续维持限制的复核依据，分享作者会收到这段说明。"></textarea>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                            <button type="submit" class="btn btn-danger">确认维持并通知作者</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-            {% endif %}
-            {% if share.is_restricted %}
-            {% if share.status == 'approved' and share.restriction_state != 'legacy_private' or share.restriction_state == 'legacy_private' and share.visibility == 'private' and share.status != 'rejected' %}
-            <div class="modal fade" id="releaseRestrictionModal{{ share.share_id }}" tabindex="-1" aria-labelledby="releaseRestrictionModalLabel{{ share.share_id }}" aria-hidden="true">
-                <div class="modal-dialog">
-                    <form method="post" action="{% url 'admin_release_share_restriction' share.share_id %}" class="modal-content">
-                        {% csrf_token %}
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="releaseRestrictionModalLabel{{ share.share_id }}">解除内容限制</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p class="text-muted small">分享：{{ share.title }}</p>
-                            <p class="small"><strong>当前原因：</strong>{{ share.restriction_reason }}</p>
-                            <label class="form-label" for="releaseRestrictionReason{{ share.share_id }}">解除说明</label>
-                            <textarea id="releaseRestrictionReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="请填写解除限制的复核依据，分享作者会收到这段说明。"></textarea>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                            <button type="submit" class="btn btn-success">确认解除并通知作者</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-            {% endif %}
-            {% endif %}
-        </div>
+    <div class="moderation-review-grid">
+        {% for item in review_items %}
+        {% include 'shares/includes/moderation_review_card.html' with item=item only %}
         {% empty %}
-        <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-check2-all display-1 text-success mb-3"></i>
-                    <h3 class="text-muted mb-3">没有待审核或受限分享</h3>
-                    <p class="text-muted">所有审核与内容限制都已处理完毕。</p>
-                </div>
+        <section class="card empty-state moderation-review-empty" aria-labelledby="moderation-review-empty-title">
+            <div class="card-body">
+                <span class="empty-state__icon" aria-hidden="true">
+                    <i class="bi bi-check2-all"></i>
+                </span>
+                <h2 class="empty-state__title" id="moderation-review-empty-title">没有待审核或受限分享</h2>
+                <p class="empty-state__message">所有审核与内容限制都已处理完毕。</p>
             </div>
-        </div>
+        </section>
         {% endfor %}
     </div>
 
-    <!-- 分页 -->
-    {% if shares.has_other_pages %}
-    <nav class="mt-5" aria-label="分页导航">
-        <ul class="pagination pagination-lg justify-content-center">
-            {% if shares.has_previous %}
-            <li class="page-item">
-                <a class="page-link" href="?page=1" aria-label="首页">
-                    <i class="bi bi-chevron-bar-left"></i>
-                </a>
-            </li>
-            <li class="page-item">
-                <a class="page-link" href="?page={{ shares.previous_page_number }}" aria-label="上一页">
-                    <i class="bi bi-chevron-left"></i> 上一页
-                </a>
-            </li>
-            {% else %}
-            <li class="page-item disabled">
-                <span class="page-link">
-                    <i class="bi bi-chevron-bar-left"></i>
-                </span>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">
-                    <i class="bi bi-chevron-left"></i> 上一页
-                </span>
-            </li>
-            {% endif %}
-            
-            <li class="page-item active">
-                <span class="page-link">
-                    第 {{ shares.number }} / {{ shares.paginator.num_pages }} 页
-                </span>
-            </li>
-            
-            {% if shares.has_next %}
-            <li class="page-item">
-                <a class="page-link" href="?page={{ shares.next_page_number }}" aria-label="下一页">
-                    下一页 <i class="bi bi-chevron-right"></i>
-                </a>
-            </li>
-            <li class="page-item">
-                <a class="page-link" href="?page={{ shares.paginator.num_pages }}" aria-label="末页">
-                    <i class="bi bi-chevron-bar-right"></i>
-                </a>
-            </li>
-            {% else %}
-            <li class="page-item disabled">
-                <span class="page-link">
-                    下一页 <i class="bi bi-chevron-right"></i>
-                </span>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">
-                    <i class="bi bi-chevron-bar-right"></i>
-                </span>
-            </li>
-            {% endif %}
-        </ul>
-    </nav>
-    {% endif %}
+    {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='审核队列分页' nav_class='mt-2' %}
 </div>
 {% endblock %}

@@ -46,19 +46,31 @@ class ReportForm(forms.ModelForm):
     """举报表单"""
     reason = forms.CharField(
         label='举报原因',
+        help_text=(
+            '请描述需要核查的具体内容，例如违规信息、垃圾广告或版权问题；'
+            '请勿填写与举报无关的隐私信息。'
+        ),
         max_length=REPORT_REASON_MAX_LENGTH,
-        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '请详细描述违规情况...'}),
+        widget=forms.Textarea(attrs={
+            'aria-describedby': 'report-reason-help',
+            'class': 'form-control',
+            'rows': 4,
+            'placeholder': '请详细描述需要管理员核查的情况…',
+        }),
     )
 
     class Meta:
         model = Report
         fields = ['reason']
-        widgets = {
-            'reason': forms.Textarea(attrs={'class': 'form-control', 'rows': 4, 'placeholder': '请详细描述违规情况...'}),
-        }
-        labels = {
-            'reason': '举报原因',
-        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.is_bound and self.errors.get('reason'):
+            reason_attrs = self.fields['reason'].widget.attrs
+            reason_attrs['aria-invalid'] = 'true'
+            reason_attrs['aria-describedby'] = (
+                'report-reason-help report-reason-errors'
+            )
 
 
 class AdminReviewRejectForm(forms.Form):
@@ -79,6 +91,7 @@ class ReportResolutionForm(forms.Form):
     """管理员处理举报时填写说明。"""
     reason = forms.CharField(
         label='处理说明',
+        help_text='处理说明会写入审计日志，并根据操作通知相关用户。',
         min_length=2,
         max_length=STAFF_REASON_MAX_LENGTH,
         widget=forms.Textarea(attrs={

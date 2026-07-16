@@ -1,0 +1,156 @@
+{% load ui_components %}
+{% with share=item.share %}
+<div class="moderation-review-grid__item">
+    <article
+        class="card h-100 share-card card-hover moderation-review-card"
+        aria-labelledby="moderation-review-title-{{ share.share_id }}">
+        {% include 'shares/includes/share_preview.html' with share=share preview_variant='review' only %}
+
+        <div class="card-body moderation-review-card__body">
+            <h2 class="moderation-review-card__title" id="moderation-review-title-{{ share.share_id }}">
+                <i class="bi bi-bookmark-fill text-primary" aria-hidden="true"></i>
+                {{ share.title }}
+            </h2>
+
+            <div class="moderation-review-card__meta">
+                <div class="moderation-review-card__meta-row">
+                    <i class="bi bi-person" aria-hidden="true"></i>
+                    {% if share.author %}
+                    <a
+                        href="{% url 'user_public_profile' share.author.username %}"
+                        target="_blank"
+                        rel="noopener noreferrer">
+                        {{ share.author|user_display_name }}
+                    </a>
+                    {% else %}
+                    <span>匿名用户</span>
+                    {% endif %}
+                </div>
+                <div class="moderation-review-card__meta-row">
+                    <i class="bi bi-calendar3" aria-hidden="true"></i>
+                    <time datetime="{{ share.created_at|date:'c' }}">{{ share.created_at|date:"Y-m-d H:i" }}</time>
+                </div>
+            </div>
+
+            <p class="moderation-review-card__description">
+                {% if share.description %}
+                {{ share.description|striptags|truncatechars:60 }}
+                {% else %}
+                <em>暂无描述</em>
+                {% endif %}
+            </p>
+
+            {% if share.is_restricted %}
+            <div class="alert alert-danger mb-0 py-2 small moderation-review-card__state-copy" role="note">
+                <strong>{{ share.get_restriction_state_display }}：</strong>
+                {{ share.restriction_reason }}
+            </div>
+            {% endif %}
+
+            <section class="moderation-history" aria-labelledby="moderation-history-title-{{ share.share_id }}">
+                <h3 class="moderation-history__heading" id="moderation-history-title-{{ share.share_id }}">
+                    <i class="bi bi-clock-history" aria-hidden="true"></i>
+                    历史记录
+                </h3>
+                <div class="moderation-history__viewport">
+                    <ol class="moderation-history__list">
+                        {% for log in share.share_logs %}
+                        <li class="moderation-history__item">
+                            <div class="moderation-history__meta">
+                                <strong class="moderation-history__actor">{{ log.user.username|default:'已删除账户' }}</strong>
+                                <time datetime="{{ log.created_at|date:'c' }}">{{ log.created_at|date:"m-d H:i" }}</time>
+                            </div>
+                            <span class="badge bg-secondary">{{ log.get_action_display }}</span>
+                            {% if log.details %}
+                            <p class="moderation-history__details">{{ log.details }}</p>
+                            {% endif %}
+                        </li>
+                        {% empty %}
+                        <li class="moderation-history__item text-center text-muted">暂无记录</li>
+                        {% endfor %}
+                    </ol>
+                </div>
+            </section>
+        </div>
+
+        <footer class="card-footer moderation-review-card__footer">
+            <a
+                href="{% url 'share_detail' share.share_id %}"
+                class="btn btn-sm btn-outline-primary"
+                target="_blank"
+                rel="noopener noreferrer">
+                <i class="bi bi-eye" aria-hidden="true"></i>
+                查看详情
+            </a>
+
+            {% if share.restriction_state == 'legacy_private' %}
+            <div class="moderation-action-grid" role="group" aria-label="确认《{{ share.title }}》的历史私密状态">
+                <button
+                    type="button"
+                    class="btn btn-sm btn-danger"
+                    data-bs-toggle="modal"
+                    data-bs-target="#confirmRestrictionModal{{ share.share_id }}">
+                    <i class="bi bi-shield-lock" aria-hidden="true"></i>
+                    确认为历史下架
+                </button>
+                {% if share.visibility == 'private' %}
+                <button
+                    type="button"
+                    class="btn btn-sm btn-success"
+                    data-bs-toggle="modal"
+                    data-bs-target="#releaseRestrictionModal{{ share.share_id }}">
+                    <i class="bi bi-person-lock" aria-hidden="true"></i>
+                    确认为作者私密
+                </button>
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">需通过审核后解除</span>
+                {% endif %}
+            </div>
+            {% elif share.status == 'pending' %}
+            <div class="moderation-action-grid" role="group" aria-label="审核《{{ share.title }}》">
+                <form method="post" action="{% url 'admin_approve_share' share.share_id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-success">
+                        <i class="bi bi-check-circle" aria-hidden="true"></i>
+                        {% if share.is_restricted %}通过并解除限制{% else %}通过{% endif %}
+                    </button>
+                </form>
+                <button
+                    type="button"
+                    class="btn btn-sm btn-danger"
+                    data-bs-toggle="modal"
+                    data-bs-target="#rejectModal{{ share.share_id }}">
+                    <i class="bi bi-x-circle" aria-hidden="true"></i>
+                    拒绝
+                </button>
+            </div>
+            {% elif share.is_restricted and share.status == 'approved' %}
+            <div class="moderation-action-grid" role="group" aria-label="复核《{{ share.title }}》的内容限制">
+                {% if share.restriction_state == 'report_takedown' %}
+                <button
+                    type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    data-bs-toggle="modal"
+                    data-bs-target="#confirmRestrictionModal{{ share.share_id }}">
+                    <i class="bi bi-shield-check" aria-hidden="true"></i>
+                    确认维持
+                </button>
+                {% endif %}
+                <button
+                    type="button"
+                    class="btn btn-sm btn-success"
+                    data-bs-toggle="modal"
+                    data-bs-target="#releaseRestrictionModal{{ share.share_id }}">
+                    <i class="bi bi-unlock" aria-hidden="true"></i>
+                    解除限制
+                </button>
+            </div>
+            {% else %}
+            <p class="small text-muted mb-0">等待作者修改并重新提交审核。</p>
+            {% endif %}
+        </footer>
+    </article>
+
+    {% include 'shares/includes/moderation_review_modals.html' with item=item only %}
+</div>
+{% endwith %}

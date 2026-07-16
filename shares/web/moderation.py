@@ -33,6 +33,43 @@ def _admin_context(**context):
     return context
 
 
+def _staff_reason_form(form_class, *, auto_id, help_id, initial=None):
+    form = form_class(auto_id=auto_id, initial=initial)
+    form.fields['reason'].widget.attrs['aria-describedby'] = help_id
+    return form
+
+
+def _first_form_error(form, fallback):
+    """Return the first server-defined validation message for flash feedback."""
+    for errors in form.errors.values():
+        if errors:
+            return str(errors[0])
+    return fallback
+
+
+def _review_item(share):
+    """Bind uniquely identified, server-defined forms to one review card."""
+    return {
+        'share': share,
+        'reject_form': _staff_reason_form(
+            AdminReviewRejectForm,
+            auto_id=f'review-reject-{share.share_id}-%s',
+            help_id=f'review-reject-help-{share.share_id}',
+        ),
+        'confirmation_form': _staff_reason_form(
+            RestrictionConfirmationForm,
+            auto_id=f'review-confirm-{share.share_id}-%s',
+            help_id=f'review-confirm-help-{share.share_id}',
+            initial={'version': share.updated_at},
+        ),
+        'release_form': _staff_reason_form(
+            RestrictionReleaseForm,
+            auto_id=f'review-release-{share.share_id}-%s',
+            help_id=f'review-release-help-{share.share_id}',
+        ),
+    }
+
+
 @user_passes_test(is_moderator)
 def admin_review_list(request):
     pending = Share.objects.filter(
@@ -52,9 +89,7 @@ def admin_review_list(request):
     shares = Paginator(pending, 20).get_page(request.GET.get('page'))
     return render(request, 'shares/admin_review_list.html', _admin_context(
         shares=shares,
-        reject_form=AdminReviewRejectForm(),
-        confirmation_form=RestrictionConfirmationForm(),
-        release_form=RestrictionReleaseForm(),
+        review_items=tuple(_review_item(share) for share in shares),
     ))
 
 
@@ -80,7 +115,7 @@ def admin_approve_share(request, share_id):
 def admin_reject_share(request, share_id):
     form = AdminReviewRejectForm(request.POST)
     if not form.is_valid():
-        messages.error(request, '拒绝原因不能为空')
+        messages.error(request, _first_form_error(form, '拒绝原因无效'))
         return redirect('admin_review_list')
     reason = form.cleaned_data['reason'].strip()
     try:
@@ -103,7 +138,7 @@ def admin_reject_share(request, share_id):
 def admin_release_share_restriction(request, share_id):
     form = RestrictionReleaseForm(request.POST)
     if not form.is_valid():
-        messages.error(request, '解除说明不能为空')
+        messages.error(request, _first_form_error(form, '解除说明无效'))
         return redirect('admin_review_list')
     try:
         result = release_share_restriction(
@@ -127,7 +162,10 @@ def admin_release_share_restriction(request, share_id):
 def admin_confirm_share_restriction(request, share_id):
     form = RestrictionConfirmationForm(request.POST)
     if not form.is_valid():
-        messages.error(request, '确认信息无效，请刷新页面后重新提交')
+        messages.error(
+            request,
+            _first_form_error(form, '确认信息无效，请刷新页面后重新提交'),
+        )
         return redirect('admin_review_list')
     try:
         result = confirm_share_restriction(
@@ -215,7 +253,11 @@ def admin_report_list(request):
     shares = Paginator(reported, 10).get_page(request.GET.get('page'))
     return render(request, 'shares/admin_report_list.html', _admin_context(
         shares=shares,
-        resolution_form=ReportResolutionForm(),
+        resolution_form=_staff_reason_form(
+            ReportResolutionForm,
+            auto_id='report-resolution-%s',
+            help_id='report-resolution-help',
+        ),
     ))
 
 
@@ -227,7 +269,7 @@ def admin_resolve_report(request, report_id, action):
         return redirect('admin_report_list')
     form = ReportResolutionForm(request.POST)
     if not form.is_valid():
-        messages.error(request, '处理说明不能为空')
+        messages.error(request, _first_form_error(form, '处理说明无效'))
         return redirect('admin_report_list')
     reason = form.cleaned_data['reason'].strip()
     try:
@@ -257,7 +299,7 @@ def admin_resolve_share_reports(request, share_id, action):
         return redirect('admin_report_list')
     form = ReportResolutionForm(request.POST)
     if not form.is_valid():
-        messages.error(request, '处理说明不能为空')
+        messages.error(request, _first_form_error(form, '处理说明无效'))
         return redirect('admin_report_list')
     reason = form.cleaned_data['reason'].strip()
     try:

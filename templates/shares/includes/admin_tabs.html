@@ -1,36 +1,48 @@
-<!-- 管理员导航标签 -->
-<ul class="nav nav-tabs mb-4 admin-tabs">
-    <!-- 左侧：列表页面 -->
-    <li class="nav-item">
-        <a class="nav-link {% if request.resolver_match.url_name == 'admin_review_list' %}active{% endif %}" href="{% url 'admin_review_list' %}">
-            <i class="bi bi-list-check"></i> 审核列表
-            {% if pending_reviews_count > 0 %}
-            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="transform: translate(-10px, 5px) !important;">
-                <span class="visually-hidden">New alerts</span>
-            </span>
-            {% endif %}
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link {% if request.resolver_match.url_name == 'admin_report_list' %}active{% endif %}" href="{% url 'admin_report_list' %}">
-            <i class="bi bi-flag"></i> 举报处理
-            {% if pending_reports_count > 0 %}
-            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" style="transform: translate(-10px, 5px) !important;">
-                <span class="visually-hidden">New alerts</span>
-            </span>
-            {% endif %}
-        </a>
-    </li>
-
-    <!-- 右侧：日志页面 -->
-    <li class="nav-item ms-auto">
-        <a class="nav-link {% if request.resolver_match.url_name == 'admin_review_logs' %}active{% endif %}" href="{% url 'admin_review_logs' %}">
-            <i class="bi bi-journal-check"></i> 审核日志
-        </a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link {% if request.resolver_match.url_name == 'admin_report_logs' %}active{% endif %}" href="{% url 'admin_report_logs' %}">
-            <i class="bi bi-journal-x"></i> 举报日志
-        </a>
-    </li>
-</ul>
+<nav class="moderation-tabs" aria-label="内容管理页面">
+    <ul class="nav moderation-tabs__list">
+        <li class="nav-item moderation-tabs__item">
+            <a
+                class="nav-link moderation-tabs__link{% if request.resolver_match.url_name == 'admin_review_list' %} active{% endif %}"
+                href="{% url 'admin_review_list' %}"
+                {% if request.resolver_match.url_name == 'admin_review_list' %}aria-current="page"{% endif %}>
+                <i class="bi bi-list-check" aria-hidden="true"></i>
+                <span class="moderation-tabs__label">审核列表</span>
+                {% if pending_reviews_count > 0 %}
+                <span class="moderation-tabs__indicator" aria-hidden="true"></span>
+                <span class="visually-hidden">有 {{ pending_reviews_count }} 个待审核或受限项目</span>
+                {% endif %}
+            </a>
+        </li>
+        <li class="nav-item moderation-tabs__item">
+            <a
+                class="nav-link moderation-tabs__link{% if request.resolver_match.url_name == 'admin_report_list' %} active{% endif %}"
+                href="{% url 'admin_report_list' %}"
+                {% if request.resolver_match.url_name == 'admin_report_list' %}aria-current="page"{% endif %}>
+                <i class="bi bi-flag" aria-hidden="true"></i>
+                <span class="moderation-tabs__label">举报处理</span>
+                {% if pending_reports_count > 0 %}
+                <span class="moderation-tabs__indicator" aria-hidden="true"></span>
+                <span class="visually-hidden">有 {{ pending_reports_count }} 个分享包含待处理举报</span>
+                {% endif %}
+            </a>
+        </li>
+        <li class="nav-item moderation-tabs__item moderation-tabs__item--logs-start">
+            <a
+                class="nav-link moderation-tabs__link{% if request.resolver_match.url_name == 'admin_review_logs' %} active{% endif %}"
+                href="{% url 'admin_review_logs' %}"
+                {% if request.resolver_match.url_name == 'admin_review_logs' %}aria-current="page"{% endif %}>
+                <i class="bi bi-journal-check" aria-hidden="true"></i>
+                <span class="moderation-tabs__label">审核日志</span>
+            </a>
+        </li>
+        <li class="nav-item moderation-tabs__item">
+            <a
+                class="nav-link moderation-tabs__link{% if request.resolver_match.url_name == 'admin_report_logs' %} active{% endif %}"
+                href="{% url 'admin_report_logs' %}"
+                {% if request.resolver_match.url_name == 'admin_report_logs' %}aria-current="page"{% endif %}>
+                <i class="bi bi-journal-x" aria-hidden="true"></i>
+                <span class="moderation-tabs__label">举报日志</span>
+            </a>
+        </li>
+    </ul>
+</nav>

@@ -3,79 +3,9 @@
 {% block title %}举报日志{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row mb-4">
-        <div class="col-12 text-center">
-            <h1 class="display-4 mb-3">
-                <i class="bi bi-shield-exclamation text-primary"></i> 
-                举报管理
-            </h1>
-            <p class="lead text-muted mb-4">内容审核与管理中心</p>
-        </div>
-    </div>
-
+<div class="container moderation-page moderation-report-page">
+    {% include 'shares/includes/moderation_page_header.html' with icon='bi bi-journal-x' eyebrow='内容治理' title='举报日志' summary='查看管理员对用户举报作出的处理决定及审计说明。' only %}
     {% include 'shares/includes/admin_tabs.html' %}
-
-    <!-- 日志列表 -->
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white border-bottom py-3">
-            <h5 class="mb-0 text-muted"><i class="bi bi-clock-history"></i> 举报处理记录</h5>
-        </div>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th scope="col" style="width: 15%;">时间</th>
-                        <th scope="col" style="width: 15%;">操作人</th>
-                        <th scope="col" style="width: 15%;">动作</th>
-                        <th scope="col" style="width: 55%;">关联分享与详情</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for log in logs %}
-                    <tr>
-                        <td class="text-secondary small">{{ log.created_at|date:"Y-m-d H:i:s" }}</td>
-                        <td>
-                            <div class="d-flex align-items-center">
-                                <i class="bi bi-person-fill text-muted me-2"></i>
-                                <span>{{ log.user.username|default:'已删除账户' }}</span>
-                            </div>
-                        </td>
-                        <td>
-                            {% if log.action == 'report_handle' %}
-                            <span class="badge bg-warning bg-opacity-10 text-warning border border-warning">处理举报</span>
-                            {% else %}
-                            <span class="badge bg-secondary">{{ log.get_action_display }}</span>
-                            {% endif %}
-                        </td>
-                        <td class="small text-muted">
-                            <div>
-                                <a href="{% url 'share_detail' log.share.share_id %}" target="_blank" class="fw-bold text-decoration-none">
-                                    {{ log.share.title }}
-                                </a>
-                            </div>
-                            {% if log.details %}
-                            <div class="mt-1">{{ log.details }}</div>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="4" class="text-center py-5 text-muted">
-                            <i class="bi bi-inbox fs-1 d-block mb-3"></i>
-                            暂无处理记录
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        
-        {% if logs.has_other_pages %}
-        <div class="card-footer bg-white border-top-0 py-3">
-            {% include 'shares/includes/pagination.html' with page_obj=logs aria_label='举报日志分页' %}
-        </div>
-        {% endif %}
-    </div>
+    {% include 'shares/includes/moderation_audit_log.html' with logs=logs log_kind='report' title='举报处理记录' title_id='moderation-report-log-title' empty_message='暂无举报处理记录' pagination_label='举报日志分页' %}
 </div>
 {% endblock %}

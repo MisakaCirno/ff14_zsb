@@ -3,226 +3,203 @@
 {% block title %}举报处理{% endblock %}
 
 {% block content %}
-<div class="container">
-    <div class="row mb-4">
-        <div class="col-12 text-center">
-            <h1 class="display-4 mb-3">
-                <i class="bi bi-shield-exclamation text-primary"></i> 
-                后台管理
-            </h1>
-            <p class="lead text-muted mb-4">内容审核与管理中心</p>
-        </div>
-    </div>
-
+<div class="container moderation-page moderation-report-page">
+    {% include 'shares/includes/moderation_page_header.html' with icon='bi bi-shield-exclamation' eyebrow='内容治理' title='举报处理' summary='集中核查待处理举报，保留处理依据并向相关用户同步结果。' only %}
     {% include 'shares/includes/admin_tabs.html' %}
 
     {% if shares %}
-        <div class="accordion" id="reportAccordion">
+    <section class="moderation-panel moderation-report-queue" aria-labelledby="report-queue-title">
+        <header class="moderation-panel__header moderation-report-queue__header">
+            <div>
+                <p class="moderation-panel__eyebrow moderation-report-queue__eyebrow">待处理队列</p>
+                <h2 class="moderation-panel__title moderation-report-queue__title" id="report-queue-title">按分享归并的举报</h2>
+            </div>
+            <p class="moderation-summary" role="status">
+                共 <strong>{{ shares.paginator.count }}</strong> 个分享
+                {% if shares.has_other_pages %}
+                · 第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页
+                {% endif %}
+            </p>
+        </header>
+
+        <div class="accordion moderation-report-accordion" id="reportAccordion">
             {% for share in shares %}
-            <div class="accordion-item mb-3 border shadow-sm">
-                <h2 class="accordion-header" id="heading{{ share.share_id }}">
-                    <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ share.share_id }}" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" aria-controls="collapse{{ share.share_id }}">
-                        <div class="d-flex align-items-center w-100 me-3">
-                            <span class="badge bg-danger me-2">{{ share.pending_count }} 条举报</span>
-                            <span class="fw-bold me-2">{{ share.title }}</span>
-                            <small class="text-muted">ID: {{ share.share_id }}</small>
-                            {% if share.is_restricted %}
-                            <span class="badge bg-dark ms-2">{{ share.get_restriction_state_display }}</span>
-                            {% endif %}
-                            <span class="ms-auto text-muted small">
-                                作者: {% if share.author %}{{ share.author.username }}{% else %}匿名{% endif %}
+            <article class="accordion-item moderation-report-card">
+                <h3 class="accordion-header" id="reportHeading{{ share.share_id }}">
+                    <button
+                        class="accordion-button moderation-report-card__toggle{% if not forloop.first %} collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#reportCollapse{{ share.share_id }}"
+                        aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
+                        aria-controls="reportCollapse{{ share.share_id }}">
+                        <span class="moderation-report-card__heading">
+                            <span class="moderation-report-card__badges">
+                                <span class="badge bg-danger">{{ share.pending_count }} 条举报</span>
+                                {% if share.is_restricted %}
+                                <span class="badge bg-dark">{{ share.get_restriction_state_display }}</span>
+                                {% endif %}
                             </span>
-                        </div>
+                            <span class="moderation-report-card__title" title="{{ share.title }}">{{ share.title }}</span>
+                            <span class="moderation-report-card__meta">
+                                <span>分享 ID：{{ share.share_id }}</span>
+                                <span>作者：{% if share.author %}{{ share.author.username }}{% else %}匿名{% endif %}</span>
+                            </span>
+                        </span>
                     </button>
-                </h2>
-                <div id="collapse{{ share.share_id }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" aria-labelledby="heading{{ share.share_id }}" data-bs-parent="#reportAccordion">
-                    <div class="accordion-body bg-light">
-                        <!-- 批量操作栏 -->
-                        <div class="d-flex justify-content-between align-items-center mb-3 p-2 bg-white rounded border">
-                            <div>
-                                <a href="{% url 'share_detail' share.share_id %}" target="_blank" class="btn btn-outline-primary btn-sm">
-                                    <i class="bi bi-box-arrow-up-right"></i> 查看分享详情
+                </h3>
+
+                <div
+                    class="accordion-collapse collapse{% if forloop.first %} show{% endif %}"
+                    id="reportCollapse{{ share.share_id }}"
+                    aria-labelledby="reportHeading{{ share.share_id }}"
+                    data-bs-parent="#reportAccordion">
+                    <div class="accordion-body moderation-report-card__body">
+                        <div class="moderation-report-toolbar">
+                            <div class="moderation-report-links" role="group" aria-label="《{{ share.title }}》的查看操作">
+                                <a href="{% url 'share_detail' share.share_id %}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                                    查看分享
                                 </a>
                                 {% if share.author %}
-                                <a href="{% url 'user_public_profile' share.author.username %}" target="_blank" class="btn btn-outline-secondary btn-sm">
-                                    <i class="bi bi-person"></i> 查看作者资料
+                                <a href="{% url 'user_public_profile' share.author.username %}" target="_blank" rel="noopener" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-person" aria-hidden="true"></i>
+                                    查看作者
                                 </a>
                                 {% endif %}
                             </div>
-                            <div class="btn-group">
-                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#resolveAllReportsModal{{ share.share_id }}">
-                                    <i class="bi bi-check-circle"></i> {% if share.is_restricted %}认可并更新限制{% else %}认可所有举报（下架分享）{% endif %}
+                            <div class="moderation-action-grid moderation-report-toolbar__actions" role="group" aria-label="《{{ share.title }}》的批量举报操作">
+                                <button
+                                    type="button"
+                                    class="btn btn-danger btn-sm"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#reportResolutionModal"
+                                    data-resolution-trigger
+                                    data-resolution-action="{% url 'admin_resolve_share_reports' share.share_id 'resolve' %}"
+                                    data-resolution-title="{% if share.is_restricted %}认可举报并更新限制{% else %}认可全部举报{% endif %}"
+                                    data-resolution-subject="分享：{{ share.title }}"
+                                    {% if share.is_restricted %}data-resolution-context-label="当前{{ share.get_restriction_state_display }}：" data-resolution-context="{{ share.restriction_reason }}"{% endif %}
+                                    data-resolution-submit="确认认可并通知用户"
+                                    data-resolution-tone="danger">
+                                    <i class="bi bi-check-circle" aria-hidden="true"></i>
+                                    {% if share.is_restricted %}认可并更新限制{% else %}认可并下架{% endif %}
                                 </button>
-                                <button type="button" class="btn btn-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#dismissAllReportsModal{{ share.share_id }}">
-                                    <i class="bi bi-x-circle"></i> 驳回所有举报
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary btn-sm"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#reportResolutionModal"
+                                    data-resolution-trigger
+                                    data-resolution-action="{% url 'admin_resolve_share_reports' share.share_id 'dismiss' %}"
+                                    data-resolution-title="驳回全部举报"
+                                    data-resolution-subject="分享：{{ share.title }}"
+                                    data-resolution-context-label="待处理举报："
+                                    data-resolution-context="共 {{ share.pending_count }} 条，处理结果会通知所有仍存在的举报人。"
+                                    data-resolution-submit="确认全部驳回并通知用户"
+                                    data-resolution-tone="secondary">
+                                    <i class="bi bi-x-circle" aria-hidden="true"></i>
+                                    全部驳回
                                 </button>
                             </div>
                         </div>
 
-                        <div class="modal fade" id="resolveAllReportsModal{{ share.share_id }}" tabindex="-1" aria-labelledby="resolveAllReportsModalLabel{{ share.share_id }}" aria-hidden="true">
-                            <div class="modal-dialog">
-                                <form method="post" action="{% url 'admin_resolve_share_reports' share.share_id 'resolve' %}" class="modal-content">
-                                    {% csrf_token %}
-                                    <div class="modal-header">
-                                        <h5 class="modal-title" id="resolveAllReportsModalLabel{{ share.share_id }}">{% if share.is_restricted %}认可举报并更新现有限制{% else %}认可所有举报{% endif %}</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                        <p class="text-muted small mb-2">分享：{{ share.title }}</p>
-                                        {% if share.is_restricted %}
-                                        <div class="alert alert-warning py-2 small">
-                                            <strong>当前{{ share.get_restriction_state_display }}：</strong>{{ share.restriction_reason }}
+                        <section class="moderation-history" aria-labelledby="reportHistory{{ share.share_id }}">
+                            <h4 class="moderation-history__heading" id="reportHistory{{ share.share_id }}">
+                                <i class="bi bi-clock-history" aria-hidden="true"></i>
+                                操作历史
+                            </h4>
+                            <div class="moderation-history__viewport">
+                                <ol class="moderation-history__list">
+                                    {% for log in share.share_logs %}
+                                    <li class="moderation-history__item">
+                                        <div class="moderation-history__meta">
+                                            <span class="moderation-history__actor">{{ log.user.username|default:'已删除账户' }}</span>
+                                            <span class="badge bg-secondary">{{ log.get_action_display }}</span>
+                                            <time datetime="{{ log.created_at|date:'c' }}">{{ log.created_at|date:"Y-m-d H:i" }}</time>
                                         </div>
-                                        {% endif %}
-                                        <label class="form-label" for="resolveAllReason{{ share.share_id }}">{% if share.is_restricted %}新的处理说明{% else %}处理说明{% endif %}</label>
-                                        <textarea id="resolveAllReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="{% if share.is_restricted %}新的说明会替换当前限制原因，并通知举报人和分享作者。{% else %}请填写下架依据，举报人和分享作者会收到站内信。{% endif %}"></textarea>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                                        <button type="submit" class="btn btn-danger">确认认可并通知用户</button>
-                                    </div>
-                                </form>
+                                        {% if log.details %}<p class="moderation-history__details">{{ log.details }}</p>{% endif %}
+                                    </li>
+                                    {% empty %}
+                                    <li class="moderation-history__item moderation-history__empty">暂无历史记录</li>
+                                    {% endfor %}
+                                </ol>
                             </div>
-                        </div>
+                        </section>
 
-                        <div class="modal fade" id="dismissAllReportsModal{{ share.share_id }}" tabindex="-1" aria-labelledby="dismissAllReportsModalLabel{{ share.share_id }}" aria-hidden="true">
-                            <div class="modal-dialog">
-                                <form method="post" action="{% url 'admin_resolve_share_reports' share.share_id 'dismiss' %}" class="modal-content">
-                                    {% csrf_token %}
-                                    <div class="modal-header">
-                                        <h5 class="modal-title" id="dismissAllReportsModalLabel{{ share.share_id }}">驳回所有举报</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                        <section class="moderation-report-items" aria-labelledby="pendingReports{{ share.share_id }}">
+                            <h4 class="moderation-report-items__title" id="pendingReports{{ share.share_id }}">待处理举报</h4>
+                            <ol class="moderation-report-items__list">
+                                {% for report in share.pending_reports %}
+                                <li class="moderation-report-item">
+                                    <header class="moderation-report-item__header">
+                                        <span class="moderation-report-item__reporter">
+                                            <i class="bi bi-person" aria-hidden="true"></i>
+                                            {{ report.reporter.username|default:'已删除账户' }}
+                                        </span>
+                                        <time datetime="{{ report.created_at|date:'c' }}">{{ report.created_at|date:"Y-m-d H:i" }}</time>
+                                    </header>
+                                    <p class="moderation-report-item__reason">{{ report.reason }}</p>
+                                    <div class="moderation-report-item__actions">
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline-secondary btn-sm"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#reportResolutionModal"
+                                            data-resolution-trigger
+                                            data-resolution-action="{% url 'admin_resolve_report' report.id 'dismiss' %}"
+                                            data-resolution-title="驳回单条举报"
+                                            data-resolution-subject="举报人：{{ report.reporter.username|default:'已删除账户' }}"
+                                            data-resolution-context-label="举报内容："
+                                            data-resolution-context="{{ report.reason }}"
+                                            data-resolution-submit="确认驳回并通知举报人"
+                                            data-resolution-tone="secondary">
+                                            <i class="bi bi-x-circle" aria-hidden="true"></i>
+                                            驳回此举报
+                                        </button>
                                     </div>
-                                    <div class="modal-body">
-                                        <p class="text-muted small mb-2">分享：{{ share.title }}</p>
-                                        <label class="form-label" for="dismissAllReason{{ share.share_id }}">处理说明</label>
-                                        <textarea id="dismissAllReason{{ share.share_id }}" name="reason" class="form-control" rows="4" required placeholder="请填写驳回依据，举报人会收到站内信。"></textarea>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                                        <button type="submit" class="btn btn-secondary">确认驳回并通知用户</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-
-                        <!-- 历史日志 -->
-                        <div class="card mb-3 border-0 bg-white">
-                            <div class="card-header bg-transparent border-bottom py-2">
-                                <h6 class="mb-0 text-muted"><i class="bi bi-clock-history"></i> 操作历史</h6>
-                            </div>
-                            <ul class="list-group list-group-flush border rounded-bottom" style="max-height: 200px; overflow-y: auto; font-size: 0.9em;">
-                                {% for log in share.share_logs %}
-                                <li class="list-group-item bg-light py-2">
-                                    <div class="d-flex justify-content-between">
-                                        <div>
-                                            <span class="fw-bold">{{ log.user.username|default:'已删除账户' }}</span>
-                                            <span class="badge bg-secondary ms-1" style="font-size: 0.75em;">{{ log.get_action_display }}</span>
-                                        </div>
-                                        <small class="text-muted">{{ log.created_at|date:"Y-m-d H:i" }}</small>
-                                    </div>
-                                    {% if log.details %}
-                                    <div class="text-muted mt-1 ps-1 border-start border-3" style="font-size: 0.9em;">{{ log.details }}</div>
-                                    {% endif %}
                                 </li>
-                                {% empty %}
-                                <li class="list-group-item text-center text-muted small">暂无历史记录</li>
                                 {% endfor %}
-                            </ul>
-                        </div>
-
-                        <!-- 举报列表 -->
-                        <div class="list-group">
-                            {% for report in share.pending_reports %}
-                            <div class="list-group-item">
-                                <div class="d-flex w-100 justify-content-between">
-                                    <h6 class="mb-1">
-                                        <i class="bi bi-person"></i> {{ report.reporter.username|default:'已删除账户' }}
-                                    </h6>
-                                    <small class="text-muted">{{ report.created_at|date:"Y-m-d H:i" }}</small>
-                                </div>
-                                <p class="mb-1 mt-2">{{ report.reason }}</p>
-                                <div class="mt-2 text-end">
-                                    <small class="text-muted me-2">单条操作:</small>
-                                    <button type="button" class="btn btn-link text-secondary text-decoration-none small p-0" data-bs-toggle="modal" data-bs-target="#dismissReportModal{{ report.id }}">
-                                        [驳回]
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="modal fade" id="dismissReportModal{{ report.id }}" tabindex="-1" aria-labelledby="dismissReportModalLabel{{ report.id }}" aria-hidden="true">
-                                <div class="modal-dialog">
-                                    <form method="post" action="{% url 'admin_resolve_report' report.id 'dismiss' %}" class="modal-content">
-                                        {% csrf_token %}
-                                        <div class="modal-header">
-                                            <h5 class="modal-title" id="dismissReportModalLabel{{ report.id }}">驳回举报</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <p class="text-muted small mb-2">举报人：{{ report.reporter.username|default:'已删除账户' }}</p>
-                                            <div class="border rounded p-2 bg-light small mb-3">{{ report.reason }}</div>
-                                            <label class="form-label" for="dismissReportReason{{ report.id }}">处理说明</label>
-                                            <textarea id="dismissReportReason{{ report.id }}" name="reason" class="form-control" rows="4" required placeholder="请填写驳回依据，举报人会收到站内信。"></textarea>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                                            <button type="submit" class="btn btn-secondary">确认驳回并通知用户</button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
+                            </ol>
+                        </section>
                     </div>
                 </div>
-            </div>
+            </article>
             {% endfor %}
         </div>
 
-        <!-- 分页 -->
-        {% if shares.has_other_pages %}
-        <nav aria-label="Page navigation" class="mt-4">
-            <ul class="pagination justify-content-center">
-                {% if shares.has_previous %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ shares.previous_page_number }}">上一页</a>
-                </li>
-                {% else %}
-                <li class="page-item disabled">
-                    <span class="page-link">上一页</span>
-                </li>
-                {% endif %}
+        {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='待处理举报分页' nav_class='moderation-report-pagination' %}
+    </section>
 
-                {% for i in shares.paginator.page_range %}
-                    {% if shares.number == i %}
-                    <li class="page-item active">
-                        <span class="page-link">{{ i }}</span>
-                    </li>
-                    {% else %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ i }}">{{ i }}</a>
-                    </li>
-                    {% endif %}
-                {% endfor %}
-
-                {% if shares.has_next %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ shares.next_page_number }}">下一页</a>
-                </li>
-                {% else %}
-                <li class="page-item disabled">
-                    <span class="page-link">下一页</span>
-                </li>
-                {% endif %}
-            </ul>
-        </nav>
-        {% endif %}
-
-    {% else %}
-        <div class="alert alert-success text-center py-5">
-            <i class="bi bi-check-circle-fill fs-1 text-success mb-3"></i>
-            <h4>暂无待处理的举报</h4>
-            <p class="text-muted">社区环境很健康！</p>
+    <div class="modal fade" id="reportResolutionModal" tabindex="-1" aria-labelledby="reportResolutionModalTitle" aria-hidden="true" data-moderation-resolution-modal>
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <form method="post" action="{% url 'admin_report_list' %}" class="modal-content" data-resolution-form>
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h2 class="modal-title fs-5" id="reportResolutionModalTitle" data-resolution-modal-title>处理举报</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body moderation-report-resolution">
+                    <p class="moderation-report-resolution__subject" data-resolution-modal-subject></p>
+                    <p class="moderation-report-resolution__context" data-resolution-modal-context hidden>
+                        <strong data-resolution-modal-context-label></strong>
+                        <span data-resolution-modal-context-value></span>
+                    </p>
+                    <div>
+                        <label class="form-label" for="{{ resolution_form.reason.id_for_label }}">{{ resolution_form.reason.label }}</label>
+                        {{ resolution_form.reason }}
+                        <p class="form-text" id="report-resolution-help">{{ resolution_form.reason.help_text }}</p>
+                    </div>
+                </div>
+                <div class="modal-footer moderation-report-resolution__actions">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" class="btn btn-secondary" data-resolution-modal-submit disabled>确认处理</button>
+                </div>
+            </form>
         </div>
+    </div>
+    {% else %}
+        {% url 'admin_report_logs' as report_logs_url %}
+        {% include 'shares/includes/empty_state.html' with icon='bi-check2-all' title='暂无待处理的举报' message='当前举报队列为空，可以查看历史处理记录。' action_url=report_logs_url action_label='查看举报日志' action_icon='bi-journal-x' only %}
     {% endif %}
 </div>
 {% endblock %}
