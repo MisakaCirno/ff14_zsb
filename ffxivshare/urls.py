@@ -9,6 +9,8 @@ from django.conf.urls.static import static
 from django.http import HttpResponse
 from django.urls import include, path, re_path
 
+from . import health
+
 
 def proxy_view(request, path):
     """Forward development-only renderer requests without losing URL boundaries."""
@@ -52,6 +54,8 @@ admin.site.site_title = '管理后台'
 admin.site.index_title = '欢迎使用管理后台'
 
 urlpatterns = [
+    path('health/live/', health.live, name='health_live'),
+    path('health/ready/', health.ready, name='health_ready'),
     path('admin/', admin.site.urls),
     path('', include('shares.urls')), # Include shares app URLs
 ]

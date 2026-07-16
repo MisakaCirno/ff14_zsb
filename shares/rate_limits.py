@@ -78,7 +78,13 @@ def consume_rate_limit(rule_name, identity, *, now=None):
                 cache.set(cache_key, 1, timeout=window_seconds + 1)
                 count = 1
     except Exception:
-        logger.exception('Rate-limit cache failed for rule %s; allowing request.', rule_name)
+        logger.exception(
+            'Rate-limit cache failed; allowing request.',
+            extra={
+                'event': 'rate_limit.cache_failed',
+                'rule': rule_name,
+            },
+        )
         return RateLimitResult(True, 0, limit, retry_after)
 
     return RateLimitResult(count <= limit, count, limit, retry_after)

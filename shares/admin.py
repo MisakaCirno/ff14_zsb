@@ -261,6 +261,7 @@ class ShareAdmin(admin.ModelAdmin):
                 logger.exception(
                     'Django Admin visibility batch selection failed',
                     extra={
+                        'event': 'admin.visibility_batch_selection_failed',
                         'batch_number': batch_number,
                         'batch_size': 0,
                         'target_visibility': visibility,
@@ -279,6 +280,7 @@ class ShareAdmin(admin.ModelAdmin):
                 logger.exception(
                     'Django Admin visibility batch failed',
                     extra={
+                        'event': 'admin.visibility_batch_failed',
                         'batch_number': batch_number,
                         'batch_size': len(candidate_pks),
                         'target_visibility': visibility,

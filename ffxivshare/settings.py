@@ -41,6 +41,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if IS_PRODUCTION e
 TRUST_X_FORWARDED_FOR = env_bool('TRUST_X_FORWARDED_FOR', default=IS_PRODUCTION)
 RATE_LIMIT_ENABLED = env_bool('RATE_LIMIT_ENABLED', default=True)
 SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', default=IS_PRODUCTION)
+SECURE_REDIRECT_EXEMPT = [r'^health/(?:live|ready)/$']
 SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
 CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', default=IS_PRODUCTION)
 SECURE_HSTS_SECONDS = env_int(
@@ -66,6 +67,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'ffxivshare.observability.RequestObservabilityMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -74,6 +76,60 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+REQUEST_LOG_ENABLED = env_bool('REQUEST_LOG_ENABLED', default=IS_PRODUCTION)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'safe_json': {
+            '()': 'ffxivshare.observability.JsonLogFormatter',
+        },
+    },
+    'handlers': {
+        'json_stdout': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'safe_json',
+            'stream': 'ext://sys.stdout',
+        },
+        'null': {
+            'class': 'logging.NullHandler',
+        },
+    },
+    'root': {
+        'handlers': ['json_stdout'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'ffxivshare.request': {
+            'handlers': ['json_stdout' if REQUEST_LOG_ENABLED else 'null'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django': {
+            'handlers': ['json_stdout'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # The structured request record replaces Django/runserver access logs.
+        'django.request': {
+            'handlers': ['json_stdout' if REQUEST_LOG_ENABLED else 'null'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['null'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['json_stdout'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
 
 ROOT_URLCONF = 'ffxivshare.urls'
 
