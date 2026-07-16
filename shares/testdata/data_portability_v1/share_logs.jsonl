@@ -1,0 +1,1 @@
+{"model": "shares.sharelog","pk": 601,"fields": {"share": 201,"user": ["fixture-owner"],"action": "report_handle","details": "固定举报处理日志","created_at": "2024-01-04T02:02:03.456Z"}}

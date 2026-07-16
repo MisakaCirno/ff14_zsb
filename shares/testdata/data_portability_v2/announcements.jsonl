@@ -1,0 +1,1 @@
+{"model": "shares.announcement","pk": 701,"fields": {"title": "固定历史公告","content": "<p>固定公告正文</p>","is_active": true,"created_at": "2024-01-02T04:02:03.456Z","updated_at": "2024-01-04T04:02:03.456Z"}}

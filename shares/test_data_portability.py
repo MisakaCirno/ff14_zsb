@@ -44,6 +44,13 @@ from .services.data_portability import (
 )
 
 
+HISTORICAL_DATASET_ROOT = Path(__file__).resolve().parent / 'testdata'
+HISTORICAL_MANIFEST_SHA256 = {
+    1: '7a1781550aa1defb39ef69e9940a83c81f4c2ce83af2945c2f47ed484e620065',
+    2: 'bc1371246e6af67e80a3d312f2eb8bc591850613758a4897306a2ec621b799ce',
+}
+
+
 def import_dataset(*args, **kwargs):
     kwargs.setdefault('confirm_exclusive_target', True)
     return _import_dataset(*args, **kwargs)
@@ -320,6 +327,193 @@ class DataPortabilityTests(TestCase):
         UserProfile.objects.all().delete()
         User.objects.all().delete()
         Group.objects.all().delete()
+
+    def historical_dataset(self, version: int) -> Path:
+        return HISTORICAL_DATASET_ROOT / f'data_portability_v{version}'
+
+    def assert_historical_fixture_import(self, version: int):
+        dataset = self.historical_dataset(version)
+        immutable_bytes = {
+            path.name: path.read_bytes()
+            for path in dataset.iterdir()
+            if path.is_file()
+        }
+        manifest = json.loads(immutable_bytes[MANIFEST_FILENAME])
+        share_payload = json.loads(immutable_bytes['shares.jsonl'])
+        report_payload = json.loads(immutable_bytes['reports.jsonl'])
+
+        if version == 1:
+            self.assertNotIn(
+                'restriction_state',
+                share_payload['fields'],
+            )
+            self.assertEqual(
+                report_payload['fields']['resolution_reason'],
+                '  固定历史举报下架  ',
+            )
+        else:
+            self.assertEqual(
+                share_payload['fields']['restriction_state'],
+                Share.RestrictionState.REPORT_TAKEDOWN,
+            )
+            self.assertEqual(
+                share_payload['fields']['restriction_reason'],
+                'v2 固定持久化限制原因',
+            )
+
+        self.clear_portable_data()
+        with TemporaryDirectory() as temporary:
+            report_path = Path(temporary) / f'v{version}-import-report.json'
+            self.assertEqual(
+                import_dataset(dataset, report_path=report_path),
+                'imported',
+            )
+            import_report = json.loads(report_path.read_text(encoding='utf-8'))
+            self.assertEqual(import_report['format_version'], version)
+            self.assertEqual(import_report['status'], 'imported')
+            self.assertEqual(
+                import_report['manifest_sha256'],
+                HISTORICAL_MANIFEST_SHA256[version],
+            )
+
+            self.assertTrue(database_matches_manifest(manifest))
+            self.assertEqual(
+                import_dataset(dataset, report_path=report_path),
+                'already_imported',
+            )
+
+        expected_counts = {
+            spec.name: 1
+            for spec in ENTITY_SPECS_BY_VERSION[version]
+        }
+        self.assertEqual(
+            {
+                spec.name: spec.model._default_manager.count()
+                for spec in ENTITY_SPECS_BY_VERSION[version]
+            },
+            expected_counts,
+        )
+        owner = User.objects.get(pk=101)
+        self.assertEqual(owner.username, 'fixture-owner')
+        self.assertEqual(owner.password, '!fixture-unusable-password')
+        self.assertEqual(
+            list(owner.groups.values_list('name', flat=True)),
+            ['fixture-moderators'],
+        )
+        self.assertEqual(
+            list(owner.user_permissions.values_list(
+                'codename',
+                'content_type__app_label',
+                'content_type__model',
+            )),
+            [('change_share', 'shares', 'share')],
+        )
+        fixture_group = Group.objects.get(name='fixture-moderators')
+        self.assertEqual(
+            list(fixture_group.permissions.values_list(
+                'codename',
+                'content_type__app_label',
+                'content_type__model',
+            )),
+            [('view_share', 'shares', 'share')],
+        )
+        self.assertEqual(owner.profile.nickname, '固定样本用户')
+
+        share = Share.objects.get(pk=201)
+        self.assertEqual(share.share_id, '2a3b4c5d')
+        self.assertEqual(
+            share.restriction_state,
+            Share.RestrictionState.REPORT_TAKEDOWN,
+        )
+        expected_reason = (
+            '固定历史举报下架'
+            if version == 1
+            else 'v2 固定持久化限制原因'
+        )
+        expected_restricted_at = (
+            datetime(2024, 1, 4, 1, 2, 3, 456000, tzinfo=UTC)
+            if version == 1
+            else datetime(2024, 1, 5, 6, 7, 8, 901000, tzinfo=UTC)
+        )
+        self.assertEqual(share.restriction_reason, expected_reason)
+        self.assertEqual(
+            share.restricted_at,
+            expected_restricted_at,
+        )
+        self.assertEqual(share.restricted_by, owner)
+        self.assertEqual(
+            list(share.likes.values_list('username', flat=True)),
+            ['fixture-owner'],
+        )
+        self.assertEqual(
+            list(share.favorites.values_list('username', flat=True)),
+            ['fixture-owner'],
+        )
+        self.assertEqual(
+            CollectionItem.objects.get(pk=401).share,
+            share,
+        )
+        imported_report = Report.objects.get(pk=501)
+        self.assertEqual(imported_report.share, share)
+        self.assertEqual(
+            imported_report.resolution_reason,
+            '  固定历史举报下架  ',
+        )
+        message = SiteMessage.objects.get(pk=801)
+        self.assertEqual(message.related_share, share)
+        self.assertEqual(message.related_report, imported_report)
+        self.assertEqual(message.metadata['fixture'], 'v1-v2')
+
+        self.assertEqual(
+            {
+                path.name: path.read_bytes()
+                for path in dataset.iterdir()
+                if path.is_file()
+            },
+            immutable_bytes,
+        )
+
+    def test_historical_v1_and_v2_golden_fixtures_are_fixed_and_valid(self):
+        for version in (1, 2):
+            with self.subTest(version=version):
+                dataset = self.historical_dataset(version)
+                manifest_path = dataset / MANIFEST_FILENAME
+                self.assertEqual(
+                    sha256(manifest_path.read_bytes()).hexdigest(),
+                    HISTORICAL_MANIFEST_SHA256[version],
+                )
+                manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+                specs = ENTITY_SPECS_BY_VERSION[version]
+                self.assertEqual(manifest['format'], DATASET_FORMAT)
+                self.assertEqual(manifest['format_version'], version)
+                self.assertEqual(
+                    set(manifest['entities']),
+                    {spec.name for spec in specs},
+                )
+                self.assertEqual(
+                    {path.name for path in dataset.iterdir()},
+                    {MANIFEST_FILENAME, *(spec.filename for spec in specs)},
+                )
+                for metadata in manifest['entities'].values():
+                    self.assertEqual(metadata['count'], 1)
+                    self.assertEqual(
+                        sha256((dataset / metadata['file']).read_bytes()).hexdigest(),
+                        metadata['sha256'],
+                    )
+
+                validation = validate_dataset(dataset)
+                self.assertTrue(validation.valid, validation.as_dict())
+                self.assertEqual(
+                    validation.entity_counts,
+                    {spec.name: 1 for spec in specs},
+                )
+                self.assertEqual(bool(validation.warnings), version == 1)
+
+    def test_historical_v1_golden_fixture_imports_and_derives_restriction(self):
+        self.assert_historical_fixture_import(1)
+
+    def test_historical_v2_golden_fixture_imports_persisted_restriction(self):
+        self.assert_historical_fixture_import(2)
 
     def test_export_writes_versioned_manifest_hashes_and_valid_report(self):
         with TemporaryDirectory() as temporary:

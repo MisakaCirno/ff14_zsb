@@ -1,0 +1,1 @@
+{"model": "shares.userprofile","pk": 101,"fields": {"user": ["fixture-owner"],"nickname": "固定样本用户","bio": "来自固定历史金样本","home_feed_mode": "paginated","created_at": "2024-01-01T01:02:03.456Z","updated_at": "2024-01-01T02:02:03.456Z"}}

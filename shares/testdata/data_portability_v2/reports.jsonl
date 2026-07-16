@@ -1,0 +1,1 @@
+{"model": "shares.report","pk": 501,"fields": {"share": 201,"reporter": ["fixture-owner"],"reason": "固定举报原因","created_at": "2024-01-03T01:02:03.456Z","status": "resolved","resolved_at": "2024-01-04T01:02:03.456Z","resolved_by": ["fixture-owner"],"resolution_reason": "  固定历史举报下架  "}}
