@@ -19,6 +19,7 @@ REPORT_FORMAT_VERSION = 1
 SQLITE_HEADER = b"SQLite format 3\x00"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+SQLITE_SIDECAR_SUFFIXES = ("-wal", "-shm", "-journal")
 
 
 class InspectionError(RuntimeError):
@@ -111,8 +112,8 @@ def _validate_paths(database_value: str, output_value: str) -> tuple[Path, Path]
     if _canonical_key(database) == _canonical_key(output):
         raise InspectionError("Database and output paths must differ.")
     forbidden_outputs = {
-        _canonical_key(Path(f"{database}-wal")),
-        _canonical_key(Path(f"{database}-shm")),
+        _canonical_key(Path(f"{database}{suffix}"))
+        for suffix in SQLITE_SIDECAR_SUFFIXES
     }
     if _canonical_key(output) in forbidden_outputs:
         raise InspectionError("Output must not use a SQLite sidecar path.")
@@ -121,7 +122,7 @@ def _validate_paths(database_value: str, output_value: str) -> tuple[Path, Path]
 
 
 def _assert_no_live_sidecars(database: Path) -> None:
-    for suffix in ("-wal", "-shm"):
+    for suffix in SQLITE_SIDECAR_SUFFIXES:
         sidecar = Path(f"{database}{suffix}")
         if os.path.lexists(sidecar):
             raise InspectionError(

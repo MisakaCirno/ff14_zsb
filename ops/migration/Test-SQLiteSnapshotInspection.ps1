@@ -284,7 +284,7 @@ try {
         -Condition ($invalidForeignKeyHashAfter -eq $invalidForeignKeyHash) `
         -Message 'Failed foreign-key inspection modified its source snapshot.'
 
-    foreach ($sidecarSuffix in @('-wal', '-shm')) {
+    foreach ($sidecarSuffix in @('-wal', '-shm', '-journal')) {
         $sidecarPath = "$validDatabase$sidecarSuffix"
         [System.IO.File]::WriteAllBytes($sidecarPath, [byte[]]@())
         try {
@@ -305,6 +305,18 @@ try {
         finally {
             Remove-Item -LiteralPath $sidecarPath -Force
         }
+
+        $forbiddenOutputExit = Invoke-Inspector `
+            -Database $validDatabase `
+            -ExpectedSha256 $validHashBefore `
+            -Output $sidecarPath `
+            -LogPath (Join-Path $temporaryRoot "$sidecarName-output.log")
+        Assert-True `
+            -Condition ($forbiddenOutputExit -ne 0) `
+            -Message "Inspector output must not use SQLite $sidecarSuffix path."
+        Assert-True `
+            -Condition (-not (Test-Path -LiteralPath $sidecarPath)) `
+            -Message "Rejected SQLite $sidecarSuffix output must not be created."
     }
 
     $temporaryArtifacts = @(
