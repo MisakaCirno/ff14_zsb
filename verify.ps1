@@ -67,6 +67,12 @@ try {
         }
 
         if (-not $SkipTests) {
+            Invoke-CheckedStep 'SQLite backup-set verification contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-SQLiteBackupSet.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
+                    -PythonExecutable $PythonExecutable
+            }
+
             Invoke-CheckedStep 'SQLite migration snapshot inspection contracts' {
                 & (Join-Path $PSScriptRoot 'ops\migration\Test-SQLiteSnapshotInspection.ps1') `
                     -RepositoryRoot $PSScriptRoot `

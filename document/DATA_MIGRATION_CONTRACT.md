@@ -170,5 +170,23 @@ python manage.py backup_database D:\FFXIVShareBackups\site-2026-07-11.sqlite3
 ```
 
 - 命令会对备份执行 `PRAGMA integrity_check` 和 `foreign_key_check`，并原子生成数据库、同名 `.sha256` 与 `.metadata.json` 证据集；已有任一输出时默认拒绝覆盖。
+- 把三件套移到离线介质后，先在独立证据目录验证文件名、精确校验和、元数据契约、SQLite 文件头及读取期间稳定性：
+
+```powershell
+$Database = 'D:\FFXIVShareBackups\site-2026-07-11.sqlite3'
+$ExpectedSha256 = (Get-FileHash -LiteralPath $Database -Algorithm SHA256).Hash.ToLowerInvariant()
+python ops\migration\Verify-SQLiteBackupSet.py `
+  --database $Database `
+  --checksum "${Database}.sha256" `
+  --metadata "${Database}.metadata.json" `
+  --output D:\FFXIVShareEvidence\backup-set-verification.json
+python ops\migration\Inspect-SQLiteSnapshot.py `
+  --database $Database `
+  --expected-sha256 $ExpectedSha256 `
+  --output D:\FFXIVShareEvidence\sqlite-snapshot-inspection.json
+```
+
+- 三件套验证器不通过 Django 或 SQLite 打开数据库，只证明本次读取到的三份文件彼此自洽，并确认该数据库具备进入独立快照检查的前置条件。元数据中的 `integrity_check=ok` 和 `foreign_key_check=ok` 仍只是备份生产者声明，不能替代随后由 `Inspect-SQLiteSnapshot.py` 执行的只读 `PRAGMA integrity_check`、`foreign_key_check`、表、migration 和序列清点。
+- 两份证据都使用新文件发布；备份集报告固定包含 `cutover_authorized=false` 和 `inspection_required=true`。无论哪一份报告都不证明线上来源、停写时点或允许正式切换。输入数据库旁出现 `-wal`、`-shm` 或 `-journal` 时必须拒绝并重新取得一致备份。
 - 备份应复制到另一物理存储，并定期在隔离环境中执行恢复、迁移、数据校验和关键流程冒烟。
 - PostgreSQL 使用 `requirements-postgres.txt` 和环境变量切换；CI 会在 PostgreSQL 16 上执行同一套迁移与测试。正式备份使用 `pg_dump`，不使用 SQLite 备份命令。
