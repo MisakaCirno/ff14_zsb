@@ -1,5 +1,7 @@
 import json
 import sqlite3
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
@@ -527,6 +529,7 @@ class DataPortabilityTests(TestCase):
             self.assertTrue(report.valid)
             self.assertEqual(manifest['entities']['users']['count'], 2)
             self.assertEqual(manifest['entities']['shares']['count'], 1)
+
             projection = manifest['table_projection']
             self.assertEqual(
                 set(projection['direct']),
@@ -578,6 +581,52 @@ class DataPortabilityTests(TestCase):
             for metadata in manifest['entities'].values():
                 self.assertEqual(len(metadata['sha256']), 64)
                 self.assertTrue((dataset / metadata['file']).is_file())
+
+    def test_real_v3_exports_compare_after_forced_session_logout(self):
+        Session.objects.create(
+            session_key='migration-source-session',
+            session_data='excluded-session-payload',
+            expire_date=timezone.now() + timedelta(days=1),
+        )
+        comparator = (
+            Path(__file__).resolve().parents[1]
+            / 'ops'
+            / 'migration'
+            / 'Compare-SiteDataExports.py'
+        )
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source-export'
+            target = root / 'target-export'
+            evidence = root / 'comparison.json'
+            export_dataset(source)
+            Session.objects.all().delete()
+            export_dataset(target)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(comparator),
+                    '--source',
+                    str(source.resolve()),
+                    '--target',
+                    str(target.resolve()),
+                    '--output',
+                    str(evidence.resolve()),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report_text = evidence.read_text(encoding='utf-8')
+            report = json.loads(report_text)
+            self.assertTrue(report['equivalent'])
+            self.assertFalse(report['cutover_authorized'])
+            self.assertTrue(report['checks']['session_projection'])
+            self.assertNotIn(self.share.strategy_code, report_text)
 
     def test_v3_preserves_six_digit_microseconds_and_sorts_embedded_relations(self):
         exact_time = datetime(2026, 7, 16, 1, 2, 3, 123456, tzinfo=UTC)

@@ -101,6 +101,22 @@ python manage.py preflight_share_restrictions --strict `
   --output D:\migration\share-restriction-preflight.json
 ```
 
+导入完成后，从目标库重新导出一份 v3 数据集，并对两个已经分别通过
+`validate_site_data` 的不可变导出执行独立比较：
+
+```powershell
+python ops\migration\Compare-SiteDataExports.py `
+  --source D:\migration\ffxivshare-export `
+  --target D:\migration\ffxivshare-target-export `
+  --output D:\migration\evidence\site-data-comparison.json
+```
+
+- 比较器不连接数据库，也不信任 manifest 中的摘要声明；它重新读取并校验固定 v3 目录、canonical JSONL 字节、实际 SHA、记录数量、模型和主键序列。
+- 业务实体和依赖引用必须一致；目标 ContentType、Permission 和 migration 只允许是可解释的前向超集。
+- 目标自增序列只能等于或高于源高水位，目标会话证据必须为空；导出时间、应用版本和数据库引擎只作为来源证据记录，不用于掩盖业务差异。
+- 输出必须位于两个不可变数据集之外且默认拒绝覆盖；任何额外文件、链接、未知结构、摘要变化或不规范 JSON 都会生成失败证据并返回非零状态。
+- 比较证据固定包含 `cutover_authorized=false`，不能替代限制预检、目标数据库备份校验或 R20 发布授权。
+
 - 导出目录已存在时命令默认拒绝覆盖；只有显式传入 `--overwrite` 才会替换。
 - 校验与导入报告必须显式写到数据集目录之外；导入和重复校验不得修改不可变源数据集。
 - `--confirm-exclusive-target` 是硬门禁：执行前必须停止所有目标应用写入者。命令仍会在锁内重新判定目标状态，并使用 SQLite exclusive locking mode 或 PostgreSQL session advisory lock 阻止并发导入；PostgreSQL advisory lock 不能替代停止应用服务的人工证明。

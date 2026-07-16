@@ -78,6 +78,11 @@ try {
                     -PythonExecutable $PythonExecutable
             }
 
+            Invoke-CheckedStep 'Site-data export comparison contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-SiteDataExportComparison.ps1') `
+                    -PythonExecutable $PythonExecutable
+            }
+
             Invoke-CheckedStep 'Waitress loopback smoke test' {
                 & (Join-Path $PSScriptRoot 'ops\windows\Test-WaitressSmoke.ps1') `
                     -RepositoryRoot $PSScriptRoot `
