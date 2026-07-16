@@ -32,6 +32,17 @@ function updateSubmitTone(button: HTMLButtonElement, tone: string | undefined): 
   button.classList.toggle('btn-secondary', resolvedTone === 'secondary')
 }
 
+function resolutionContext(trigger: HTMLElement): string {
+  const sourceId = trigger.dataset.resolutionContextSource
+  if (sourceId) {
+    const source = document.getElementById(sourceId)
+    if (source) {
+      return source.textContent?.trim() ?? ''
+    }
+  }
+  return trigger.dataset.resolutionContext ?? ''
+}
+
 function focusModalError(modal: HTMLElement, fallback?: HTMLElement): void {
   const errorSummary = modal.querySelector<HTMLElement>('[data-moderation-error-summary]')
   if (errorSummary) {
@@ -162,7 +173,7 @@ function initializeResolutionModal(modal: HTMLElement): void {
     submit.textContent = trigger.dataset.resolutionSubmit ?? '确认处理'
     updateSubmitTone(submit, trigger.dataset.resolutionTone)
 
-    const detail = trigger.dataset.resolutionContext ?? ''
+    const detail = resolutionContext(trigger)
     context.hidden = detail.length === 0
     contextLabel.textContent = trigger.dataset.resolutionContextLabel ?? ''
     contextValue.textContent = detail

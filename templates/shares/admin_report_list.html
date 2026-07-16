@@ -78,7 +78,7 @@
                                     data-resolution-action="{% url 'admin_resolve_share_reports' share.share_id 'resolve' %}"
                                     data-resolution-title="{% if share.is_restricted %}认可举报并更新限制{% else %}认可全部举报{% endif %}"
                                     data-resolution-subject="分享：{{ share.title }}"
-                                    {% if share.is_restricted %}data-resolution-context-label="当前{{ share.get_restriction_state_display }}：" data-resolution-context="{{ share.restriction_reason }}"{% endif %}
+                                    {% if share.is_restricted %}data-resolution-context-label="当前{{ share.get_restriction_state_display }}：" data-resolution-context-source="reportRestrictionReason{{ share.share_id }}"{% endif %}
                                     data-resolution-submit="确认认可并通知用户"
                                     data-resolution-tone="danger">
                                     <i class="bi bi-check-circle" aria-hidden="true"></i>
@@ -103,6 +103,13 @@
                             </div>
                         </div>
 
+                        {% if share.is_restricted %}
+                        <p class="moderation-report-item__reason">
+                            <strong>当前{{ share.get_restriction_state_display }}：</strong>
+                            <span id="reportRestrictionReason{{ share.share_id }}">{{ share.restriction_reason_preview }}</span>
+                        </p>
+                        {% endif %}
+
                         <section class="moderation-history" aria-labelledby="reportHistory{{ share.share_id }}">
                             <h4 class="moderation-history__heading" id="reportHistory{{ share.share_id }}">
                                 <i class="bi bi-clock-history" aria-hidden="true"></i>
@@ -117,13 +124,20 @@
                                             <span class="badge bg-secondary">{{ log.get_action_display }}</span>
                                             <time datetime="{{ log.created_at|date:'c' }}">{{ log.created_at|date:"Y-m-d H:i" }}</time>
                                         </div>
-                                        {% if log.details %}<p class="moderation-history__details">{{ log.details }}</p>{% endif %}
+                                        {% if log.details_preview %}
+                                        <p class="moderation-history__details">
+                                            {{ log.details_preview }}{% if log.details_length > 500 %}…{% endif %}
+                                        </p>
+                                        {% endif %}
                                     </li>
                                     {% empty %}
                                     <li class="moderation-history__item moderation-history__empty">暂无历史记录</li>
                                     {% endfor %}
                                 </ol>
                             </div>
+                            {% if share.share_logs_truncated %}
+                            <p class="moderation-history__empty">仅展示最近 5 条；完整记录仍保留在审计日志中。</p>
+                            {% endif %}
                         </section>
 
                         <section class="moderation-report-items" aria-labelledby="pendingReports{{ share.share_id }}">
@@ -138,7 +152,9 @@
                                         </span>
                                         <time datetime="{{ report.created_at|date:'c' }}">{{ report.created_at|date:"Y-m-d H:i" }}</time>
                                     </header>
-                                    <p class="moderation-report-item__reason">{{ report.reason }}</p>
+                                    <p class="moderation-report-item__reason" id="reportReason{{ report.pk }}">
+                                        {{ report.reason_preview }}{% if report.reason_length > 160 %}…{% endif %}
+                                    </p>
                                     <div class="moderation-report-item__actions">
                                         <button
                                             type="button"
@@ -150,7 +166,7 @@
                                             data-resolution-title="驳回单条举报"
                                             data-resolution-subject="举报人：{{ report.reporter.username|default:'已删除账户' }}"
                                             data-resolution-context-label="举报内容："
-                                            data-resolution-context="{{ report.reason }}"
+                                            data-resolution-context-source="reportReason{{ report.pk }}"
                                             data-resolution-submit="确认驳回并通知举报人"
                                             data-resolution-tone="secondary">
                                             <i class="bi bi-x-circle" aria-hidden="true"></i>
@@ -160,6 +176,12 @@
                                 </li>
                                 {% endfor %}
                             </ol>
+                            {% if share.pending_reports_truncated %}
+                            <p class="moderation-history__empty">
+                                当前仅展示最近 5 条；
+                                <a href="{% url 'admin_report_share' share.share_id %}">查看并逐条处理全部 {{ share.pending_count }} 条举报</a>。
+                            </p>
+                            {% endif %}
                         </section>
                     </div>
                 </div>
@@ -175,59 +197,8 @@
     {% endif %}
 
     {% if shares or resolution_error %}
-    <div
-        class="modal fade"
-        id="reportResolutionModal"
-        tabindex="-1"
-        aria-labelledby="reportResolutionModalTitle"
-        aria-hidden="true"
-        data-moderation-resolution-modal
-        {% if resolution_error %}data-moderation-invalid-modal{% endif %}>
-        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-            <form
-                method="post"
-                action="{% if resolution_error %}{{ resolution_error.action_url }}{% else %}{% url 'admin_report_list' %}{% endif %}"
-                class="modal-content"
-                data-resolution-form
-                data-resolution-fallback-action="{% url 'admin_report_list' %}">
-                {% csrf_token %}
-                <input type="hidden" name="return_page" value="{{ shares.number }}">
-                <div class="modal-header">
-                    <h2 class="modal-title fs-5" id="reportResolutionModalTitle" data-resolution-modal-title>
-                        {{ resolution_error.title|default:'处理举报' }}
-                    </h2>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
-                </div>
-                <div class="modal-body moderation-report-resolution">
-                    <p class="moderation-report-resolution__subject" data-resolution-modal-subject>{{ resolution_error.subject }}</p>
-                    <p class="moderation-report-resolution__context" data-resolution-modal-context{% if not resolution_error.context %} hidden{% endif %}>
-                        <strong data-resolution-modal-context-label>{{ resolution_error.context_label }}</strong>
-                        <span data-resolution-modal-context-value>{{ resolution_error.context }}</span>
-                    </p>
-                    {% if resolution_error.target_stale %}
-                    <div class="alert alert-warning" role="status" data-resolution-server-only>
-                        目标状态已发生变化，本次提交尚未执行。已保留处理说明，请核对当前状态后再决定是否重试。
-                    </div>
-                    {% endif %}
-                    {% include 'shares/includes/moderation_form_error_summary.html' with form=resolution_form error_id='report-resolution-errors' only %}
-                    <div>
-                        <label class="form-label" for="{{ resolution_form.reason.id_for_label }}">{{ resolution_form.reason.label }}</label>
-                        {{ resolution_form.reason }}
-                        <p class="form-text" id="report-resolution-help">{{ resolution_form.reason.help_text }}</p>
-                    </div>
-                </div>
-                <div class="modal-footer moderation-report-resolution__actions">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                    <button
-                        type="submit"
-                        class="btn btn-{{ resolution_error.tone|default:'secondary' }}"
-                        data-resolution-modal-submit{% if not resolution_error %} disabled{% endif %}>
-                        {{ resolution_error.submit|default:'确认处理' }}
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
+    {% url 'admin_report_list' as report_queue_url %}
+    {% include 'shares/includes/moderation_report_resolution_modal.html' with resolution_error=resolution_error resolution_form=resolution_form fallback_action=report_queue_url return_page=shares.number csrf_token=csrf_token only %}
     {% endif %}
 </div>
 {% endblock %}

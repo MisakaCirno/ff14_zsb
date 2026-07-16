@@ -257,10 +257,7 @@ def admin_task_counts():
             Q(status=Share.Status.PENDING)
             | ~Q(restriction_state=Share.RestrictionState.CLEAR)
         ).count(),
-        'pending_reports_count': Share.objects.annotate(
-            pending_count=Count(
-                'reports',
-                filter=Q(reports__status=Report.Status.PENDING),
-            )
-        ).filter(pending_count__gt=0).count(),
+        'pending_reports_count': Report.objects.filter(
+            status=Report.Status.PENDING,
+        ).values('share_id').distinct().count(),
     }

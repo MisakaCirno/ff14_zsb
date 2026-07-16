@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+
+{% block title %}举报详情 - {{ share.title }}{% endblock %}
+
+{% block content %}
+<div class="container moderation-page moderation-report-page">
+    {% include 'shares/includes/moderation_page_header.html' with icon='bi bi-flag' eyebrow='内容治理' title='分享举报详情' summary='分页查看并逐条处理该分享的全部待处理举报；完整处理结果仍会写入审计记录。' only %}
+
+    {% include 'shares/includes/admin_tabs.html' %}
+
+    <section class="moderation-panel moderation-report-queue" aria-labelledby="report-share-title">
+        <header class="moderation-panel__header">
+            <div>
+                <p class="moderation-panel__eyebrow">待处理分享</p>
+                <h2 class="moderation-panel__title" id="report-share-title">{{ share.title }}</h2>
+                <p class="moderation-report-subject__meta">
+                    分享 ID：{{ share.share_id }} · 作者：{{ share.author.username|default:'匿名' }}
+                </p>
+            </div>
+            <span class="moderation-panel__count">共 {{ share.pending_count }} 条</span>
+        </header>
+
+        <div class="moderation-report-card__body">
+            <div class="moderation-report-toolbar">
+                <div class="moderation-report-links" role="group" aria-label="查看相关内容">
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'admin_report_list' %}">
+                        <i class="bi bi-arrow-left" aria-hidden="true"></i>
+                        返回举报队列
+                    </a>
+                    <a class="btn btn-outline-primary btn-sm" href="{% url 'share_detail' share.share_id %}" target="_blank" rel="noopener noreferrer">
+                        <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+                        查看分享
+                    </a>
+                </div>
+                {% if share.pending_count %}
+                <div class="moderation-action-grid moderation-report-toolbar__actions" role="group" aria-label="全部举报操作">
+                    <button
+                        type="button"
+                        class="btn btn-danger btn-sm"
+                        data-bs-toggle="modal"
+                        data-bs-target="#reportResolutionModal"
+                        data-resolution-trigger
+                        data-resolution-action="{% url 'admin_resolve_share_reports' share.share_id 'resolve' %}"
+                        data-resolution-title="{% if share.is_restricted %}认可举报并更新限制{% else %}认可全部举报{% endif %}"
+                        data-resolution-subject="分享：{{ share.title }}"
+                        {% if share.is_restricted %}data-resolution-context-label="当前{{ share.get_restriction_state_display }}：" data-resolution-context-source="reportDetailRestrictionReason"{% endif %}
+                        data-resolution-submit="确认认可并通知用户"
+                        data-resolution-tone="danger">
+                        认可全部举报
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-secondary btn-sm"
+                        data-bs-toggle="modal"
+                        data-bs-target="#reportResolutionModal"
+                        data-resolution-trigger
+                        data-resolution-action="{% url 'admin_resolve_share_reports' share.share_id 'dismiss' %}"
+                        data-resolution-title="驳回全部举报"
+                        data-resolution-subject="分享：{{ share.title }}"
+                        data-resolution-context-label="待处理举报："
+                        data-resolution-context="共 {{ share.pending_count }} 条，处理结果会通知所有仍存在的举报人。"
+                        data-resolution-submit="确认全部驳回并通知用户"
+                        data-resolution-tone="secondary">
+                        全部驳回
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if share.is_restricted %}
+            <p class="moderation-report-item__reason">
+                <strong>当前{{ share.get_restriction_state_display }}：</strong>
+                <span id="reportDetailRestrictionReason">{{ share.restriction_reason_preview }}</span>
+            </p>
+            {% endif %}
+
+            <section class="moderation-report-items" aria-labelledby="report-share-items-title">
+                <h3 class="moderation-report-items__title" id="report-share-items-title">待处理举报</h3>
+                <ol class="moderation-report-items__list">
+                    {% for report in reports %}
+                    <li class="moderation-report-item">
+                        <header class="moderation-report-item__header">
+                            <span class="moderation-report-item__reporter">
+                                <i class="bi bi-person" aria-hidden="true"></i>
+                                {{ report.reporter.username|default:'已删除账户' }}
+                            </span>
+                            <time datetime="{{ report.created_at|date:'c' }}">{{ report.created_at|date:"Y-m-d H:i" }}</time>
+                        </header>
+                        <p class="moderation-report-item__reason" id="reportDetailReason{{ report.pk }}">
+                            {{ report.reason_preview }}{% if report.reason_length > 2000 %}…（已截断，原文仍保留）{% endif %}
+                        </p>
+                        <div class="moderation-report-item__actions moderation-action-grid">
+                            <button
+                                type="button"
+                                class="btn btn-outline-danger btn-sm"
+                                data-bs-toggle="modal"
+                                data-bs-target="#reportResolutionModal"
+                                data-resolution-trigger
+                                data-resolution-action="{% url 'admin_resolve_report' report.pk 'resolve' %}"
+                                data-resolution-title="认可单条举报"
+                                data-resolution-subject="举报人：{{ report.reporter.username|default:'已删除账户' }}"
+                                data-resolution-context-label="举报内容："
+                                data-resolution-context-source="reportDetailReason{{ report.pk }}"
+                                data-resolution-submit="确认认可并通知用户"
+                                data-resolution-tone="danger">
+                                认可此举报
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm"
+                                data-bs-toggle="modal"
+                                data-bs-target="#reportResolutionModal"
+                                data-resolution-trigger
+                                data-resolution-action="{% url 'admin_resolve_report' report.pk 'dismiss' %}"
+                                data-resolution-title="驳回单条举报"
+                                data-resolution-subject="举报人：{{ report.reporter.username|default:'已删除账户' }}"
+                                data-resolution-context-label="举报内容："
+                                data-resolution-context-source="reportDetailReason{{ report.pk }}"
+                                data-resolution-submit="确认驳回并通知举报人"
+                                data-resolution-tone="secondary">
+                                驳回此举报
+                            </button>
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="moderation-report-item moderation-history__empty">该分享目前没有待处理举报。</li>
+                    {% endfor %}
+                </ol>
+            </section>
+
+            {% include 'shares/includes/pagination.html' with page_obj=reports aria_label='该分享待处理举报分页' nav_class='moderation-report-pagination' %}
+        </div>
+    </section>
+
+    {% if reports %}
+    {% url 'admin_report_share' share.share_id as report_detail_url %}
+    {% include 'shares/includes/moderation_report_resolution_modal.html' with resolution_error=resolution_error resolution_form=resolution_form fallback_action=report_detail_url return_page=None csrf_token=csrf_token only %}
+    {% endif %}
+</div>
+{% endblock %}

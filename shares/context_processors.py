@@ -19,6 +19,8 @@ def admin_counts(request):
         pending_reviews_count = counts['pending_reviews_count']
         pending_reports_count = counts['pending_reports_count']
         context.update({
+            'pending_reviews_count': pending_reviews_count,
+            'pending_reports_count': pending_reports_count,
             'global_pending_reviews_count': pending_reviews_count,
             'global_pending_reports_count': pending_reports_count,
             'has_admin_actions': pending_reviews_count + pending_reports_count > 0

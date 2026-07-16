@@ -55,6 +55,7 @@ urlpatterns = [
     path('share/<str:share_id>/report/', moderation.report_share, name='report_share'),
     path('staff/reports/', moderation.admin_report_list, name='admin_report_list'),
     path('staff/reports/logs/', moderation.admin_report_logs, name='admin_report_logs'),
+    path('staff/reports/share/<str:share_id>/', moderation.admin_report_share, name='admin_report_share'),
     path('staff/reports/<int:report_id>/<str:action>/', moderation.admin_resolve_report, name='admin_resolve_report'),
 
     path('staff/reports/share/<str:share_id>/<str:action>/', moderation.admin_resolve_share_reports, name='admin_resolve_share_reports'),

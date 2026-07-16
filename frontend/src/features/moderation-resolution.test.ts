@@ -28,6 +28,7 @@ describe('moderation resolution modal', () => {
         data-resolution-context="用户提供的举报内容"
         data-resolution-submit="确认认可"
         data-resolution-tone="danger"></button>
+      <p id="report-reason-source">来自页面的&lt;img src=x onerror=alert(1)&gt;举报内容</p>
       <button
         id="dismiss"
         data-resolution-trigger
@@ -109,6 +110,24 @@ describe('moderation resolution modal', () => {
 
     dispatchModalEvent(modal, 'shown.bs.modal')
     expect(document.activeElement).toBe(reason)
+  })
+
+  it('reads user context from a stable text source without duplicating or parsing HTML', () => {
+    const modal = document.querySelector<HTMLElement>('[data-moderation-resolution-modal]')!
+    const trigger = document.querySelector<HTMLElement>('#resolve')!
+    trigger.dataset.resolutionContextSource = 'report-reason-source'
+    trigger.dataset.resolutionContext = '不应优先使用的回退内容'
+    initializeModerationResolution()
+
+    dispatchModalEvent(modal, 'show.bs.modal', trigger)
+
+    const value = modal.querySelector<HTMLElement>('[data-resolution-modal-context-value]')!
+    expect(value.textContent).toBe('来自页面的<img src=x onerror=alert(1)>举报内容')
+    expect(value.querySelector('img')).toBeNull()
+
+    trigger.dataset.resolutionContextSource = 'missing-source'
+    dispatchModalEvent(modal, 'show.bs.modal', trigger)
+    expect(value.textContent).toBe('不应优先使用的回退内容')
   })
 
   it('reopens a server-invalid report action without clearing its reason and focuses errors', () => {

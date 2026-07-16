@@ -2,7 +2,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquery, Value
+from django.db.models.functions import Coalesce, Length, Substr
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -18,7 +19,6 @@ from shares.forms import (
 from shares.models import Report, Share, ShareLog
 from shares.policies import can_view_share, is_moderator
 from shares.rate_limits import consume_rate_limit, request_identity
-from shares.selectors import admin_task_counts
 from shares.services.moderation import (
     approve_share,
     confirm_share_restriction,
@@ -29,9 +29,63 @@ from shares.services.moderation import (
 )
 
 
+_QUEUE_LOG_PREVIEW_SIZE = 5
+_QUEUE_REPORT_PREVIEW_SIZE = 5
+_QUEUE_TEXT_PREVIEW_LENGTH = 500
+_QUEUE_REPORT_TEXT_PREVIEW_LENGTH = 160
+_AUDIT_TEXT_PREVIEW_LENGTH = 2000
+
+
 def _admin_context(**context):
-    context.update(admin_task_counts())
     return context
+
+
+def _log_preview_queryset(*, text_length=_QUEUE_TEXT_PREVIEW_LENGTH):
+    return ShareLog.objects.select_related('user').annotate(
+        details_preview=Substr('details', 1, text_length),
+        details_length=Length('details'),
+    ).defer('details').order_by('-created_at', '-pk')
+
+
+def _queue_log_prefetch():
+    return Prefetch(
+        'logs',
+        queryset=_log_preview_queryset()[:_QUEUE_LOG_PREVIEW_SIZE + 1],
+        to_attr='share_logs',
+    )
+
+
+def _queue_share_queryset(queryset=None, *, include_strategy_code=False):
+    queryset = queryset if queryset is not None else Share.objects.all()
+    deferred_fields = [
+        'description',
+        'review_feedback',
+        'restriction_reason',
+    ]
+    if not include_strategy_code:
+        deferred_fields.append('strategy_code')
+    return queryset.select_related(
+        'author',
+        'author__profile',
+        'restricted_by',
+    ).annotate(
+        description_preview=Substr(
+            'description',
+            1,
+            _QUEUE_TEXT_PREVIEW_LENGTH,
+        ),
+        restriction_reason_preview=Substr(
+            'restriction_reason',
+            1,
+            _QUEUE_TEXT_PREVIEW_LENGTH,
+        ),
+    ).defer(*deferred_fields).prefetch_related(_queue_log_prefetch())
+
+
+def _normalize_log_preview(share):
+    logs = list(getattr(share, 'share_logs', ()))
+    share.share_logs_truncated = len(logs) > _QUEUE_LOG_PREVIEW_SIZE
+    share.share_logs = tuple(logs[:_QUEUE_LOG_PREVIEW_SIZE])
 
 
 def _staff_reason_form(
@@ -53,19 +107,12 @@ def _staff_reason_form(
 
 
 def _review_queryset():
-    return Share.objects.filter(
-        Q(status=Share.Status.PENDING)
-        | ~Q(restriction_state=Share.RestrictionState.CLEAR)
-    ).select_related(
-        'author',
-        'author__profile',
-        'restricted_by',
-    ).prefetch_related(
-        Prefetch(
-            'logs',
-            queryset=ShareLog.objects.select_related('user').order_by('-created_at'),
-            to_attr='share_logs',
-        )
+    return _queue_share_queryset(
+        Share.objects.filter(
+            Q(status=Share.Status.PENDING)
+            | ~Q(restriction_state=Share.RestrictionState.CLEAR)
+        ),
+        include_strategy_code=True,
     ).order_by('-created_at', '-pk')
 
 
@@ -164,6 +211,8 @@ def _review_queue_context(
         page_number,
         invalid_share,
     )
+    for share in shares:
+        _normalize_log_preview(share)
     review_items = [
         _review_item(
             share,
@@ -186,6 +235,7 @@ def _review_queue_context(
         for item in review_items
     ) if invalid_share is not None else True
     if not target_is_visible:
+        _normalize_log_preview(invalid_share)
         review_items.insert(0, _review_item(
             invalid_share,
             return_page=shares.number,
@@ -203,17 +253,7 @@ def _review_queue_context(
 
 def _render_review_form_error(request, *, share_id, action, form):
     share = get_object_or_404(
-        Share.objects.select_related(
-            'author',
-            'author__profile',
-            'restricted_by',
-        ).prefetch_related(
-            Prefetch(
-                'logs',
-                queryset=ShareLog.objects.select_related('user').order_by('-created_at'),
-                to_attr='share_logs',
-            )
-        ),
+        _queue_share_queryset(include_strategy_code=True),
         share_id=share_id,
     )
     if action == 'confirm' and form.errors.get('version'):
@@ -402,25 +442,54 @@ def report_share(request, share_id):
     return render(request, 'shares/report_share.html', {'form': form, 'share': share})
 
 
+def _pending_report_count():
+    counts = Report.objects.filter(
+        share_id=OuterRef('pk'),
+        status=Report.Status.PENDING,
+    ).order_by().values('share_id').annotate(
+        total=Count('pk'),
+    ).values('total')[:1]
+    return Coalesce(
+        Subquery(counts, output_field=IntegerField()),
+        Value(0),
+        output_field=IntegerField(),
+    )
+
+
+def _report_preview_queryset(*, text_length=_QUEUE_TEXT_PREVIEW_LENGTH):
+    return Report.objects.select_related('reporter').annotate(
+        reason_preview=Substr('reason', 1, text_length),
+        reason_length=Length('reason'),
+    ).defer('reason').order_by('-created_at', '-pk')
+
+
+def _pending_report_queryset(*, text_length=_QUEUE_TEXT_PREVIEW_LENGTH):
+    return _report_preview_queryset(text_length=text_length).filter(
+        status=Report.Status.PENDING,
+    )
+
+
 def _report_queryset():
-    return Share.objects.annotate(
-        pending_count=Count(
-            'reports', filter=Q(reports__status=Report.Status.PENDING),
-        )
-    ).filter(pending_count__gt=0).prefetch_related(
+    return _queue_share_queryset(
+        Share.objects.annotate(
+            pending_count=_pending_report_count(),
+        ).filter(pending_count__gt=0)
+    ).prefetch_related(
         Prefetch(
             'reports',
-            queryset=Report.objects.filter(
-                status=Report.Status.PENDING,
-            ).select_related('reporter'),
+            queryset=_pending_report_queryset(
+                text_length=_QUEUE_REPORT_TEXT_PREVIEW_LENGTH,
+            )[:_QUEUE_REPORT_PREVIEW_SIZE],
             to_attr='pending_reports',
         ),
-        Prefetch(
-            'logs',
-            queryset=ShareLog.objects.select_related('user').order_by('-created_at'),
-            to_attr='share_logs',
-        ),
     ).order_by('-pending_count', '-updated_at', '-pk')
+
+
+def _normalize_report_preview(share):
+    _normalize_log_preview(share)
+    reports = tuple(getattr(share, 'pending_reports', ()))
+    share.pending_reports = reports
+    share.pending_reports_truncated = share.pending_count > len(reports)
 
 
 def _page_containing_report(queryset, page_number, target_share=None):
@@ -461,6 +530,8 @@ def _report_queue_context(
         page_number,
         target_share,
     )
+    for share in shares:
+        _normalize_report_preview(share)
     if resolution_form is None:
         resolution_form = _staff_reason_form(
             ReportResolutionForm,
@@ -487,7 +558,7 @@ def _report_resolution_error(*, action, action_url, share, report=None):
             'title': '认可单条举报' if resolve else '驳回单条举报',
             'subject': f'举报人：{reporter}',
             'context_label': '举报内容：',
-            'context': report.reason,
+            'context': report.reason_preview,
             'submit': '确认认可并通知用户' if resolve else '确认驳回并通知举报人',
             'tone': 'danger' if resolve else 'secondary',
             'target_stale': report.status != Report.Status.PENDING,
@@ -508,7 +579,11 @@ def _report_resolution_error(*, action, action_url, share, report=None):
                 if share.is_restricted
                 else ''
             ),
-            'context': share.restriction_reason if share.is_restricted else '',
+            'context': (
+                share.restriction_reason_preview
+                if share.is_restricted
+                else ''
+            ),
             'submit': '确认认可并通知用户',
             'tone': 'danger',
             'target_stale': pending_count == 0,
@@ -557,6 +632,36 @@ def admin_report_list(request):
 
 
 @user_passes_test(is_moderator)
+def admin_report_share(request, share_id):
+    share = get_object_or_404(
+        _queue_share_queryset(
+            Share.objects.annotate(pending_count=_pending_report_count())
+        ),
+        share_id=share_id,
+    )
+    _normalize_log_preview(share)
+    reports = Paginator(
+        _pending_report_queryset(
+            text_length=_AUDIT_TEXT_PREVIEW_LENGTH,
+        ).filter(share=share),
+        20,
+    ).get_page(request.GET.get('page'))
+    resolution_form = _staff_reason_form(
+        ReportResolutionForm,
+        auto_id='report-resolution-%s',
+        help_id='report-resolution-help',
+        error_id='report-resolution-errors',
+    )
+    return render(request, 'shares/admin_report_share.html', _admin_context(
+        share=share,
+        reports=reports,
+        resolution_form=resolution_form,
+        resolution_error=None,
+        moderation_active_tab='admin_report_list',
+    ))
+
+
+@user_passes_test(is_moderator)
 @require_POST
 def admin_resolve_report(request, report_id, action):
     if action not in {'resolve', 'dismiss'}:
@@ -571,7 +676,9 @@ def admin_resolve_report(request, report_id, action):
     )
     if not form.is_valid():
         report = get_object_or_404(
-            Report.objects.select_related('share', 'reporter'),
+            _report_preview_queryset(
+                text_length=_AUDIT_TEXT_PREVIEW_LENGTH,
+            ).select_related('share', 'reporter'),
             pk=report_id,
         )
         return _render_report_form_error(
@@ -622,7 +729,10 @@ def admin_resolve_share_reports(request, share_id, action):
         error_id='report-resolution-errors',
     )
     if not form.is_valid():
-        share = get_object_or_404(Share, share_id=share_id)
+        share = get_object_or_404(
+            _queue_share_queryset(),
+            share_id=share_id,
+        )
         return _render_report_form_error(
             request,
             form=form,
@@ -659,12 +769,14 @@ def admin_resolve_share_reports(request, share_id, action):
 @user_passes_test(is_moderator)
 def admin_review_logs(request):
     logs = Paginator(
-        ShareLog.objects.filter(action__in=[
+        _log_preview_queryset(
+            text_length=_AUDIT_TEXT_PREVIEW_LENGTH,
+        ).filter(action__in=[
             ShareLog.ActionType.REVIEW_APPROVE,
             ShareLog.ActionType.REVIEW_REJECT,
             ShareLog.ActionType.RESTRICTION_CONFIRM,
             ShareLog.ActionType.RESTRICTION_RELEASE,
-        ]).select_related('user', 'share').order_by('-created_at'),
+        ]).select_related('user', 'share'),
         20,
     ).get_page(request.GET.get('page'))
     return render(request, 'shares/admin_review_logs.html', _admin_context(logs=logs))
@@ -673,9 +785,11 @@ def admin_review_logs(request):
 @user_passes_test(is_moderator)
 def admin_report_logs(request):
     logs = Paginator(
-        ShareLog.objects.filter(
+        _log_preview_queryset(
+            text_length=_AUDIT_TEXT_PREVIEW_LENGTH,
+        ).filter(
             action=ShareLog.ActionType.REPORT_HANDLE,
-        ).select_related('user', 'share').order_by('-created_at'),
+        ).select_related('user', 'share'),
         20,
     ).get_page(request.GET.get('page'))
     return render(request, 'shares/admin_report_logs.html', _admin_context(logs=logs))

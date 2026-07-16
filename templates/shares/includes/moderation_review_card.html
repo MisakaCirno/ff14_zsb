@@ -33,8 +33,8 @@
             </div>
 
             <p class="moderation-review-card__description">
-                {% if share.description %}
-                {{ share.description|striptags|truncatechars:60 }}
+                {% if share.description_preview %}
+                {{ share.description_preview|striptags|truncatechars:60 }}
                 {% else %}
                 <em>暂无描述</em>
                 {% endif %}
@@ -43,7 +43,7 @@
             {% if share.is_restricted %}
             <div class="alert alert-danger mb-0 py-2 small moderation-review-card__state-copy" role="note">
                 <strong>{{ share.get_restriction_state_display }}：</strong>
-                {{ share.restriction_reason }}
+                {{ share.restriction_reason_preview }}
             </div>
             {% endif %}
 
@@ -61,8 +61,10 @@
                                 <time datetime="{{ log.created_at|date:'c' }}">{{ log.created_at|date:"m-d H:i" }}</time>
                             </div>
                             <span class="badge bg-secondary">{{ log.get_action_display }}</span>
-                            {% if log.details %}
-                            <p class="moderation-history__details">{{ log.details }}</p>
+                            {% if log.details_preview %}
+                            <p class="moderation-history__details">
+                                {{ log.details_preview }}{% if log.details_length > 500 %}…{% endif %}
+                            </p>
                             {% endif %}
                         </li>
                         {% empty %}
@@ -70,6 +72,9 @@
                         {% endfor %}
                     </ol>
                 </div>
+                {% if share.share_logs_truncated %}
+                <p class="moderation-history__empty">仅展示最近 5 条；完整记录仍保留在审计日志中。</p>
+                {% endif %}
             </section>
         </div>
 

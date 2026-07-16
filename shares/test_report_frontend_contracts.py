@@ -70,9 +70,13 @@ class ReportFrontendContractTests(TestCase):
     def test_report_templates_use_shared_moderation_components_and_one_resolution_form(self):
         submit_source = self.read_source('templates/shares/report_share.html')
         queue_source = self.read_source('templates/shares/admin_report_list.html')
+        detail_source = self.read_source('templates/shares/admin_report_share.html')
+        modal_source = self.read_source(
+            'templates/shares/includes/moderation_report_resolution_modal.html'
+        )
         log_source = self.read_source('templates/shares/admin_report_logs.html')
 
-        for source in (submit_source, queue_source, log_source):
+        for source in (submit_source, queue_source, detail_source, log_source):
             self.assertIn("shares/includes/moderation_page_header.html", source)
             self.assertIn("icon='bi bi-", source)
             self.assertIn('moderation-report-', source)
@@ -82,10 +86,12 @@ class ReportFrontendContractTests(TestCase):
         self.assertIn("shares/includes/admin_tabs.html", queue_source)
         self.assertIn("shares/includes/pagination.html", queue_source)
         self.assertIn("shares/includes/empty_state.html", queue_source)
-        self.assertIn('{{ resolution_form.reason }}', queue_source)
-        self.assertEqual(queue_source.count('id="reportResolutionModal"'), 1)
-        self.assertIn('data-resolution-modal-submit', queue_source)
-        self.assertIn('{% if not resolution_error %} disabled{% endif %}', queue_source)
+        self.assertIn('moderation_report_resolution_modal.html', queue_source)
+        self.assertIn('moderation_report_resolution_modal.html', detail_source)
+        self.assertIn('{{ resolution_form.reason }}', modal_source)
+        self.assertEqual(modal_source.count('id="reportResolutionModal"'), 1)
+        self.assertIn('data-resolution-modal-submit', modal_source)
+        self.assertIn('{% if not resolution_error %} disabled{% endif %}', modal_source)
         self.assertNotIn('dismissReportModal', queue_source)
         self.assertNotIn('shares.paginator.page_range', queue_source)
         self.assertNotIn('href="?page=', queue_source)
@@ -164,7 +170,8 @@ class ReportFrontendContractTests(TestCase):
         self.assertIsInstance(response.context['resolution_form'], ReportResolutionForm)
         self.assertContains(response, self.long_title)
         self.assertContains(response, self.author.username)
-        self.assertContains(response, self.long_reason)
+        self.assertContains(response, self.long_reason[:160])
+        self.assertNotContains(response, self.long_reason[160:])
         self.assertContains(response, 'id="reportResolutionModal"', count=1)
         self.assertContains(response, 'name="reason"', count=1)
         self.assertContains(response, 'id="report-resolution-reason"', count=1)
@@ -218,6 +225,50 @@ class ReportFrontendContractTests(TestCase):
         empty_response = self.client.get(reverse('admin_report_list'))
         self.assertContains(empty_response, 'class="card empty-state"')
         self.assertContains(empty_response, '暂无待处理的举报')
+
+    def test_report_queue_preview_links_to_paginated_per_share_processing(self):
+        extra_reporters = User.objects.bulk_create([
+            User(username=f'report-detail-user-{index:02d}')
+            for index in range(19)
+        ])
+        Report.objects.bulk_create([
+            Report(
+                share=self.share,
+                reporter=reporter,
+                reason=f'较旧举报 {index:02d}',
+            )
+            for index, reporter in enumerate(extra_reporters)
+        ])
+        self.client.force_login(self.moderator)
+
+        queue = self.client.get(reverse('admin_report_list'))
+
+        queued_share = queue.context['shares'][0]
+        self.assertEqual(queued_share.pending_count, 21)
+        self.assertEqual(len(queued_share.pending_reports), 5)
+        self.assertTrue(queued_share.pending_reports_truncated)
+        detail_url = reverse('admin_report_share', args=[self.share.share_id])
+        self.assertContains(queue, detail_url)
+
+        first_page = self.client.get(detail_url)
+        second_page = self.client.get(detail_url, {'page': 2})
+
+        self.assertEqual(len(first_page.context['reports']), 20)
+        self.assertEqual(len(second_page.context['reports']), 1)
+        old_report = second_page.context['reports'][0]
+        dismiss_url = reverse(
+            'admin_resolve_report',
+            args=[old_report.pk, 'dismiss'],
+        )
+        self.assertContains(second_page, dismiss_url)
+
+        dismissed = self.client.post(dismiss_url, {
+            'reason': '分页详情中核查后驳回该举报',
+        })
+
+        self.assertRedirects(dismissed, reverse('admin_report_list'))
+        old_report.refresh_from_db()
+        self.assertEqual(old_report.status, Report.Status.DISMISSED)
 
     def test_report_log_uses_responsive_audit_list_for_long_content_and_multiple_pages(self):
         details = '处理依据：' + ('不可拆分的连续审计说明' * 40)

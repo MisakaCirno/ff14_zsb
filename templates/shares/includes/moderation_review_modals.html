@@ -59,7 +59,7 @@
             </div>
             <div class="modal-body">
                 <p class="moderation-modal__context">分享：{{ share.title }}</p>
-                <p class="moderation-modal__reason"><strong>当前原因：</strong>{{ share.restriction_reason }}</p>
+                <p class="moderation-modal__reason"><strong>当前原因：</strong>{{ share.restriction_reason_preview }}</p>
                 {% if item.target_outside_queue %}
                 <div class="alert alert-warning" role="status">
                     目标状态已发生变化，本次提交尚未执行。请核对当前状态后再决定是否重试。
@@ -102,7 +102,7 @@
             </div>
             <div class="modal-body">
                 <p class="moderation-modal__context">分享：{{ share.title }}</p>
-                <p class="moderation-modal__reason"><strong>当前原因：</strong>{{ share.restriction_reason }}</p>
+                <p class="moderation-modal__reason"><strong>当前原因：</strong>{{ share.restriction_reason_preview }}</p>
                 {% if item.target_outside_queue %}
                 <div class="alert alert-warning" role="status">
                     目标状态已发生变化，本次提交尚未执行。请核对当前状态后再决定是否重试。
