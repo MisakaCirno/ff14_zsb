@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from hashlib import sha256
+import json
 import os
 from pathlib import Path
 import sqlite3
+from typing import Iterable
 from uuid import uuid4
 
 from django.db import connections
+
+
+BACKUP_METHOD = 'sqlite_backup_api'
+BACKUP_METADATA_SCHEMA_VERSION = 1
 
 
 class DatabaseBackupError(RuntimeError):
@@ -21,14 +28,96 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _write_text_atomic(path: Path, content: str) -> None:
+def _write_staged_text(path: Path, content: str) -> Path:
     temporary = path.with_name(f'.{path.name}.tmp-{uuid4().hex}')
     try:
-        temporary.write_text(content, encoding='utf-8', newline='\n')
-        os.replace(temporary, path)
+        with temporary.open('w', encoding='utf-8', newline='\n') as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
+    return temporary
+
+
+def _restore_output_set(
+    published: list[tuple[Path, Path]],
+    displaced: list[tuple[Path, Path]],
+) -> list[str]:
+    errors: list[str] = []
+    for staged, destination in reversed(published):
+        try:
+            if destination.exists():
+                os.replace(destination, staged)
+        except OSError:
+            errors.append(destination.name)
+    for destination, rollback in reversed(displaced):
+        try:
+            if rollback.exists():
+                os.replace(rollback, destination)
+        except OSError:
+            errors.append(destination.name)
+    return errors
+
+
+def _publish_output_set(
+    outputs: Iterable[tuple[Path, Path]],
+    *,
+    overwrite: bool,
+) -> None:
+    output_set = tuple(outputs)
+    displaced: list[tuple[Path, Path]] = []
+    published: list[tuple[Path, Path]] = []
+    succeeded = False
+    try:
+        for _staged, destination in output_set:
+            if destination.exists() and not overwrite:
+                raise DatabaseBackupError(
+                    'A backup output appeared while the backup was being created. '
+                    'Use --overwrite explicitly after reviewing it.'
+                )
+
+        for _staged, destination in output_set:
+            if not destination.exists():
+                continue
+            rollback = destination.with_name(
+                f'.{destination.name}.rollback-{uuid4().hex}'
+            )
+            os.replace(destination, rollback)
+            displaced.append((destination, rollback))
+
+        for staged, destination in output_set:
+            os.replace(staged, destination)
+            published.append((staged, destination))
+        succeeded = True
+    except Exception as exc:
+        rollback_errors = _restore_output_set(published, displaced)
+        if rollback_errors:
+            names = ', '.join(sorted(set(rollback_errors)))
+            raise DatabaseBackupError(
+                'Backup publication failed and automatic rollback was incomplete '
+                f'for: {names}.'
+            ) from exc
+        raise
     finally:
-        if temporary.exists():
-            temporary.unlink()
+        if succeeded:
+            for _destination, rollback in displaced:
+                rollback.unlink(missing_ok=True)
+
+
+def _metadata_payload(*, digest: str, size: int) -> dict[str, object]:
+    return {
+        'schema_version': BACKUP_METADATA_SCHEMA_VERSION,
+        'generated_at': datetime.now(UTC).isoformat().replace('+00:00', 'Z'),
+        'backup_method': BACKUP_METHOD,
+        'database_vendor': 'sqlite',
+        'application_version': os.environ.get('APP_VERSION', 'unknown'),
+        'sha256': digest,
+        'size': size,
+        'integrity_check': 'ok',
+        'foreign_key_check': 'ok',
+    }
 
 
 def backup_sqlite_database(
@@ -45,9 +134,12 @@ def backup_sqlite_database(
 
     output = Path(output_file).expanduser().resolve()
     checksum_path = output.with_name(f'{output.name}.sha256')
-    if (output.exists() or checksum_path.exists()) and not overwrite:
+    metadata_path = output.with_name(f'{output.name}.metadata.json')
+    output_paths = (output, checksum_path, metadata_path)
+    if any(path.exists() for path in output_paths) and not overwrite:
         raise DatabaseBackupError(
-            f'Backup output already exists: {output}. Use --overwrite explicitly.'
+            'One or more backup outputs already exist. '
+            'Use --overwrite explicitly after reviewing all three files.'
         )
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -58,6 +150,8 @@ def backup_sqlite_database(
             raise DatabaseBackupError('Backup output must differ from the live database path.')
 
     temporary = output.with_name(f'.{output.name}.tmp-{uuid4().hex}')
+    staged_checksum: Path | None = None
+    staged_metadata: Path | None = None
     destination = None
     try:
         database.ensure_connection()
@@ -71,16 +165,44 @@ def backup_sqlite_database(
             raise DatabaseBackupError(
                 f'Backup integrity check failed: {integrity_rows!r}'
             )
+        foreign_key_violation = destination.execute(
+            'PRAGMA foreign_key_check'
+        ).fetchone()
+        if foreign_key_violation is not None:
+            raise DatabaseBackupError(
+                'Backup foreign key check failed; one or more violations were found.'
+            )
         destination.close()
         destination = None
 
         digest = _file_sha256(temporary)
         size = temporary.stat().st_size
-        os.replace(temporary, output)
-        _write_text_atomic(checksum_path, f'{digest}  {output.name}\n')
+        metadata = _metadata_payload(digest=digest, size=size)
+        staged_checksum = _write_staged_text(
+            checksum_path,
+            f'{digest}  {output.name}\n',
+        )
+        staged_metadata = _write_staged_text(
+            metadata_path,
+            json.dumps(
+                metadata,
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            ) + '\n',
+        )
+        _publish_output_set(
+            (
+                (temporary, output),
+                (staged_checksum, checksum_path),
+                (staged_metadata, metadata_path),
+            ),
+            overwrite=overwrite,
+        )
         return {
             'path': str(output),
             'checksum_path': str(checksum_path),
+            'metadata_path': str(metadata_path),
             'sha256': digest,
             'size': size,
         }
@@ -89,3 +211,7 @@ def backup_sqlite_database(
             destination.close()
         if temporary.exists():
             temporary.unlink()
+        if staged_checksum is not None and staged_checksum.exists():
+            staged_checksum.unlink()
+        if staged_metadata is not None and staged_metadata.exists():
+            staged_metadata.unlink()
