@@ -5,7 +5,7 @@ from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import User
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST, require_safe
@@ -24,7 +24,7 @@ from shares.presentation import (
     redirect_response,
     render_share_cards_response,
 )
-from shares.selectors import annotate_share_cards
+from shares.selectors import annotate_collection_cards, annotate_share_cards
 from shares.validation import SEARCH_QUERY_MAX_LENGTH
 
 
@@ -193,24 +193,28 @@ def user_public_profile(request, username):
     current_tab = request.GET.get('tab', 'shares')
     if current_tab not in _PUBLIC_PROFILE_TABS:
         current_tab = 'shares'
-    shares = Paginator(
-        public_share_queryset(Share.objects.filter(author=author)).order_by(
-            '-created_at',
-            '-pk',
-        ),
-        12,
-    ).get_page(request.GET.get('page') if current_tab == 'shares' else None)
-    collections = Collection.objects.filter(
-        author=author,
-        is_public=True,
-    ).annotate(item_count=Count('collectionitem')).order_by('-updated_at', '-pk')
-    return render(request, 'shares/user_public_profile.html', {
+    context = {
         'author': author,
-        'shares': shares,
-        'collections': collections,
         'current_tab': current_tab,
         'author_presentation': build_user_presentation(author),
-    })
+    }
+    public_shares = public_share_queryset(
+        Share.objects.filter(author=author),
+    ).order_by('-created_at', '-pk')
+    if current_tab == 'collections':
+        queryset = annotate_collection_cards(
+            Collection.objects.filter(author=author, is_public=True),
+        ).order_by('-updated_at', '-pk')
+        context['collections'] = Paginator(queryset, 12).get_page(
+            request.GET.get('page')
+        )
+        context['public_share_count'] = public_shares.count()
+    else:
+        context['shares'] = Paginator(public_shares, 12).get_page(
+            request.GET.get('page')
+        )
+        context['public_share_count'] = context['shares'].paginator.count
+    return render(request, 'shares/user_public_profile.html', context)
 
 
 def announcement_list(request):

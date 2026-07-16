@@ -55,6 +55,20 @@ def can_view_collection(user, collection):
     return collection.is_public or is_owner(user, collection) or is_moderator(user)
 
 
+def viewable_collection_queryset(user, queryset=None):
+    """Apply collection visibility in SQL so pagination stays complete."""
+    queryset = queryset if queryset is not None else Collection.objects.all()
+    if not isinstance(queryset, QuerySet):
+        raise TypeError('queryset must be a Django QuerySet')
+    if is_moderator(user):
+        return queryset
+
+    visibility_filter = Q(is_public=True)
+    if user and user.is_authenticated and user.pk is not None:
+        visibility_filter |= Q(author_id=user.pk)
+    return queryset.filter(visibility_filter)
+
+
 def public_share_queryset(queryset=None):
     queryset = queryset if queryset is not None else Share.objects.all()
     if not isinstance(queryset, QuerySet):

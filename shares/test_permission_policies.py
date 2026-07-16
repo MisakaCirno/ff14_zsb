@@ -571,7 +571,7 @@ class PermissionEnforcementTests(TestCase):
                 for summary in summaries
             ]
 
-        self.assertEqual(len(captured), 2)
+        self.assertEqual(len(captured), 3)
         self.assertEqual(len(snapshots), 2)
         for _, titles, positions in snapshots:
             self.assertEqual(

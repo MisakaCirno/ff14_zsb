@@ -13,22 +13,12 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭添加到合集窗口"></button>
             </div>
             <div class="modal-body">
-                {% if user_collections %}
-                <form class="share-detail-modal__form" action="{% url 'add_share_to_collection' share.share_id %}" method="post">
-                    {% csrf_token %}
-                    <div class="share-detail-modal__field">
-                        <label class="form-label" for="share-detail-collection-select">选择合集</label>
-                        <select class="form-select" id="share-detail-collection-select" name="collection_id" required>
-                            {% for collection in user_collections %}
-                            <option value="{{ collection.id }}">{{ collection.title }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-folder-plus" aria-hidden="true"></i>
-                        确定添加
-                    </button>
-                </form>
+                {% if has_user_collections %}
+                <p>合集选择已改为分页页面，合集较多时也不会一次载入全部数据。</p>
+                <a class="btn btn-primary" href="{% url 'select_collection_for_share' share.share_id %}">
+                    <i class="bi bi-folder-plus" aria-hidden="true"></i>
+                    选择合集
+                </a>
                 <div class="share-detail-modal__secondary-action">
                     <a href="{% url 'create_collection' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-outline-primary">
                         <i class="bi bi-plus-lg" aria-hidden="true"></i>

@@ -59,5 +59,6 @@
         {% endwith %}
         {% endfor %}
     </div>
+    {% include 'shares/includes/pagination.html' with page_obj=related_collections aria_label='所属合集分页' nav_class='mt-3' %}
 </section>
 {% endif %}

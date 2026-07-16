@@ -64,6 +64,7 @@ urlpatterns = [
     path('collections/<int:collection_id>/', collections.collection_detail, name='collection_detail'),
     path('collections/<int:collection_id>/edit/', collections.edit_collection, name='edit_collection'),
     path('collections/<int:collection_id>/delete/', collections.delete_collection, name='delete_collection'),
+    path('share/<str:share_id>/collections/', collections.select_collection_for_share, name='select_collection_for_share'),
     path('share/<str:share_id>/add-to-collection/', collections.add_share_to_collection, name='add_share_to_collection'),
     path('share/<str:share_id>/like/', interactions.toggle_like, name='toggle_like'),
     path('share/<str:share_id>/favorite/', interactions.toggle_favorite, name='toggle_favorite'),

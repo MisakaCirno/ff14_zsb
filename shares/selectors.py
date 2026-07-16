@@ -1,24 +1,24 @@
 from dataclasses import dataclass
 
+from django.core.paginator import Paginator
 from django.db.models import (
     BooleanField,
     Count,
     Exists,
-    F,
     IntegerField,
     OuterRef,
     Q,
     Subquery,
     Value,
-    Window,
 )
-from django.db.models.functions import Coalesce, RowNumber, Substr
+from django.db.models.functions import Coalesce, Substr
 
 from .models import Collection, CollectionItem, Report, Share, SiteMessage
-from .policies import can_view_collection, viewable_share_queryset
+from .policies import viewable_collection_queryset, viewable_share_queryset
 
 
 _RELATED_COLLECTION_PREVIEW_SIZE = 5
+_RELATED_COLLECTIONS_PER_PAGE = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,50 +28,115 @@ class RelatedCollectionSummary:
     visible_item_count: int
 
 
-def related_collection_summaries(share, user):
-    """Build permission-filtered collection previews for a share detail page."""
-    visible_share_ids = viewable_share_queryset(user).order_by().values('pk')
-    contains_share = CollectionItem.objects.filter(
-        collection_id=OuterRef('pk'),
-        share=share,
+def _collection_item_count_subquery(visible_share_ids=None):
+    counts = CollectionItem.objects.filter(collection_id=OuterRef('pk'))
+    if visible_share_ids is not None:
+        counts = counts.filter(share_id__in=visible_share_ids)
+    counts = counts.order_by().values('collection_id').annotate(
+        total=Count('pk'),
+    ).values('total')[:1]
+    return Coalesce(
+        Subquery(counts, output_field=IntegerField()),
+        Value(0),
+        output_field=IntegerField(),
     )
-    collections = [
-        collection
-        for collection in Collection.objects.select_related(
+
+
+def annotate_collection_cards(queryset):
+    """Add item totals without joining every collection item into the page."""
+    return queryset.annotate(item_count=_collection_item_count_subquery())
+
+
+def _related_collection_page(queryset, page_number, selected_collection_id):
+    paginator = Paginator(queryset, _RELATED_COLLECTIONS_PER_PAGE)
+    if page_number not in (None, ''):
+        return paginator.get_page(page_number)
+    try:
+        selected_pk = int(selected_collection_id)
+    except (TypeError, ValueError):
+        return paginator.get_page(None)
+    if selected_pk <= 0:
+        return paginator.get_page(None)
+
+    target = queryset.filter(pk=selected_pk).values('pk', 'updated_at').first()
+    if target is None:
+        return paginator.get_page(None)
+    items_before_target = queryset.filter(
+        Q(updated_at__gt=target['updated_at'])
+        | Q(updated_at=target['updated_at'], pk__gt=target['pk'])
+    ).count()
+    return paginator.get_page((items_before_target // paginator.per_page) + 1)
+
+
+def related_collection_summaries(
+    share,
+    user,
+    *,
+    page_number=None,
+    selected_collection_id=None,
+):
+    """Build one bounded page of permission-filtered collection previews."""
+    visible_share_ids = viewable_share_queryset(user).order_by().values('pk')
+    queryset = viewable_collection_queryset(
+        user,
+        Collection.objects.select_related(
             'author',
             'author__profile',
-        ).annotate(
-            contains_share=Exists(contains_share),
-            visible_item_count=Count(
-                'collectionitem',
-                filter=Q(collectionitem__share_id__in=visible_share_ids),
-            ),
-        ).filter(contains_share=True).order_by('-updated_at')
-        if can_view_collection(user, collection)
-    ]
+        ).filter(collectionitem__share=share),
+    ).annotate(
+        visible_item_count=_collection_item_count_subquery(visible_share_ids),
+    ).order_by('-updated_at', '-pk')
+    page = _related_collection_page(
+        queryset,
+        page_number,
+        selected_collection_id,
+    )
+    collections = list(page.object_list)
     if not collections:
-        return []
+        page.object_list = ()
+        return page
 
     visible_items_by_collection = {
         collection.pk: []
         for collection in collections
     }
+    preview_filter = Q()
+    for collection_id in visible_items_by_collection:
+        preview_item_ids = CollectionItem.objects.filter(
+            collection_id=collection_id,
+            share_id__in=visible_share_ids,
+        ).order_by(
+            'order',
+            'added_at',
+            'pk',
+        ).values('pk')[:_RELATED_COLLECTION_PREVIEW_SIZE]
+        preview_filter |= Q(
+            collection_id=collection_id,
+            pk__in=Subquery(preview_item_ids),
+        )
+
+    preceding_visible_items = CollectionItem.objects.filter(
+        collection_id=OuterRef('collection_id'),
+        share_id__in=visible_share_ids,
+        order__lt=OuterRef('order'),
+    ).order_by().values('collection_id').annotate(
+        total=Count('pk'),
+    ).values('total')[:1]
     collection_items = CollectionItem.objects.filter(
-        collection_id__in=visible_items_by_collection,
+        preview_filter | Q(
+            collection_id__in=visible_items_by_collection,
+            share_id=share.pk,
+        ),
         share_id__in=visible_share_ids,
     ).annotate(
-        visible_position=Window(
-            expression=RowNumber(),
-            partition_by=[F('collection_id')],
-            order_by=(
-                F('order').asc(),
-                F('added_at').asc(),
-                F('pk').asc(),
-            ),
+        visible_position=(
+            Coalesce(
+                Subquery(preceding_visible_items, output_field=IntegerField()),
+                Value(0),
+                output_field=IntegerField(),
+            )
+            + Value(1)
         ),
-    ).filter(
-        Q(visible_position__lte=_RELATED_COLLECTION_PREVIEW_SIZE)
-        | Q(share_id=share.pk),
     ).select_related(
         'share',
         'share__author',
@@ -99,7 +164,8 @@ def related_collection_summaries(share, user):
             visible_items=tuple(preview_items),
             visible_item_count=collection.visible_item_count,
         ))
-    return summaries
+    page.object_list = tuple(summaries)
+    return page
 
 
 def _annotate_current_user_interactions(queryset, user):
@@ -127,8 +193,8 @@ def _annotate_current_user_interactions(queryset, user):
 def annotate_share_cards(queryset, user):
     """Add card statistics and current-user interaction state."""
     queryset = queryset.select_related('author', 'author__profile').annotate(
-        likes_count=Count('likes', distinct=True),
-        favorites_count=Count('favorites', distinct=True),
+        likes_count=_interaction_count_subquery(Share.likes.through),
+        favorites_count=_interaction_count_subquery(Share.favorites.through),
     )
     return _annotate_current_user_interactions(queryset, user)
 

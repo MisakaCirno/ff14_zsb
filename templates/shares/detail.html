@@ -263,12 +263,15 @@
                                 <span class="share-detail-log-list__action">{{ log.get_action_display }}</span>
                                 <time datetime="{{ log.created_at|date:'c' }}">{{ log.created_at|date:"Y-m-d H:i" }}</time>
                             </div>
-                            {% if log.details %}
-                            <p>{{ log.details }}</p>
+                            {% if log.details_preview %}
+                            <p>{{ log.details_preview }}</p>
                             {% endif %}
                         </li>
                         {% endfor %}
                     </ol>
+                    {% if share_logs_truncated %}
+                    <p class="share-detail-disclosure__empty">这里只展示最近 25 条；完整审计记录仍保留在数据库中。</p>
+                    {% endif %}
                     {% else %}
                     <p class="share-detail-disclosure__empty">暂无操作日志。</p>
                     {% endif %}
@@ -348,7 +351,7 @@
     </div>
 </article>
 
-{% include 'shares/includes/share_detail_modals.html' with share=share detail=detail user_collections=user_collections canonical_share_path=canonical_share_path csrf_token=csrf_token only %}
+{% include 'shares/includes/share_detail_modals.html' with share=share detail=detail has_user_collections=has_user_collections canonical_share_path=canonical_share_path csrf_token=csrf_token only %}
 {% endblock %}
 
 {% block extra_js %}

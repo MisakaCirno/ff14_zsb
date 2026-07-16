@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}选择合集{% endblock %}
+
+{% block content %}
+<div class="container moderation-page">
+    <header class="moderation-hero">
+        <div class="moderation-hero__icon" aria-hidden="true"><i class="bi bi-folder-plus"></i></div>
+        <div class="moderation-hero__copy">
+            <p class="moderation-hero__eyebrow">整理分享</p>
+            <h1 class="moderation-hero__title">选择合集</h1>
+            <p class="moderation-hero__summary">将《{{ share.title }}》加入你的合集。每页最多显示 20 个合集。</p>
+        </div>
+    </header>
+
+    <section class="moderation-panel" aria-labelledby="collection-picker-title">
+        <div class="moderation-panel__header">
+            <div>
+                <p class="moderation-panel__eyebrow">我的合集</p>
+                <h2 id="collection-picker-title">共 {{ collections.paginator.count }} 个合集</h2>
+            </div>
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'create_collection' %}?next={{ request.get_full_path|urlencode }}">
+                <i class="bi bi-plus-circle" aria-hidden="true"></i>
+                创建合集
+            </a>
+        </div>
+
+        {% if collections %}
+        <div class="moderation-review-grid">
+            {% for collection in collections %}
+            <article class="card moderation-review-card">
+                <div class="card-body">
+                    <h3 class="h5">{{ collection.title }}</h3>
+                    <p class="text-muted mb-3">{{ collection.item_count }} 个内容</p>
+                    {% if collection.contains_share %}
+                    <button class="btn btn-outline-secondary" type="button" disabled>已在此合集中</button>
+                    {% else %}
+                    <form action="{% url 'add_share_to_collection' share.share_id %}" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="collection_id" value="{{ collection.id }}">
+                        <button class="btn btn-primary" type="submit">
+                            <i class="bi bi-folder-plus" aria-hidden="true"></i>
+                            加入此合集
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% include 'shares/includes/pagination.html' with page_obj=collections aria_label='合集选择分页' nav_class='mt-3' %}
+        {% else %}
+        <p>你还没有合集。可以先创建一个合集，再返回这里继续添加。</p>
+        {% endif %}
+    </section>
+
+    <a class="btn btn-outline-secondary" href="{% url 'share_detail' share.share_id %}">返回分享详情</a>
+</div>
+{% endblock %}

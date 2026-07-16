@@ -236,6 +236,30 @@ class ShareAccessContractTests(TestCase):
         self.assertContains(response, 'data-copy-strategy')
         self.assertNotContains(response, '?fragment=card')
 
+    def test_public_profile_collections_are_paginated_with_stable_links(self):
+        self.create_share(title='合集页签仍应统计的公开分享')
+        for index in range(13):
+            Collection.objects.create(
+                title=f'profile collection pagination {index:02d}',
+                author=self.author,
+                is_public=True,
+            )
+
+        response = self.client.get(
+            reverse('user_public_profile', args=[self.author.username]),
+            {'tab': 'collections', 'source': 'profile & collections'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['public_share_count'], 1)
+        self.assertEqual(response.context['collections'].paginator.count, 13)
+        self.assertEqual(len(response.context['collections']), 12)
+        self.assertContains(response, 'aria-label="用户公开合集分页"')
+        self.assertContains(
+            response,
+            '?tab=collections&amp;source=profile+%26+collections&amp;page=2',
+        )
+
     def test_public_profile_renders_selected_server_tab(self):
         share = self.create_share(title='profile selected share')
         collection = Collection.objects.create(

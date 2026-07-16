@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Exists, Max, OuterRef
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -14,6 +14,7 @@ from shares.policies import (
     is_owner,
     viewable_share_queryset,
 )
+from shares.selectors import annotate_collection_cards
 from shares.services.audit import log_share_action
 
 
@@ -122,6 +123,29 @@ def add_share_to_collection(request, share_id):
                 f'加入合集: {collection.title}',
             )
     return redirect('share_detail', share_id=share_id)
+
+
+@login_required
+def select_collection_for_share(request, share_id):
+    share = get_object_or_404(Share, share_id=share_id)
+    if share.author != request.user:
+        messages.error(request, '只能将自己的分享添加到合集')
+        return redirect('share_detail', share_id=share_id)
+
+    contains_share = CollectionItem.objects.filter(
+        collection_id=OuterRef('pk'),
+        share=share,
+    )
+    queryset = annotate_collection_cards(
+        Collection.objects.filter(author=request.user),
+    ).annotate(
+        contains_share=Exists(contains_share),
+    ).order_by('-updated_at', '-pk')
+    collections = Paginator(queryset, 20).get_page(request.GET.get('page'))
+    return render(request, 'shares/select_collection_for_share.html', {
+        'share': share,
+        'collections': collections,
+    })
 
 
 @login_required

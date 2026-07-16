@@ -1,7 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count
+from django.db.models.functions import Substr
 from django.shortcuts import get_object_or_404, redirect, render
 
 from shares.forms import CreateShareForm, EditShareForm
@@ -13,6 +13,7 @@ from shares.presentation import (
 )
 from shares.rate_limits import consume_rate_limit, request_identity
 from shares.selectors import (
+    annotate_collection_cards,
     annotate_share_cards,
     related_collection_summaries,
     share_detail_queryset,
@@ -26,6 +27,7 @@ from shares.services.shares import (
 
 
 _MY_CONTENT_TABS = {'my_shares', 'collections', 'likes', 'favorites'}
+_DETAIL_LOG_PREVIEW_SIZE = 25
 
 
 def share_detail(request, share_id):
@@ -37,15 +39,26 @@ def share_detail(request, share_id):
         messages.error(request, '该分享不存在或您没有权限访问')
         return redirect('index')
     detail = build_share_detail_view_model(share, request.user)
-    related_collections = related_collection_summaries(share, request.user)
-    share_logs = (
-        share.logs.select_related('user').order_by('-created_at')
-        if detail.actions.can_view_logs
-        else None
+    related_collections = related_collection_summaries(
+        share,
+        request.user,
+        page_number=request.GET.get('page'),
+        selected_collection_id=request.GET.get('collection_id'),
     )
-    user_collections = []
+    share_logs = None
+    share_logs_truncated = False
+    if detail.actions.can_view_logs:
+        log_preview = list(
+            share.logs.select_related('user').annotate(
+                details_preview=Substr('details', 1, 500),
+            ).defer('details').order_by('-created_at', '-pk')
+            [:_DETAIL_LOG_PREVIEW_SIZE + 1]
+        )
+        share_logs_truncated = len(log_preview) > _DETAIL_LOG_PREVIEW_SIZE
+        share_logs = tuple(log_preview[:_DETAIL_LOG_PREVIEW_SIZE])
+    has_user_collections = False
     if detail.actions.can_add_to_collection:
-        user_collections = Collection.objects.filter(author=request.user).order_by('-updated_at')
+        has_user_collections = Collection.objects.filter(author=request.user).exists()
     canonical_share_path = share.get_absolute_url()
     return render(request, 'shares/detail.html', {
         'share': share,
@@ -53,8 +66,9 @@ def share_detail(request, share_id):
         'canonical_share_path': canonical_share_path,
         'canonical_share_url': request.build_absolute_uri(canonical_share_path),
         'related_collections': related_collections,
-        'user_collections': user_collections,
+        'has_user_collections': has_user_collections,
         'share_logs': share_logs,
+        'share_logs_truncated': share_logs_truncated,
         'is_liked': detail.is_liked,
         'is_favorited': detail.is_favorited,
     })
@@ -140,8 +154,8 @@ def my_shares(request):
     context = {'current_tab': tab}
     page_number = request.GET.get('page')
     if tab == 'collections':
-        queryset = Collection.objects.filter(author=request.user).annotate(
-            item_count=Count('collectionitem'),
+        queryset = annotate_collection_cards(
+            Collection.objects.filter(author=request.user),
         ).order_by('-updated_at', '-pk')
         context['collections'] = Paginator(queryset, 12).get_page(page_number)
         return render(request, 'shares/my_shares.html', context)

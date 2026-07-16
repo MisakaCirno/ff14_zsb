@@ -442,6 +442,10 @@ class Collection(models.Model):
                 fields=['author', 'is_public', '-updated_at'],
                 name='collection_author_idx',
             ),
+            models.Index(
+                fields=['author', '-updated_at', '-id'],
+                name='collection_owner_updated_idx',
+            ),
         ]
         verbose_name = '合集'
         verbose_name_plural = '合集'

@@ -288,7 +288,7 @@ class ShareDetailPresentationTests(TestCase):
         self.assertEqual(detail.content_warning.key, 'nsfw-spoiler')
         self.assertIn('令人不适和剧透', detail.content_warning.message)
 
-    def test_detail_view_uses_actions_to_load_logs_and_owner_collections(self):
+    def test_detail_view_loads_bounded_logs_and_only_checks_for_owner_collections(self):
         collection = Collection.objects.create(
             title='作者合集',
             author=self.author,
@@ -305,7 +305,8 @@ class ShareDetailPresentationTests(TestCase):
             reverse('share_detail', args=[self.share.share_id]),
         )
         self.assertEqual(owner_response.status_code, 200)
-        self.assertEqual(list(owner_response.context['user_collections']), [collection])
+        self.assertTrue(owner_response.context['has_user_collections'])
+        self.assertNotIn('user_collections', owner_response.context)
         self.assertIsNone(owner_response.context['share_logs'])
         self.assertTrue(owner_response.context['detail'].actions.can_add_to_collection)
 
@@ -314,7 +315,7 @@ class ShareDetailPresentationTests(TestCase):
             reverse('share_detail', args=[self.share.share_id]),
         )
         self.assertEqual(staff_response.status_code, 200)
-        self.assertEqual(staff_response.context['user_collections'], [])
+        self.assertFalse(staff_response.context['has_user_collections'])
         self.assertEqual(list(staff_response.context['share_logs']), [log])
         self.assertTrue(staff_response.context['detail'].actions.can_view_logs)
 
@@ -323,5 +324,5 @@ class ShareDetailPresentationTests(TestCase):
             reverse('share_detail', args=[self.share.share_id]),
         )
         self.assertEqual(viewer_response.status_code, 200)
-        self.assertEqual(viewer_response.context['user_collections'], [])
+        self.assertFalse(viewer_response.context['has_user_collections'])
         self.assertIsNone(viewer_response.context['share_logs'])
