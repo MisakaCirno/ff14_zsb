@@ -3,11 +3,16 @@ param(
     [string]$PythonExecutable = '',
     [string]$NpmExecutable = '',
     [switch]$SkipTests,
-    [switch]$SkipFrontend
+    [switch]$SkipFrontend,
+    [switch]$IncludeProductionCopyE2E
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ($SkipTests -and $IncludeProductionCopyE2E) {
+    throw 'IncludeProductionCopyE2E cannot be combined with SkipTests.'
+}
 
 function Invoke-CheckedStep {
     param(
@@ -87,6 +92,39 @@ try {
             Invoke-CheckedStep 'Site-data export comparison contracts' {
                 & (Join-Path $PSScriptRoot 'ops\migration\Test-SiteDataExportComparison.ps1') `
                     -PythonExecutable $PythonExecutable
+            }
+
+            Invoke-CheckedStep 'Production-copy bootstrap contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyBootstrap.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
+                    -PythonExecutable $PythonExecutable
+            }
+
+            Invoke-CheckedStep 'Production-copy policy proposal contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyPolicyProposal.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
+                    -PythonExecutable $PythonExecutable
+            }
+
+            Invoke-CheckedStep 'Production-copy policy approval contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyPolicyApproval.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
+                    -PythonExecutable $PythonExecutable
+            }
+
+            Invoke-CheckedStep 'Production-copy rehearsal contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyRehearsal.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
+                    -PythonExecutable $PythonExecutable
+            }
+
+            if ($IncludeProductionCopyE2E) {
+                Invoke-CheckedStep 'Production-copy real offline end-to-end contracts' {
+                    & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyEndToEnd.ps1') `
+                        -IncludeSlow `
+                        -RepositoryRoot $PSScriptRoot `
+                        -PythonExecutable $PythonExecutable
+                }
             }
 
             Invoke-CheckedStep 'Waitress loopback smoke test' {
