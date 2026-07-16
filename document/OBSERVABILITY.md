@@ -10,7 +10,7 @@
 REQUEST_LOG_ENABLED=True
 ```
 
-设置变更后需要重启 Django 进程。日志由应用写到标准输出，每个请求恰好一条 `http.request` JSON；未处理异常还会追加一条可用同一 `request_id` 关联的 `django.request.error` 安全错误事件。后续 WinSW 只负责捕获和轮转标准输出，不再配置第二个应用文件日志处理器。
+设置变更后需要重启 Django 进程。日志由应用写到标准输出，每个请求恰好一条 `http.request` JSON；未处理异常还会追加一条可用同一 `request_id` 关联的 `django.request.error` 安全错误事件。Windows 生产契约中的 WinSW 只负责捕获和轮转标准输出，不再配置第二个应用文件日志处理器；服务目录、轮转和检查方式见 [WINDOWS_PRODUCTION.md](WINDOWS_PRODUCTION.md)。
 
 请求记录只允许以下字段：
 

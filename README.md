@@ -72,6 +72,7 @@ python manage.py runserver
 ## 📚 文档
 
 - 📖 **详细启动指南**: [STARTUP_GUIDE.md](STARTUP_GUIDE.md)
+- 🏭 **Windows 生产服务**: [document/WINDOWS_PRODUCTION.md](document/WINDOWS_PRODUCTION.md)
 - 🆕 **用户系统更新说明**: [USER_SYSTEM_UPDATE.md](USER_SYSTEM_UPDATE.md)
 - 🎛️ **管理后台使用指南**: [ADMIN_GUIDE.md](ADMIN_GUIDE.md)
 

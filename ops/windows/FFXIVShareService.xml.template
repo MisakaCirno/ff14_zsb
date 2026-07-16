@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<service>
+  <id>FFXIVShare</id>
+  <name>FFXIVShare</name>
+  <description>FFXIVShare Django application service</description>
+  <executable>{{PYTHON_EXECUTABLE}}</executable>
+  <arguments>-m waitress --listen=127.0.0.1:{{LISTEN_PORT}} --threads={{THREAD_COUNT}} --trusted-proxy=127.0.0.1 "--trusted-proxy-headers=x-forwarded-for x-forwarded-proto" --clear-untrusted-proxy-headers --no-expose-tracebacks ffxivshare.wsgi:application</arguments>
+  <workingdirectory>{{CURRENT_RELEASE}}</workingdirectory>
+  <env name="FFXIVSHARE_ENV_FILE" value="{{ENVIRONMENT_FILE}}" />
+  <env name="PYTHONUNBUFFERED" value="1" />
+  <env name="PYTHONDONTWRITEBYTECODE" value="1" />
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <stoptimeout>30 sec</stoptimeout>
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <onfailure action="restart" delay="60 sec" />
+  <onfailure action="none" />
+  <resetfailure>1 hour</resetfailure>
+  <logpath>{{LOG_DIRECTORY}}</logpath>
+  <log mode="roll">
+    <sizeThreshold>25600</sizeThreshold>
+    <keepFiles>14</keepFiles>
+  </log>
+</service>
