@@ -87,12 +87,16 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
 
         self.assertIn('def _staff_reason_form(', view_source)
         self.assertNotIn('def _review_reason_form(', view_source)
-        self.assertIn('review_items=tuple(_review_item(share)', view_source)
-        self.assertIn("auto_id=f'review-reject-{share.share_id}-%s'", view_source)
-        self.assertIn("auto_id=f'review-confirm-{share.share_id}-%s'", view_source)
-        self.assertIn("auto_id=f'review-release-{share.share_id}-%s'", view_source)
+        self.assertIn('def _review_queue_context(', view_source)
+        self.assertIn('_review_item(', view_source)
+        for prefix in ('review-reject', 'review-confirm', 'review-release'):
+            with self.subTest(prefix=prefix):
+                self.assertIn(f"'{prefix}'", view_source)
+        self.assertIn("'auto_id': f'{prefix}-{share_id}-%s'", view_source)
+        self.assertIn("'error_id': f'{prefix}-errors-{share_id}'", view_source)
         self.assertIn("initial={'version': share.updated_at}", view_source)
-        self.assertIn("widget.attrs['aria-describedby'] = help_id", view_source)
+        self.assertIn("reason_attrs['aria-describedby'] = help_id", view_source)
+        self.assertIn("reason_attrs['aria-invalid'] = 'true'", view_source)
 
     def test_shared_moderation_tabs_and_audit_list_are_accessible(self):
         tabs_source = self.read_template('shares/includes/admin_tabs.html')
@@ -101,6 +105,10 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
         )
 
         self.assertIn('class="moderation-tabs"', tabs_source)
+        self.assertIn(
+            'moderation_active_tab|default:request.resolver_match.url_name',
+            tabs_source,
+        )
         self.assertIn('aria-current="page"', tabs_source)
         self.assertIn('moderation-tabs__indicator', tabs_source)
         self.assertIn('有 {{ pending_reviews_count }} 个待审核或受限项目', tabs_source)
@@ -233,9 +241,15 @@ class ReviewFrontendRenderingContractTests(TestCase):
         response = self.client.post(
             reverse('admin_reject_share', args=[share.share_id]),
             {'reason': '短'},
-            follow=True,
         )
 
-        self.assertContains(response, expected_error)
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, expected_error, status_code=400)
+        self.assertContains(
+            response,
+            'data-moderation-invalid-modal',
+            count=1,
+            status_code=400,
+        )
         share.refresh_from_db()
         self.assertEqual(share.status, Share.Status.PENDING)

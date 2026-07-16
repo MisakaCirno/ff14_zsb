@@ -549,7 +549,13 @@ class ModerationWorkflowContractTests(TestCase):
             {'reason': ''},
         )
 
-        self.assertRedirects(response, reverse('admin_review_list'))
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(
+            response,
+            'data-moderation-invalid-modal',
+            count=1,
+            status_code=400,
+        )
         share.refresh_from_db()
         self.assertEqual(
             share.restriction_state,

@@ -5,7 +5,7 @@
     <ul class="pagination justify-content-center{% if pagination_class %} {{ pagination_class }}{% else %} mb-0{% endif %}">
         {% if page_obj.has_previous %}
         <li class="page-item">
-            <a class="page-link" href="{% querystring page=page_obj.previous_page_number %}" rel="prev">上一页</a>
+            <a class="page-link" href="{% if base_url %}{{ base_url }}{% endif %}{% querystring page=page_obj.previous_page_number %}" rel="prev">上一页</a>
         </li>
         {% else %}
         <li class="page-item disabled" aria-disabled="true">
@@ -24,14 +24,14 @@
             </li>
             {% else %}
             <li class="page-item">
-                <a class="page-link" href="{% querystring page=item.number %}" aria-label="第 {{ item.number }} 页">{{ item.number }}</a>
+                <a class="page-link" href="{% if base_url %}{{ base_url }}{% endif %}{% querystring page=item.number %}" aria-label="第 {{ item.number }} 页">{{ item.number }}</a>
             </li>
             {% endif %}
         {% endfor %}
 
         {% if page_obj.has_next %}
         <li class="page-item">
-            <a class="page-link" href="{% querystring page=page_obj.next_page_number %}" rel="next">下一页</a>
+            <a class="page-link" href="{% if base_url %}{{ base_url }}{% endif %}{% querystring page=page_obj.next_page_number %}" rel="next">下一页</a>
         </li>
         {% else %}
         <li class="page-item disabled" aria-disabled="true">

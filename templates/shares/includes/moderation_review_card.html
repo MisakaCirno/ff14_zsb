@@ -83,7 +83,24 @@
                 查看详情
             </a>
 
-            {% if share.restriction_state == 'legacy_private' %}
+            {% if item.target_outside_queue %}
+            <div class="moderation-action-grid" role="group" aria-label="恢复《{{ share.title }}》未完成的管理操作">
+                <button
+                    type="button"
+                    class="btn btn-sm btn-warning"
+                    data-bs-toggle="modal"
+                    {% if item.invalid_action == 'reject' %}
+                    data-bs-target="#rejectModal{{ share.share_id }}"
+                    {% elif item.invalid_action == 'confirm' %}
+                    data-bs-target="#confirmRestrictionModal{{ share.share_id }}"
+                    {% else %}
+                    data-bs-target="#releaseRestrictionModal{{ share.share_id }}"
+                    {% endif %}>
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                    检查未完成的操作
+                </button>
+            </div>
+            {% elif share.restriction_state == 'legacy_private' %}
             <div class="moderation-action-grid" role="group" aria-label="确认《{{ share.title }}》的历史私密状态">
                 <button
                     type="button"
@@ -151,6 +168,6 @@
         </footer>
     </article>
 
-    {% include 'shares/includes/moderation_review_modals.html' with item=item only %}
+    {% include 'shares/includes/moderation_review_modals.html' with item=item csrf_token=csrf_token only %}
 </div>
 {% endwith %}

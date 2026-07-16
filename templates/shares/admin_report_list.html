@@ -27,11 +27,11 @@
             <article class="accordion-item moderation-report-card">
                 <h3 class="accordion-header" id="reportHeading{{ share.share_id }}">
                     <button
-                        class="accordion-button moderation-report-card__toggle{% if not forloop.first %} collapsed{% endif %}"
+                        class="accordion-button moderation-report-card__toggle{% if resolution_error and resolution_error.share_id != share.share_id or not resolution_error and not forloop.first %} collapsed{% endif %}"
                         type="button"
                         data-bs-toggle="collapse"
                         data-bs-target="#reportCollapse{{ share.share_id }}"
-                        aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
+                        aria-expanded="{% if resolution_error and resolution_error.share_id == share.share_id or not resolution_error and forloop.first %}true{% else %}false{% endif %}"
                         aria-controls="reportCollapse{{ share.share_id }}">
                         <span class="moderation-report-card__heading">
                             <span class="moderation-report-card__badges">
@@ -50,7 +50,7 @@
                 </h3>
 
                 <div
-                    class="accordion-collapse collapse{% if forloop.first %} show{% endif %}"
+                    class="accordion-collapse collapse{% if resolution_error and resolution_error.share_id == share.share_id or not resolution_error and forloop.first %} show{% endif %}"
                     id="reportCollapse{{ share.share_id }}"
                     aria-labelledby="reportHeading{{ share.share_id }}"
                     data-bs-parent="#reportAccordion">
@@ -167,23 +167,49 @@
             {% endfor %}
         </div>
 
-        {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='待处理举报分页' nav_class='moderation-report-pagination' %}
+        {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='待处理举报分页' nav_class='moderation-report-pagination' base_url=pagination_base_url %}
     </section>
+    {% else %}
+        {% url 'admin_report_logs' as report_logs_url %}
+        {% include 'shares/includes/empty_state.html' with icon='bi-check2-all' title='暂无待处理的举报' message='当前举报队列为空，可以查看历史处理记录。' action_url=report_logs_url action_label='查看举报日志' action_icon='bi-journal-x' only %}
+    {% endif %}
 
-    <div class="modal fade" id="reportResolutionModal" tabindex="-1" aria-labelledby="reportResolutionModalTitle" aria-hidden="true" data-moderation-resolution-modal>
+    {% if shares or resolution_error %}
+    <div
+        class="modal fade"
+        id="reportResolutionModal"
+        tabindex="-1"
+        aria-labelledby="reportResolutionModalTitle"
+        aria-hidden="true"
+        data-moderation-resolution-modal
+        {% if resolution_error %}data-moderation-invalid-modal{% endif %}>
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
-            <form method="post" action="{% url 'admin_report_list' %}" class="modal-content" data-resolution-form>
+            <form
+                method="post"
+                action="{% if resolution_error %}{{ resolution_error.action_url }}{% else %}{% url 'admin_report_list' %}{% endif %}"
+                class="modal-content"
+                data-resolution-form
+                data-resolution-fallback-action="{% url 'admin_report_list' %}">
                 {% csrf_token %}
+                <input type="hidden" name="return_page" value="{{ shares.number }}">
                 <div class="modal-header">
-                    <h2 class="modal-title fs-5" id="reportResolutionModalTitle" data-resolution-modal-title>处理举报</h2>
+                    <h2 class="modal-title fs-5" id="reportResolutionModalTitle" data-resolution-modal-title>
+                        {{ resolution_error.title|default:'处理举报' }}
+                    </h2>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
                 </div>
                 <div class="modal-body moderation-report-resolution">
-                    <p class="moderation-report-resolution__subject" data-resolution-modal-subject></p>
-                    <p class="moderation-report-resolution__context" data-resolution-modal-context hidden>
-                        <strong data-resolution-modal-context-label></strong>
-                        <span data-resolution-modal-context-value></span>
+                    <p class="moderation-report-resolution__subject" data-resolution-modal-subject>{{ resolution_error.subject }}</p>
+                    <p class="moderation-report-resolution__context" data-resolution-modal-context{% if not resolution_error.context %} hidden{% endif %}>
+                        <strong data-resolution-modal-context-label>{{ resolution_error.context_label }}</strong>
+                        <span data-resolution-modal-context-value>{{ resolution_error.context }}</span>
                     </p>
+                    {% if resolution_error.target_stale %}
+                    <div class="alert alert-warning" role="status" data-resolution-server-only>
+                        目标状态已发生变化，本次提交尚未执行。已保留处理说明，请核对当前状态后再决定是否重试。
+                    </div>
+                    {% endif %}
+                    {% include 'shares/includes/moderation_form_error_summary.html' with form=resolution_form error_id='report-resolution-errors' only %}
                     <div>
                         <label class="form-label" for="{{ resolution_form.reason.id_for_label }}">{{ resolution_form.reason.label }}</label>
                         {{ resolution_form.reason }}
@@ -192,14 +218,16 @@
                 </div>
                 <div class="modal-footer moderation-report-resolution__actions">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="submit" class="btn btn-secondary" data-resolution-modal-submit disabled>确认处理</button>
+                    <button
+                        type="submit"
+                        class="btn btn-{{ resolution_error.tone|default:'secondary' }}"
+                        data-resolution-modal-submit{% if not resolution_error %} disabled{% endif %}>
+                        {{ resolution_error.submit|default:'确认处理' }}
+                    </button>
                 </div>
             </form>
         </div>
     </div>
-    {% else %}
-        {% url 'admin_report_logs' as report_logs_url %}
-        {% include 'shares/includes/empty_state.html' with icon='bi-check2-all' title='暂无待处理的举报' message='当前举报队列为空，可以查看历史处理记录。' action_url=report_logs_url action_label='查看举报日志' action_icon='bi-journal-x' only %}
     {% endif %}
 </div>
 {% endblock %}

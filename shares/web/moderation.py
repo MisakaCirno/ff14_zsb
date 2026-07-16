@@ -5,6 +5,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, Prefetch, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from shares.forms import (
@@ -33,46 +34,26 @@ def _admin_context(**context):
     return context
 
 
-def _staff_reason_form(form_class, *, auto_id, help_id, initial=None):
-    form = form_class(auto_id=auto_id, initial=initial)
-    form.fields['reason'].widget.attrs['aria-describedby'] = help_id
+def _staff_reason_form(
+    form_class,
+    *,
+    auto_id,
+    help_id,
+    error_id,
+    data=None,
+    initial=None,
+):
+    form = form_class(data=data, auto_id=auto_id, initial=initial)
+    reason_attrs = form.fields['reason'].widget.attrs
+    reason_attrs['aria-describedby'] = help_id
+    if form.is_bound and form.errors.get('reason'):
+        reason_attrs['aria-invalid'] = 'true'
+        reason_attrs['aria-describedby'] = f'{help_id} {error_id}'
     return form
 
 
-def _first_form_error(form, fallback):
-    """Return the first server-defined validation message for flash feedback."""
-    for errors in form.errors.values():
-        if errors:
-            return str(errors[0])
-    return fallback
-
-
-def _review_item(share):
-    """Bind uniquely identified, server-defined forms to one review card."""
-    return {
-        'share': share,
-        'reject_form': _staff_reason_form(
-            AdminReviewRejectForm,
-            auto_id=f'review-reject-{share.share_id}-%s',
-            help_id=f'review-reject-help-{share.share_id}',
-        ),
-        'confirmation_form': _staff_reason_form(
-            RestrictionConfirmationForm,
-            auto_id=f'review-confirm-{share.share_id}-%s',
-            help_id=f'review-confirm-help-{share.share_id}',
-            initial={'version': share.updated_at},
-        ),
-        'release_form': _staff_reason_form(
-            RestrictionReleaseForm,
-            auto_id=f'review-release-{share.share_id}-%s',
-            help_id=f'review-release-help-{share.share_id}',
-        ),
-    }
-
-
-@user_passes_test(is_moderator)
-def admin_review_list(request):
-    pending = Share.objects.filter(
+def _review_queryset():
+    return Share.objects.filter(
         Q(status=Share.Status.PENDING)
         | ~Q(restriction_state=Share.RestrictionState.CLEAR)
     ).select_related(
@@ -85,12 +66,182 @@ def admin_review_list(request):
             queryset=ShareLog.objects.select_related('user').order_by('-created_at'),
             to_attr='share_logs',
         )
-    ).order_by('-created_at')
-    shares = Paginator(pending, 20).get_page(request.GET.get('page'))
-    return render(request, 'shares/admin_review_list.html', _admin_context(
+    ).order_by('-created_at', '-pk')
+
+
+def _review_form_ids(action, share_id):
+    prefix = {
+        'reject': 'review-reject',
+        'confirm': 'review-confirm',
+        'release': 'review-release',
+    }[action]
+    return {
+        'auto_id': f'{prefix}-{share_id}-%s',
+        'help_id': f'{prefix}-help-{share_id}',
+        'error_id': f'{prefix}-errors-{share_id}',
+    }
+
+
+def _new_review_form(form_class, action, share, *, data=None, initial=None):
+    return _staff_reason_form(
+        form_class,
+        data=data,
+        initial=initial,
+        **_review_form_ids(action, share.share_id),
+    )
+
+
+def _review_item(
+    share,
+    *,
+    return_page,
+    invalid_action=None,
+    invalid_form=None,
+    target_outside_queue=False,
+):
+    """Bind uniquely identified, server-defined forms to one review card."""
+    reject_form = (
+        invalid_form
+        if invalid_action == 'reject'
+        else _new_review_form(AdminReviewRejectForm, 'reject', share)
+    )
+    confirmation_form = (
+        invalid_form
+        if invalid_action == 'confirm'
+        else _new_review_form(
+            RestrictionConfirmationForm,
+            'confirm',
+            share,
+            initial={'version': share.updated_at},
+        )
+    )
+    release_form = (
+        invalid_form
+        if invalid_action == 'release'
+        else _new_review_form(RestrictionReleaseForm, 'release', share)
+    )
+    return {
+        'share': share,
+        'reject_form': reject_form,
+        'reject_error_id': _review_form_ids('reject', share.share_id)['error_id'],
+        'confirmation_form': confirmation_form,
+        'confirmation_error_id': _review_form_ids('confirm', share.share_id)['error_id'],
+        'release_form': release_form,
+        'release_error_id': _review_form_ids('release', share.share_id)['error_id'],
+        'invalid_action': invalid_action,
+        'return_page': return_page,
+        'target_outside_queue': target_outside_queue,
+    }
+
+
+def _page_containing_review(queryset, page_number, target_share=None):
+    paginator = Paginator(queryset, 20)
+    page = paginator.get_page(page_number)
+    if target_share is None or any(item.pk == target_share.pk for item in page):
+        return page
+
+    target_is_queued = queryset.filter(pk=target_share.pk).exists()
+    if not target_is_queued:
+        return page
+
+    items_before_target = queryset.filter(
+        Q(created_at__gt=target_share.created_at)
+        | Q(created_at=target_share.created_at, pk__gt=target_share.pk)
+    ).count()
+    return paginator.get_page((items_before_target // paginator.per_page) + 1)
+
+
+def _review_queue_context(
+    *,
+    page_number=None,
+    pagination_base_url=None,
+    invalid_share=None,
+    invalid_action=None,
+    invalid_form=None,
+):
+    shares = _page_containing_review(
+        _review_queryset(),
+        page_number,
+        invalid_share,
+    )
+    review_items = [
+        _review_item(
+            share,
+            return_page=shares.number,
+            invalid_action=(
+                invalid_action
+                if invalid_share is not None and share.pk == invalid_share.pk
+                else None
+            ),
+            invalid_form=(
+                invalid_form
+                if invalid_share is not None and share.pk == invalid_share.pk
+                else None
+            ),
+        )
+        for share in shares
+    ]
+    target_is_visible = any(
+        item['share'].pk == invalid_share.pk
+        for item in review_items
+    ) if invalid_share is not None else True
+    if not target_is_visible:
+        review_items.insert(0, _review_item(
+            invalid_share,
+            return_page=shares.number,
+            invalid_action=invalid_action,
+            invalid_form=invalid_form,
+            target_outside_queue=True,
+        ))
+    return _admin_context(
         shares=shares,
-        review_items=tuple(_review_item(share) for share in shares),
-    ))
+        review_items=tuple(review_items),
+        moderation_active_tab='admin_review_list',
+        pagination_base_url=pagination_base_url,
+    )
+
+
+def _render_review_form_error(request, *, share_id, action, form):
+    share = get_object_or_404(
+        Share.objects.select_related(
+            'author',
+            'author__profile',
+            'restricted_by',
+        ).prefetch_related(
+            Prefetch(
+                'logs',
+                queryset=ShareLog.objects.select_related('user').order_by('-created_at'),
+                to_attr='share_logs',
+            )
+        ),
+        share_id=share_id,
+    )
+    if action == 'confirm' and form.errors.get('version'):
+        # Keep the moderator's explanation, but replace an unusable concurrency
+        # token with the current server value so the corrected form can retry.
+        form.data = form.data.copy()
+        form.data['version'] = share.updated_at.isoformat()
+    return render(
+        request,
+        'shares/admin_review_list.html',
+        _review_queue_context(
+            page_number=request.POST.get('return_page'),
+            pagination_base_url=reverse('admin_review_list'),
+            invalid_share=share,
+            invalid_action=action,
+            invalid_form=form,
+        ),
+        status=400,
+    )
+
+
+@user_passes_test(is_moderator)
+def admin_review_list(request):
+    return render(
+        request,
+        'shares/admin_review_list.html',
+        _review_queue_context(page_number=request.GET.get('page')),
+    )
 
 
 @user_passes_test(is_moderator)
@@ -113,10 +264,18 @@ def admin_approve_share(request, share_id):
 @user_passes_test(is_moderator)
 @require_POST
 def admin_reject_share(request, share_id):
-    form = AdminReviewRejectForm(request.POST)
+    form = _staff_reason_form(
+        AdminReviewRejectForm,
+        data=request.POST,
+        **_review_form_ids('reject', share_id),
+    )
     if not form.is_valid():
-        messages.error(request, _first_form_error(form, '拒绝原因无效'))
-        return redirect('admin_review_list')
+        return _render_review_form_error(
+            request,
+            share_id=share_id,
+            action='reject',
+            form=form,
+        )
     reason = form.cleaned_data['reason'].strip()
     try:
         result = reject_share(
@@ -136,10 +295,18 @@ def admin_reject_share(request, share_id):
 @user_passes_test(is_moderator)
 @require_POST
 def admin_release_share_restriction(request, share_id):
-    form = RestrictionReleaseForm(request.POST)
+    form = _staff_reason_form(
+        RestrictionReleaseForm,
+        data=request.POST,
+        **_review_form_ids('release', share_id),
+    )
     if not form.is_valid():
-        messages.error(request, _first_form_error(form, '解除说明无效'))
-        return redirect('admin_review_list')
+        return _render_review_form_error(
+            request,
+            share_id=share_id,
+            action='release',
+            form=form,
+        )
     try:
         result = release_share_restriction(
             share_id=share_id,
@@ -160,13 +327,18 @@ def admin_release_share_restriction(request, share_id):
 @user_passes_test(is_moderator)
 @require_POST
 def admin_confirm_share_restriction(request, share_id):
-    form = RestrictionConfirmationForm(request.POST)
+    form = _staff_reason_form(
+        RestrictionConfirmationForm,
+        data=request.POST,
+        **_review_form_ids('confirm', share_id),
+    )
     if not form.is_valid():
-        messages.error(
+        return _render_review_form_error(
             request,
-            _first_form_error(form, '确认信息无效，请刷新页面后重新提交'),
+            share_id=share_id,
+            action='confirm',
+            form=form,
         )
-        return redirect('admin_review_list')
     try:
         result = confirm_share_restriction(
             share_id=share_id,
@@ -230,9 +402,8 @@ def report_share(request, share_id):
     return render(request, 'shares/report_share.html', {'form': form, 'share': share})
 
 
-@user_passes_test(is_moderator)
-def admin_report_list(request):
-    reported = Share.objects.annotate(
+def _report_queryset():
+    return Share.objects.annotate(
         pending_count=Count(
             'reports', filter=Q(reports__status=Report.Status.PENDING),
         )
@@ -249,16 +420,140 @@ def admin_report_list(request):
             queryset=ShareLog.objects.select_related('user').order_by('-created_at'),
             to_attr='share_logs',
         ),
-    ).order_by('-pending_count', '-updated_at')
-    shares = Paginator(reported, 10).get_page(request.GET.get('page'))
-    return render(request, 'shares/admin_report_list.html', _admin_context(
-        shares=shares,
-        resolution_form=_staff_reason_form(
+    ).order_by('-pending_count', '-updated_at', '-pk')
+
+
+def _page_containing_report(queryset, page_number, target_share=None):
+    paginator = Paginator(queryset, 10)
+    page = paginator.get_page(page_number)
+    if target_share is None or any(item.pk == target_share.pk for item in page):
+        return page
+
+    target = queryset.filter(pk=target_share.pk).first()
+    if target is None:
+        return page
+
+    items_before_target = queryset.filter(
+        Q(pending_count__gt=target.pending_count)
+        | Q(
+            pending_count=target.pending_count,
+            updated_at__gt=target.updated_at,
+        )
+        | Q(
+            pending_count=target.pending_count,
+            updated_at=target.updated_at,
+            pk__gt=target.pk,
+        )
+    ).count()
+    return paginator.get_page((items_before_target // paginator.per_page) + 1)
+
+
+def _report_queue_context(
+    *,
+    page_number=None,
+    pagination_base_url=None,
+    target_share=None,
+    resolution_form=None,
+    resolution_error=None,
+):
+    shares = _page_containing_report(
+        _report_queryset(),
+        page_number,
+        target_share,
+    )
+    if resolution_form is None:
+        resolution_form = _staff_reason_form(
             ReportResolutionForm,
             auto_id='report-resolution-%s',
             help_id='report-resolution-help',
+            error_id='report-resolution-errors',
+        )
+    return _admin_context(
+        shares=shares,
+        resolution_form=resolution_form,
+        resolution_error=resolution_error,
+        moderation_active_tab='admin_report_list',
+        pagination_base_url=pagination_base_url,
+    )
+
+
+def _report_resolution_error(*, action, action_url, share, report=None):
+    resolve = action == 'resolve'
+    if report is not None:
+        reporter = report.reporter.username if report.reporter else '已删除账户'
+        return {
+            'action_url': action_url,
+            'share_id': share.share_id,
+            'title': '认可单条举报' if resolve else '驳回单条举报',
+            'subject': f'举报人：{reporter}',
+            'context_label': '举报内容：',
+            'context': report.reason,
+            'submit': '确认认可并通知用户' if resolve else '确认驳回并通知举报人',
+            'tone': 'danger' if resolve else 'secondary',
+            'target_stale': report.status != Report.Status.PENDING,
+        }
+
+    pending_count = Report.objects.filter(
+        share=share,
+        status=Report.Status.PENDING,
+    ).count()
+    if resolve:
+        return {
+            'action_url': action_url,
+            'share_id': share.share_id,
+            'title': '认可举报并更新限制' if share.is_restricted else '认可全部举报',
+            'subject': f'分享：{share.title}',
+            'context_label': (
+                f'当前{share.get_restriction_state_display()}：'
+                if share.is_restricted
+                else ''
+            ),
+            'context': share.restriction_reason if share.is_restricted else '',
+            'submit': '确认认可并通知用户',
+            'tone': 'danger',
+            'target_stale': pending_count == 0,
+        }
+    return {
+        'action_url': action_url,
+        'share_id': share.share_id,
+        'title': '驳回全部举报',
+        'subject': f'分享：{share.title}',
+        'context_label': '待处理举报：',
+        'context': f'共 {pending_count} 条，处理结果会通知所有仍存在的举报人。',
+        'submit': '确认全部驳回并通知用户',
+        'tone': 'secondary',
+        'target_stale': pending_count == 0,
+    }
+
+
+def _render_report_form_error(
+    request,
+    *,
+    form,
+    target_share,
+    resolution_error,
+):
+    return render(
+        request,
+        'shares/admin_report_list.html',
+        _report_queue_context(
+            page_number=request.POST.get('return_page'),
+            pagination_base_url=reverse('admin_report_list'),
+            target_share=target_share,
+            resolution_form=form,
+            resolution_error=resolution_error,
         ),
-    ))
+        status=400,
+    )
+
+
+@user_passes_test(is_moderator)
+def admin_report_list(request):
+    return render(
+        request,
+        'shares/admin_report_list.html',
+        _report_queue_context(page_number=request.GET.get('page')),
+    )
 
 
 @user_passes_test(is_moderator)
@@ -267,10 +562,32 @@ def admin_resolve_report(request, report_id, action):
     if action not in {'resolve', 'dismiss'}:
         messages.error(request, '无效的操作')
         return redirect('admin_report_list')
-    form = ReportResolutionForm(request.POST)
+    form = _staff_reason_form(
+        ReportResolutionForm,
+        data=request.POST,
+        auto_id='report-resolution-%s',
+        help_id='report-resolution-help',
+        error_id='report-resolution-errors',
+    )
     if not form.is_valid():
-        messages.error(request, _first_form_error(form, '处理说明无效'))
-        return redirect('admin_report_list')
+        report = get_object_or_404(
+            Report.objects.select_related('share', 'reporter'),
+            pk=report_id,
+        )
+        return _render_report_form_error(
+            request,
+            form=form,
+            target_share=report.share,
+            resolution_error=_report_resolution_error(
+                action=action,
+                action_url=reverse(
+                    'admin_resolve_report',
+                    args=[report_id, action],
+                ),
+                share=report.share,
+                report=report,
+            ),
+        )
     reason = form.cleaned_data['reason'].strip()
     try:
         result = resolve_report(
@@ -297,10 +614,28 @@ def admin_resolve_share_reports(request, share_id, action):
     if action not in {'resolve', 'dismiss'}:
         messages.error(request, '无效的操作')
         return redirect('admin_report_list')
-    form = ReportResolutionForm(request.POST)
+    form = _staff_reason_form(
+        ReportResolutionForm,
+        data=request.POST,
+        auto_id='report-resolution-%s',
+        help_id='report-resolution-help',
+        error_id='report-resolution-errors',
+    )
     if not form.is_valid():
-        messages.error(request, _first_form_error(form, '处理说明无效'))
-        return redirect('admin_report_list')
+        share = get_object_or_404(Share, share_id=share_id)
+        return _render_report_form_error(
+            request,
+            form=form,
+            target_share=share,
+            resolution_error=_report_resolution_error(
+                action=action,
+                action_url=reverse(
+                    'admin_resolve_share_reports',
+                    args=[share_id, action],
+                ),
+                share=share,
+            ),
+        )
     reason = form.cleaned_data['reason'].strip()
     try:
         result = resolve_share_reports(

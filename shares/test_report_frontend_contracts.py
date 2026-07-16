@@ -84,7 +84,8 @@ class ReportFrontendContractTests(TestCase):
         self.assertIn("shares/includes/empty_state.html", queue_source)
         self.assertIn('{{ resolution_form.reason }}', queue_source)
         self.assertEqual(queue_source.count('id="reportResolutionModal"'), 1)
-        self.assertIn('data-resolution-modal-submit disabled', queue_source)
+        self.assertIn('data-resolution-modal-submit', queue_source)
+        self.assertIn('{% if not resolution_error %} disabled{% endif %}', queue_source)
         self.assertNotIn('dismissReportModal', queue_source)
         self.assertNotIn('shares.paginator.page_range', queue_source)
         self.assertNotIn('href="?page=', queue_source)
@@ -183,10 +184,16 @@ class ReportFrontendContractTests(TestCase):
         response = self.client.post(
             reverse('admin_resolve_report', args=[self.report.pk, 'dismiss']),
             {'reason': '短'},
-            follow=True,
         )
 
-        self.assertContains(response, expected_error)
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, expected_error, status_code=400)
+        self.assertContains(
+            response,
+            'data-moderation-invalid-modal',
+            count=1,
+            status_code=400,
+        )
         self.report.refresh_from_db()
         self.assertEqual(self.report.status, Report.Status.PENDING)
 

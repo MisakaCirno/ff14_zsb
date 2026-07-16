@@ -1,10 +1,11 @@
+{% with active_tab=moderation_active_tab|default:request.resolver_match.url_name %}
 <nav class="moderation-tabs" aria-label="内容管理页面">
     <ul class="nav moderation-tabs__list">
         <li class="nav-item moderation-tabs__item">
             <a
-                class="nav-link moderation-tabs__link{% if request.resolver_match.url_name == 'admin_review_list' %} active{% endif %}"
+                class="nav-link moderation-tabs__link{% if active_tab == 'admin_review_list' %} active{% endif %}"
                 href="{% url 'admin_review_list' %}"
-                {% if request.resolver_match.url_name == 'admin_review_list' %}aria-current="page"{% endif %}>
+                {% if active_tab == 'admin_review_list' %}aria-current="page"{% endif %}>
                 <i class="bi bi-list-check" aria-hidden="true"></i>
                 <span class="moderation-tabs__label">审核列表</span>
                 {% if pending_reviews_count > 0 %}
@@ -15,9 +16,9 @@
         </li>
         <li class="nav-item moderation-tabs__item">
             <a
-                class="nav-link moderation-tabs__link{% if request.resolver_match.url_name == 'admin_report_list' %} active{% endif %}"
+                class="nav-link moderation-tabs__link{% if active_tab == 'admin_report_list' %} active{% endif %}"
                 href="{% url 'admin_report_list' %}"
-                {% if request.resolver_match.url_name == 'admin_report_list' %}aria-current="page"{% endif %}>
+                {% if active_tab == 'admin_report_list' %}aria-current="page"{% endif %}>
                 <i class="bi bi-flag" aria-hidden="true"></i>
                 <span class="moderation-tabs__label">举报处理</span>
                 {% if pending_reports_count > 0 %}
@@ -28,21 +29,22 @@
         </li>
         <li class="nav-item moderation-tabs__item moderation-tabs__item--logs-start">
             <a
-                class="nav-link moderation-tabs__link{% if request.resolver_match.url_name == 'admin_review_logs' %} active{% endif %}"
+                class="nav-link moderation-tabs__link{% if active_tab == 'admin_review_logs' %} active{% endif %}"
                 href="{% url 'admin_review_logs' %}"
-                {% if request.resolver_match.url_name == 'admin_review_logs' %}aria-current="page"{% endif %}>
+                {% if active_tab == 'admin_review_logs' %}aria-current="page"{% endif %}>
                 <i class="bi bi-journal-check" aria-hidden="true"></i>
                 <span class="moderation-tabs__label">审核日志</span>
             </a>
         </li>
         <li class="nav-item moderation-tabs__item">
             <a
-                class="nav-link moderation-tabs__link{% if request.resolver_match.url_name == 'admin_report_logs' %} active{% endif %}"
+                class="nav-link moderation-tabs__link{% if active_tab == 'admin_report_logs' %} active{% endif %}"
                 href="{% url 'admin_report_logs' %}"
-                {% if request.resolver_match.url_name == 'admin_report_logs' %}aria-current="page"{% endif %}>
+                {% if active_tab == 'admin_report_logs' %}aria-current="page"{% endif %}>
                 <i class="bi bi-journal-x" aria-hidden="true"></i>
                 <span class="moderation-tabs__label">举报日志</span>
             </a>
         </li>
     </ul>
 </nav>
+{% endwith %}
