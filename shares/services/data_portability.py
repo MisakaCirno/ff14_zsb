@@ -53,7 +53,7 @@ class EntitySpec:
         return apps.get_model(self.model_label)
 
 
-ENTITY_SPECS = (
+V1_ENTITY_SPECS = (
     EntitySpec('groups', 'auth.Group', 'groups.jsonl'),
     EntitySpec('users', 'auth.User', 'users.jsonl'),
     EntitySpec('user_profiles', 'shares.UserProfile', 'user_profiles.jsonl'),
@@ -65,6 +65,12 @@ ENTITY_SPECS = (
     EntitySpec('announcements', 'shares.Announcement', 'announcements.jsonl'),
     EntitySpec('site_messages', 'shares.SiteMessage', 'site_messages.jsonl'),
 )
+V2_ENTITY_SPECS = V1_ENTITY_SPECS
+ENTITY_SPECS_BY_VERSION = MappingProxyType({
+    1: V1_ENTITY_SPECS,
+    2: V2_ENTITY_SPECS,
+})
+ENTITY_SPECS = ENTITY_SPECS_BY_VERSION[DATASET_VERSION]
 ENTITY_BY_NAME = {spec.name: spec for spec in ENTITY_SPECS}
 
 # Dataset schemas are public migration contracts, not projections of whichever
@@ -173,8 +179,30 @@ V1_ENTITY_FIELDS = MappingProxyType({
     }),
 })
 
-if frozenset(V1_ENTITY_FIELDS) != frozenset(ENTITY_BY_NAME):
-    raise RuntimeError('The frozen v1 schema must cover every portable entity.')
+# v2 added persistent moderation restrictions to Share.  It remains a frozen
+# historical wire contract: future Django model fields must require a dataset
+# version bump instead of silently changing v2 validation or digests.
+V2_ENTITY_FIELDS = MappingProxyType({
+    **V1_ENTITY_FIELDS,
+    'shares': frozenset({
+        *V1_ENTITY_FIELDS['shares'],
+        'restriction_state',
+        'restriction_reason',
+        'restricted_at',
+        'restricted_by',
+    }),
+})
+ENTITY_FIELDS_BY_VERSION = MappingProxyType({
+    1: V1_ENTITY_FIELDS,
+    2: V2_ENTITY_FIELDS,
+})
+
+for frozen_version, frozen_specs in ENTITY_SPECS_BY_VERSION.items():
+    frozen_entity_names = frozenset(spec.name for spec in frozen_specs)
+    if frozenset(ENTITY_FIELDS_BY_VERSION[frozen_version]) != frozen_entity_names:
+        raise RuntimeError(
+            f'The frozen v{frozen_version} schema must cover every portable entity.'
+        )
 
 
 class DataPortabilityError(RuntimeError):
@@ -276,7 +304,11 @@ def _serialize_entity(spec: EntitySpec, destination: Path) -> dict[str, Any]:
     queryset = spec.model._default_manager.order_by(spec.model._meta.pk.name)
     count = queryset.count()
     with destination.open('w', encoding='utf-8', newline='\n') as stream:
-        _serialize_queryset(queryset, stream)
+        _serialize_queryset(
+            queryset,
+            stream,
+            fields=_expected_serialized_fields(spec),
+        )
     return {
         'model': spec.model_label.lower(),
         'file': spec.filename,
@@ -358,9 +390,12 @@ def _expected_serialized_fields(
     *,
     dataset_version: int = DATASET_VERSION,
 ) -> set[str]:
-    if dataset_version == 1:
-        return set(V1_ENTITY_FIELDS[spec.name])
-    return _current_serialized_fields(spec)
+    try:
+        return set(ENTITY_FIELDS_BY_VERSION[dataset_version][spec.name])
+    except KeyError as exc:
+        raise DataPortabilityError(
+            f'No frozen schema for dataset v{dataset_version} entity {spec.name!r}.'
+        ) from exc
 
 
 def _record_schema_errors(
@@ -947,11 +982,7 @@ def _database_entity_digest(
     queryset = spec.model._default_manager.order_by(spec.model._meta.pk.name)
     count = queryset.count()
     stream = StringIO(newline='\n')
-    fields = (
-        _expected_serialized_fields(spec, dataset_version=1)
-        if dataset_version == 1
-        else None
-    )
+    fields = _expected_serialized_fields(spec, dataset_version=dataset_version)
     _serialize_queryset(queryset, stream, fields=fields)
     return count, sha256(stream.getvalue().encode('utf-8')).hexdigest()
 

@@ -27,6 +27,7 @@ from .services.data_portability import (
     IMPORT_REPORT_FILENAME,
     MANIFEST_FILENAME,
     V1_ENTITY_FIELDS,
+    V2_ENTITY_FIELDS,
     DataPortabilityError,
     database_matches_manifest,
     export_dataset,
@@ -161,6 +162,51 @@ class DataPortabilityTests(TestCase):
                 {spec.name for spec in ENTITY_SPECS},
             )
             self.assertNotIn('restriction_state', V1_ENTITY_FIELDS['shares'])
+
+    def test_version_2_schema_and_digest_ignore_future_model_fields(self):
+        from .services import data_portability
+
+        with TemporaryDirectory() as temporary:
+            dataset, manifest = self.export_to(Path(temporary))
+            current_serialized_fields = data_portability._current_serialized_fields
+
+            def fields_with_future_addition(spec):
+                return {
+                    *current_serialized_fields(spec),
+                    f'future_{spec.name}_field',
+                }
+
+            with patch.object(
+                data_portability,
+                '_current_serialized_fields',
+                side_effect=fields_with_future_addition,
+            ):
+                validation = validate_dataset(dataset)
+                self.assertTrue(validation.valid, validation.as_dict())
+                self.assertTrue(database_matches_manifest(manifest))
+
+    def test_frozen_version_2_fields_match_current_models(self):
+        from .services import data_portability
+
+        self.assertEqual(
+            set(V2_ENTITY_FIELDS),
+            {spec.name for spec in ENTITY_SPECS},
+        )
+        for spec in ENTITY_SPECS:
+            self.assertEqual(
+                set(V2_ENTITY_FIELDS[spec.name]),
+                data_portability._current_serialized_fields(spec),
+                f'{spec.name} changed without a dataset version bump',
+            )
+        self.assertEqual(
+            set(V2_ENTITY_FIELDS['shares']) - set(V1_ENTITY_FIELDS['shares']),
+            {
+                'restriction_state',
+                'restriction_reason',
+                'restricted_at',
+                'restricted_by',
+            },
+        )
 
     def clear_portable_data(self):
         SiteMessage.objects.all().delete()
