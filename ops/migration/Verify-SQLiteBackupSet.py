@@ -122,14 +122,18 @@ def _resolve_regular_file(raw_value: str, *, label: str) -> Path:
         raise VerificationError(f"{label} must be an existing regular file.") from None
     except OSError:
         raise VerificationError(f"{label} could not be inspected safely.") from None
-    if not stat.S_ISREG(metadata.st_mode) or _is_reparse_point(resolved):
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_nlink != 1
+        or _is_reparse_point(resolved)
+    ):
         raise VerificationError(f"{label} must be an existing regular file.")
     return resolved
 
 
 def _resolve_paths(
     arguments: argparse.Namespace,
-) -> tuple[Path, Path, Path, Path, tuple[int, int, int, int, int]]:
+) -> tuple[Path, Path, Path, Path, tuple[int, int, int, int, int, int]]:
     database = _resolve_regular_file(arguments.database, label="Database")
     checksum = _resolve_regular_file(arguments.checksum, label="Checksum")
     metadata = _resolve_regular_file(arguments.metadata, label="Metadata")
@@ -181,13 +185,16 @@ def _resolve_paths(
     )
 
 
-def _stat_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
+def _stat_identity(
+    metadata: os.stat_result,
+) -> tuple[int, int, int, int, int, int]:
     return (
         metadata.st_dev,
         metadata.st_ino,
         metadata.st_size,
         metadata.st_mtime_ns,
         metadata.st_ctime_ns,
+        metadata.st_nlink,
     )
 
 
@@ -201,11 +208,11 @@ def _read_stable_bytes(
     path: Path,
     *,
     maximum_size: int,
-) -> tuple[bytes, tuple[int, int, int, int, int]]:
+) -> tuple[bytes, tuple[int, int, int, int, int, int]]:
     try:
         with path.open("rb") as stream:
             before = os.fstat(stream.fileno())
-            if not stat.S_ISREG(before.st_mode):
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
                 raise VerificationError("Backup input is not a regular file.")
             if before.st_size > maximum_size:
                 raise VerificationError("Backup evidence file is too large.")
@@ -226,14 +233,14 @@ def _read_stable_bytes(
 
 def _hash_stable_database(
     path: Path,
-) -> tuple[str, int, tuple[int, int, int, int, int]]:
+) -> tuple[str, int, tuple[int, int, int, int, int, int]]:
     digest = sha256()
     byte_count = 0
     prefix = bytearray()
     try:
         with path.open("rb") as stream:
             before = os.fstat(stream.fileno())
-            if not stat.S_ISREG(before.st_mode):
+            if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
                 raise VerificationError("Database is not a regular file.")
             while True:
                 chunk = stream.read(1024 * 1024)
@@ -332,9 +339,9 @@ def _validate_metadata(metadata: dict[str, Any]) -> None:
 def _assert_inputs_unchanged(
     paths: tuple[Path, Path, Path],
     identities: tuple[
-        tuple[int, int, int, int, int],
-        tuple[int, int, int, int, int],
-        tuple[int, int, int, int, int],
+        tuple[int, int, int, int, int, int],
+        tuple[int, int, int, int, int, int],
+        tuple[int, int, int, int, int, int],
     ],
 ) -> None:
     try:
@@ -342,7 +349,11 @@ def _assert_inputs_unchanged(
             if _is_reparse_point(path):
                 raise VerificationError("Backup input became a reparse point.")
             current = os.stat(path)
-            if not stat.S_ISREG(current.st_mode) or _stat_identity(current) != expected:
+            if (
+                not stat.S_ISREG(current.st_mode)
+                or current.st_nlink != 1
+                or _stat_identity(current) != expected
+            ):
                 raise VerificationError("Backup input changed during verification.")
     except VerificationError:
         raise
@@ -352,7 +363,7 @@ def _assert_inputs_unchanged(
 
 def _assert_output_parent_unchanged(
     output: Path,
-    expected_identity: tuple[int, int, int, int, int],
+    expected_identity: tuple[int, int, int, int, int, int],
 ) -> None:
     try:
         _assert_no_reparse_components(output, include_leaf=False)

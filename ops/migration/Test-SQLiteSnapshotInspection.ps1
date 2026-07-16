@@ -129,6 +129,8 @@ $temporaryRoot = Join-Path `
 $fixtureScript = Join-Path $temporaryRoot 'create_fixture.py'
 $validDatabase = Join-Path $temporaryRoot 'valid.sqlite3'
 $invalidForeignKeyDatabase = Join-Path $temporaryRoot 'invalid-fk.sqlite3'
+$hardlinkSourceDatabase = Join-Path $temporaryRoot 'hardlink-source.sqlite3'
+$hardlinkAliasDatabase = Join-Path $temporaryRoot 'hardlink-alias.sqlite3'
 
 $fixtureSource = @'
 import sqlite3
@@ -177,6 +179,20 @@ try {
         -FilePath $PythonExecutable `
         -Arguments @($fixtureScript, $invalidForeignKeyDatabase, 'invalid-fk') `
         -Description 'Invalid foreign-key SQLite fixture creation'
+    Invoke-NativeChecked `
+        -FilePath $PythonExecutable `
+        -Arguments @($fixtureScript, $hardlinkSourceDatabase, 'valid') `
+        -Description 'Hard-link source SQLite fixture creation'
+    Invoke-NativeChecked `
+        -FilePath $PythonExecutable `
+        -Arguments @(
+            '-B',
+            '-c',
+            'import os, sys; os.link(sys.argv[1], sys.argv[2])',
+            $hardlinkSourceDatabase,
+            $hardlinkAliasDatabase
+        ) `
+        -Description 'Hard-linked SQLite alias creation'
 
     $validHashBefore = (
         Get-FileHash -LiteralPath $validDatabase -Algorithm SHA256
@@ -241,6 +257,22 @@ try {
     Assert-True `
         -Condition ($validHashAfter -eq $validHashBefore) `
         -Message 'Inspector modified the source SQLite snapshot.'
+
+    $hardlinkHash = (
+        Get-FileHash -LiteralPath $hardlinkAliasDatabase -Algorithm SHA256
+    ).Hash.ToLowerInvariant()
+    $hardlinkOutput = Join-Path $temporaryRoot 'hardlink-report.json'
+    $hardlinkExit = Invoke-Inspector `
+        -Database $hardlinkAliasDatabase `
+        -ExpectedSha256 $hardlinkHash `
+        -Output $hardlinkOutput `
+        -LogPath (Join-Path $temporaryRoot 'hardlink.log')
+    Assert-True `
+        -Condition ($hardlinkExit -ne 0) `
+        -Message 'Hard-linked SQLite snapshot must fail inspection.'
+    Assert-True `
+        -Condition (-not (Test-Path -LiteralPath $hardlinkOutput)) `
+        -Message 'Hard-linked SQLite snapshot must not publish a report.'
 
     $wrongHashOutput = Join-Path $temporaryRoot 'wrong-hash-report.json'
     $wrongHashExit = Invoke-Inspector `

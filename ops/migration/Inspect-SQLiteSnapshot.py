@@ -79,6 +79,19 @@ def _canonical_key(path: Path) -> str:
     return os.path.normcase(os.path.realpath(os.fspath(path)))
 
 
+def _file_identity(
+    metadata: os.stat_result,
+) -> tuple[int, int, int, int, int, int]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+        metadata.st_nlink,
+    )
+
+
 def _validate_paths(database_value: str, output_value: str) -> tuple[Path, Path]:
     database_input = _absolute_path(database_value, description="Database")
     try:
@@ -90,8 +103,13 @@ def _validate_paths(database_value: str, output_value: str) -> tuple[Path, Path]
     except OSError as exc:
         raise InspectionError(f"Database path could not be inspected: {exc}") from None
 
-    if not stat.S_ISREG(database_metadata.st_mode):
-        raise InspectionError("Database must be an existing regular file.")
+    if (
+        not stat.S_ISREG(database_metadata.st_mode)
+        or database_metadata.st_nlink != 1
+    ):
+        raise InspectionError(
+            "Database must be a single-link existing regular file."
+        )
 
     output_input = _absolute_path(output_value, description="Output")
     if os.path.lexists(output_input):
@@ -341,6 +359,9 @@ def inspect_snapshot(
 
     database, output = _validate_paths(database_value, output_value)
     _assert_no_live_sidecars(database)
+    initial_identity = _file_identity(os.stat(database))
+    if initial_identity[-1] != 1:
+        raise InspectionError("Database became hard-linked before inspection.")
     before_hash = _file_sha256(database)
     if before_hash != expected_sha256:
         raise InspectionError("Database SHA256 does not match the expected value.")
@@ -351,8 +372,14 @@ def inspect_snapshot(
 
     _assert_no_live_sidecars(database)
     after_hash = _file_sha256(database)
-    after_size = database.stat().st_size
-    if before_hash != after_hash or before_size != after_size:
+    final_metadata = os.stat(database)
+    after_size = final_metadata.st_size
+    if (
+        before_hash != after_hash
+        or before_size != after_size
+        or _file_identity(final_metadata) != initial_identity
+        or final_metadata.st_nlink != 1
+    ):
         raise InspectionError("Database changed while it was being inspected.")
 
     report = {

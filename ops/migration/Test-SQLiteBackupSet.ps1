@@ -440,6 +440,38 @@ try {
         -Condition ($validHashAfter -eq $validHashBefore) `
         -Message 'Verifier modified the valid database.'
 
+    $hardlinkTarget = New-BackupSet -Name 'hardlink-target'
+    $hardlinkAliasRoot = Join-Path $temporaryRoot 'input-hardlink-alias'
+    [void](New-Item -ItemType Directory -Path $hardlinkAliasRoot)
+    $hardlinkAlias = Join-Path $hardlinkAliasRoot 'backup.sqlite3'
+    Invoke-NativeChecked `
+        -FilePath $PythonExecutable `
+        -Arguments @(
+            '-B',
+            '-c',
+            'import os, sys; os.link(sys.argv[1], sys.argv[2])',
+            $hardlinkTarget.Database,
+            $hardlinkAlias
+        ) `
+        -Description 'Hard-linked backup fixture creation'
+    Copy-Item `
+        -LiteralPath $hardlinkTarget.Checksum `
+        -Destination "$hardlinkAlias.sha256"
+    Copy-Item `
+        -LiteralPath $hardlinkTarget.Metadata `
+        -Destination "$hardlinkAlias.metadata.json"
+    $hardlinkOutput = Join-Path $reportRoot 'hardlink.json'
+    Invoke-Verifier `
+        -Database $hardlinkAlias `
+        -Checksum "$hardlinkAlias.sha256" `
+        -Metadata "$hardlinkAlias.metadata.json" `
+        -Output $hardlinkOutput `
+        -Name 'hardlink' `
+        -ExpectedExitCode 1
+    Assert-Contract `
+        -Condition (-not (Test-Path -LiteralPath $hardlinkOutput)) `
+        -Message 'A hard-linked backup database published a report.'
+
     $fractionalTime = New-BackupSet `
         -Name 'fractional-time' `
         -Variant 'fractional-time'

@@ -187,6 +187,7 @@ python ops\migration\Inspect-SQLiteSnapshot.py `
 ```
 
 - 三件套验证器不通过 Django 或 SQLite 打开数据库，只证明本次读取到的三份文件彼此自洽，并确认该数据库具备进入独立快照检查的前置条件。元数据中的 `integrity_check=ok` 和 `foreign_key_check=ok` 仍只是备份生产者声明，不能替代随后由 `Inspect-SQLiteSnapshot.py` 执行的只读 `PRAGMA integrity_check`、`foreign_key_check`、表、migration 和序列清点。
+- 三件套和待检查数据库必须是单链接普通文件；不要用 NTFS/Unix 硬链接给活动数据库创建“副本”，否则另一文件名旁的 WAL 或回滚日志可能绕过同名 sidecar 检查。跨目录交接应复制备份字节并重新核对 SHA-256。
 - 两份证据都使用新文件发布；备份集报告固定包含 `cutover_authorized=false` 和 `inspection_required=true`。无论哪一份报告都不证明线上来源、停写时点或允许正式切换。输入数据库旁出现 `-wal`、`-shm` 或 `-journal` 时必须拒绝并重新取得一致备份。
 - 备份应复制到另一物理存储，并定期在隔离环境中执行恢复、迁移、数据校验和关键流程冒烟。
 - PostgreSQL 使用 `requirements-postgres.txt` 和环境变量切换；CI 会在 PostgreSQL 16 上执行同一套迁移与测试。正式备份使用 `pg_dump`，不使用 SQLite 备份命令。
