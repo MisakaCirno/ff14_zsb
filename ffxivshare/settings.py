@@ -5,23 +5,22 @@ Django settings for ffxivshare project.
 from pathlib import Path
 
 from django.contrib.messages import constants as message_constants
-from dotenv import load_dotenv
 
 from .environment import (
     build_database_config,
     env_bool,
     env_int,
     env_list,
+    load_environment_file,
     resolve_app_environment,
+    resolve_runtime_path,
     resolve_secret_key,
     validate_runtime_config,
 )
 
-# Load environment variables from .env file
-load_dotenv()
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_environment_file(BASE_DIR)
 
 APP_ENV = resolve_app_environment()
 IS_PRODUCTION = APP_ENV == 'production'
@@ -198,7 +197,7 @@ VITE_ENTRYPOINT = 'src/main.ts'
 
 # Media files
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = resolve_runtime_path('MEDIA_ROOT', BASE_DIR, 'media')
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

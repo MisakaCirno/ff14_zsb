@@ -1,18 +1,275 @@
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
 from .environment import (
     DEVELOPMENT_SECRET_KEY,
+    ENV_FILE_VARIABLE,
     build_database_config,
     env_bool,
     env_int,
     env_list,
+    load_environment_file,
     resolve_app_environment,
+    resolve_runtime_path,
     resolve_secret_key,
     validate_runtime_config,
 )
+
+
+class EnvironmentFileLoadingTests(SimpleTestCase):
+    def write_env(self, directory, content, name='app.env'):
+        env_file = Path(directory) / name
+        env_file.write_text(content, encoding='utf-8')
+        return env_file
+
+    def test_explicit_file_must_be_an_existing_absolute_regular_file(self):
+        with TemporaryDirectory() as temporary_directory:
+            base_dir = Path(temporary_directory)
+            relative_file = self.write_env(base_dir, 'VALUE=relative\n')
+            missing_file = base_dir / 'missing.env'
+
+            invalid_values = (
+                '',
+                '   ',
+                relative_file.name,
+                str(missing_file),
+                str(base_dir),
+            )
+            for value in invalid_values:
+                with self.subTest(value=value):
+                    with self.assertRaisesMessage(
+                        ImproperlyConfigured,
+                        f'{ENV_FILE_VARIABLE} must be an absolute path to an existing file.',
+                    ) as raised:
+                        load_environment_file(
+                            base_dir,
+                            environ={ENV_FILE_VARIABLE: value},
+                        )
+                    self.assertNotIn(str(base_dir), str(raised.exception))
+
+    def test_environment_read_failure_is_generic_and_does_not_log_the_error(self):
+        secret = 'secret-from-filesystem-error'
+        with TemporaryDirectory() as temporary_directory:
+            env_file = self.write_env(temporary_directory, 'VALUE=unread\n')
+
+            with patch(
+                'ffxivshare.environment.dotenv_values',
+                side_effect=OSError(secret),
+            ):
+                with self.assertNoLogs(level='WARNING'):
+                    with self.assertRaisesMessage(
+                        ImproperlyConfigured,
+                        'The environment file could not be read.',
+                    ) as raised:
+                        load_environment_file(
+                            temporary_directory,
+                            environ={ENV_FILE_VARIABLE: str(env_file)},
+                        )
+
+            self.assertNotIn(secret, str(raised.exception))
+
+    def test_explicit_file_is_loaded_without_reading_project_dotenv(self):
+        with TemporaryDirectory() as base_directory, TemporaryDirectory() as external_directory:
+            base_dir = Path(base_directory)
+            self.write_env(base_dir, 'SOURCE=project\n', name='.env')
+            external_file = self.write_env(
+                external_directory,
+                'SOURCE=external\nNEW_VALUE=from-file\n',
+            )
+            environ = {ENV_FILE_VARIABLE: str(external_file)}
+
+            loaded_file = load_environment_file(base_dir, environ=environ)
+
+            self.assertEqual(loaded_file, external_file.resolve())
+            self.assertEqual(environ['SOURCE'], 'external')
+            self.assertEqual(environ['NEW_VALUE'], 'from-file')
+
+    def test_process_environment_has_priority_over_file_values(self):
+        with TemporaryDirectory() as temporary_directory:
+            env_file = self.write_env(
+                temporary_directory,
+                (
+                    'SECRET_KEY=file-secret\n'
+                    'NEW_VALUE=from-file\n'
+                    'DERIVED=${SECRET_KEY}-derived\n'
+                ),
+            )
+            environ = {
+                ENV_FILE_VARIABLE: str(env_file),
+                'SECRET_KEY': 'process-secret',
+            }
+
+            with self.assertNoLogs(level='WARNING'):
+                load_environment_file(temporary_directory, environ=environ)
+
+            self.assertEqual(environ['SECRET_KEY'], 'process-secret')
+            self.assertEqual(environ['NEW_VALUE'], 'from-file')
+            self.assertEqual(environ['DERIVED'], 'process-secret-derived')
+
+    def test_default_loader_reads_only_base_dir_dotenv(self):
+        with TemporaryDirectory() as temporary_directory:
+            base_dir = Path(temporary_directory)
+            env_file = self.write_env(base_dir, 'SOURCE=base-dir\n', name='.env')
+            environ = {}
+
+            with patch(
+                'ffxivshare.environment.dotenv_values',
+                return_value={'SOURCE': 'base-dir'},
+            ) as dotenv_values_mock:
+                loaded_file = load_environment_file(base_dir, environ=environ)
+
+            self.assertEqual(loaded_file, env_file.resolve())
+            dotenv_values_mock.assert_called_once()
+            called_path = dotenv_values_mock.call_args.kwargs['dotenv_path']
+            self.assertTrue(called_path.samefile(env_file))
+            self.assertEqual(
+                dotenv_values_mock.call_args.kwargs['encoding'],
+                'utf-8',
+            )
+            self.assertFalse(dotenv_values_mock.call_args.kwargs['interpolate'])
+            self.assertEqual(environ['SOURCE'], 'base-dir')
+
+    def test_missing_default_file_is_a_noop_and_never_searches_the_cwd(self):
+        with TemporaryDirectory() as temporary_directory:
+            with patch('ffxivshare.environment.dotenv_values') as dotenv_values_mock:
+                loaded_file = load_environment_file(temporary_directory, environ={})
+
+            self.assertIsNone(loaded_file)
+            dotenv_values_mock.assert_not_called()
+
+    def test_selector_inside_dotenv_cannot_change_future_file_selection(self):
+        with TemporaryDirectory() as temporary_directory:
+            env_file = self.write_env(
+                temporary_directory,
+                f'{ENV_FILE_VARIABLE}=D:\\private\\other.env\nVALUE=loaded\n',
+                name='.env',
+            )
+            environ = {}
+
+            self.assertEqual(
+                load_environment_file(temporary_directory, environ=environ),
+                env_file.resolve(),
+            )
+
+            self.assertNotIn(ENV_FILE_VARIABLE, environ)
+            self.assertEqual(environ['VALUE'], 'loaded')
+
+    def test_project_dotenv_must_be_a_regular_file_when_present(self):
+        with TemporaryDirectory() as temporary_directory:
+            (Path(temporary_directory) / '.env').mkdir()
+
+            with self.assertRaisesMessage(
+                ImproperlyConfigured,
+                'The project .env path must be a regular file.',
+            ):
+                load_environment_file(temporary_directory, environ={})
+
+
+class RuntimePathResolutionTests(SimpleTestCase):
+    def test_missing_or_blank_value_uses_the_compatible_default(self):
+        with TemporaryDirectory() as temporary_directory:
+            base_dir = Path(temporary_directory)
+            expected = (base_dir / 'media').resolve()
+
+            for environ in ({}, {'MEDIA_ROOT': ''}, {'MEDIA_ROOT': '   '}):
+                with self.subTest(environ=environ):
+                    self.assertEqual(
+                        resolve_runtime_path(
+                            'MEDIA_ROOT',
+                            base_dir,
+                            'media',
+                            environ=environ,
+                        ),
+                        expected,
+                    )
+
+    def test_relative_value_is_anchored_to_base_dir_not_the_cwd(self):
+        with TemporaryDirectory() as temporary_directory:
+            base_dir = Path(temporary_directory)
+
+            resolved = resolve_runtime_path(
+                'MEDIA_ROOT',
+                base_dir,
+                'media',
+                environ={'MEDIA_ROOT': 'persistent/media'},
+            )
+
+            self.assertEqual(resolved, (base_dir / 'persistent' / 'media').resolve())
+
+    def test_absolute_external_path_is_preserved_without_requiring_it_to_exist(self):
+        with TemporaryDirectory() as temporary_directory:
+            external_path = Path(temporary_directory) / 'future-media-directory'
+
+            resolved = resolve_runtime_path(
+                'MEDIA_ROOT',
+                Path.cwd(),
+                'media',
+                environ={'MEDIA_ROOT': str(external_path)},
+            )
+
+            self.assertEqual(resolved, external_path.resolve())
+            self.assertFalse(external_path.exists())
+
+    def test_invalid_path_fails_without_echoing_its_value(self):
+        invalid_value = 'secret-value\0media'
+
+        with self.assertRaisesMessage(
+            ImproperlyConfigured,
+            'MEDIA_ROOT must be a valid filesystem path.',
+        ) as raised:
+            resolve_runtime_path(
+                'MEDIA_ROOT',
+                Path.cwd(),
+                'media',
+                environ={'MEDIA_ROOT': invalid_value},
+            )
+
+        self.assertNotIn('secret-value', str(raised.exception))
+
+
+class SettingsBootstrapContractTests(SimpleTestCase):
+    def setUp(self):
+        self.project_root = Path(__file__).resolve().parent.parent
+        self.settings_source = (
+            self.project_root / 'ffxivshare' / 'settings.py'
+        ).read_text(encoding='utf-8')
+
+    def test_base_dir_is_known_before_the_only_dotenv_load(self):
+        base_dir_assignment = 'BASE_DIR = Path(__file__).resolve().parent.parent'
+        environment_load = 'load_environment_file(BASE_DIR)'
+
+        self.assertLess(
+            self.settings_source.index(base_dir_assignment),
+            self.settings_source.index(environment_load),
+        )
+        self.assertNotIn('load_dotenv(', self.settings_source)
+
+    def test_media_root_is_wired_to_the_shared_runtime_path_resolver(self):
+        self.assertIn(
+            "MEDIA_ROOT = resolve_runtime_path('MEDIA_ROOT', BASE_DIR, 'media')",
+            self.settings_source,
+        )
+
+    def test_environment_samples_keep_legacy_default_and_external_production_media(self):
+        development_sample = (self.project_root / '.env.sample').read_text(encoding='utf-8')
+        production_sample = (
+            self.project_root / '.env.production.sample'
+        ).read_text(encoding='utf-8')
+
+        self.assertIn('MEDIA_ROOT=media', development_sample)
+        self.assertIn(r'MEDIA_ROOT=D:\FFXIVShareData\media', production_sample)
+        self.assertIn(
+            r'DATABASE_PATH=D:\FFXIVShareData\database\ffxivshare.sqlite3',
+            production_sample,
+        )
+        self.assertIn(
+            r'# FFXIVSHARE_ENV_FILE=D:\FFXIVShareData\config\ffxivshare.env',
+            production_sample,
+        )
 
 
 class EnvironmentParsingTests(SimpleTestCase):
