@@ -104,6 +104,60 @@ class SQLiteBackupTests(TransactionTestCase):
                         [item == existing_index for item in range(3)],
                     )
 
+    def test_overwrite_refuses_live_database_and_journal_sidecars(self):
+        with TemporaryDirectory() as temporary:
+            live_database = Path(temporary) / 'live.sqlite3'
+            sentinel = b'active SQLite file'
+
+            class DatabaseListCursor:
+                @staticmethod
+                def fetchall():
+                    return [(0, 'main', str(live_database))]
+
+            class SourceConnection:
+                @staticmethod
+                def execute(statement):
+                    if statement != 'PRAGMA database_list':
+                        raise AssertionError(f'Unexpected statement: {statement}')
+                    return DatabaseListCursor()
+
+                @staticmethod
+                def backup(*_args, **_kwargs):
+                    raise AssertionError('A protected output reached the backup step.')
+
+            class DatabaseConnection:
+                vendor = 'sqlite'
+                settings_dict = {
+                    'NAME': 'file:misleading-name.sqlite3?mode=rwc',
+                }
+                connection = SourceConnection()
+
+                @staticmethod
+                def ensure_connection():
+                    return None
+
+            with patch(
+                'shares.services.database_backup.connections',
+                {'default': DatabaseConnection()},
+            ):
+                for suffix in ('', '-wal', '-shm', '-journal'):
+                    with self.subTest(suffix=suffix):
+                        output = live_database.with_name(
+                            f'{live_database.name}{suffix}'
+                        )
+                        output.write_bytes(sentinel)
+
+                        with self.assertRaisesRegex(
+                            DatabaseBackupError,
+                            'live SQLite database and its journal sidecars',
+                        ):
+                            backup_sqlite_database(output, overwrite=True)
+
+                        self.assertEqual(output.read_bytes(), sentinel)
+                        for sidecar in self._output_paths(output)[1:]:
+                            self.assertFalse(sidecar.exists())
+                        output.unlink()
+
     def test_overwrite_consistently_replaces_all_three_outputs(self):
         with TemporaryDirectory() as temporary:
             output = Path(temporary) / 'site-backup.sqlite3'

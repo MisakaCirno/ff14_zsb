@@ -28,6 +28,23 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _sqlite_main_database_path(source: sqlite3.Connection) -> Path | None:
+    rows = source.execute('PRAGMA database_list').fetchall()
+    main_rows = [row for row in rows if len(row) >= 3 and row[1] == 'main']
+    if len(main_rows) != 1:
+        raise DatabaseBackupError(
+            'Could not identify the active SQLite main database path.'
+        )
+    raw_path = main_rows[0][2]
+    if raw_path == '':
+        return None
+    if not isinstance(raw_path, str):
+        raise DatabaseBackupError(
+            'The active SQLite main database path has an unexpected type.'
+        )
+    return Path(raw_path).expanduser().resolve()
+
+
 def _write_staged_text(path: Path, content: str) -> Path:
     temporary = path.with_name(f'.{path.name}.tmp-{uuid4().hex}')
     try:
@@ -141,23 +158,31 @@ def backup_sqlite_database(
             'One or more backup outputs already exist. '
             'Use --overwrite explicitly after reviewing all three files.'
         )
-    output.parent.mkdir(parents=True, exist_ok=True)
 
-    configured_name = str(database.settings_dict['NAME'])
-    if not configured_name.startswith('file:') and configured_name != ':memory:':
-        source_path = Path(configured_name).expanduser().resolve()
-        if output == source_path:
-            raise DatabaseBackupError('Backup output must differ from the live database path.')
+    database.ensure_connection()
+    source = database.connection
+    if source is None or not hasattr(source, 'backup'):
+        raise DatabaseBackupError('The active SQLite connection cannot create backups.')
+    source_path = _sqlite_main_database_path(source)
+    if source_path is not None:
+        protected_source_paths = {
+            source_path,
+            source_path.with_name(f'{source_path.name}-wal'),
+            source_path.with_name(f'{source_path.name}-shm'),
+            source_path.with_name(f'{source_path.name}-journal'),
+        }
+        if any(path in protected_source_paths for path in output_paths):
+            raise DatabaseBackupError(
+                'Backup outputs must differ from the live SQLite database and '
+                'its journal sidecars.'
+            )
+    output.parent.mkdir(parents=True, exist_ok=True)
 
     temporary = output.with_name(f'.{output.name}.tmp-{uuid4().hex}')
     staged_checksum: Path | None = None
     staged_metadata: Path | None = None
     destination = None
     try:
-        database.ensure_connection()
-        source = database.connection
-        if source is None or not hasattr(source, 'backup'):
-            raise DatabaseBackupError('The active SQLite connection cannot create backups.')
         destination = sqlite3.connect(temporary)
         source.backup(destination, pages=1000, sleep=0.05)
         integrity_rows = destination.execute('PRAGMA integrity_check').fetchall()
