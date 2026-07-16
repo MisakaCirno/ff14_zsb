@@ -357,3 +357,10 @@
     max-width: calc(100vw - 3.5rem);
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .browse-announcement {
+    animation: none !important;
+    transition: none !important;
+  }
+}

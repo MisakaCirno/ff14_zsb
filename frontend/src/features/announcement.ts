@@ -1,4 +1,26 @@
 const dismissedAnnouncementKey = 'dismissed_announcement_id'
+const reducedMotionQuery = '(prefers-reduced-motion: reduce)'
+
+function prefersReducedMotion(): boolean {
+  return typeof window.matchMedia === 'function'
+    && window.matchMedia(reducedMotionQuery).matches
+}
+
+function restoreFocusAfterDismissal(
+  hadFocus: boolean,
+  preferredTarget: HTMLElement | null,
+): void {
+  if (!hadFocus) {
+    return
+  }
+
+  const target = preferredTarget?.isConnected
+    ? preferredTarget
+    : document.getElementById('main-content')
+  if (target instanceof HTMLElement) {
+    target.focus({ preventScroll: true })
+  }
+}
 
 function rememberDismissal(announcementId: string): void {
   if (!announcementId) {
@@ -24,12 +46,19 @@ function dismissAnnouncement(banner: HTMLElement): void {
   const navLink = document.getElementById('nav-announcement-link')
   const announcementId = banner.dataset.announcementId ?? ''
   const isNavLinkVisible = navLink instanceof HTMLElement && navLink.offsetParent !== null
+  const focusTarget = isNavLinkVisible ? navLink : null
+  const hadFocus = banner.contains(document.activeElement)
+  banner.setAttribute('aria-hidden', 'true')
+  banner.setAttribute('inert', '')
 
-  if (isNavLinkVisible) {
+  if (prefersReducedMotion()) {
+    banner.style.display = 'none'
+  } else if (isNavLinkVisible) {
     const clone = banner.cloneNode(true) as HTMLElement
     clone.removeAttribute('id')
     clone.removeAttribute('aria-labelledby')
     clone.setAttribute('aria-hidden', 'true')
+    clone.setAttribute('inert', '')
     clone.querySelector('#browse-announcement-title')?.removeAttribute('id')
     const rect = banner.getBoundingClientRect()
     const targetRect = navLink.getBoundingClientRect()
@@ -65,6 +94,7 @@ function dismissAnnouncement(banner: HTMLElement): void {
     }, 300)
   }
 
+  restoreFocusAfterDismissal(hadFocus, focusTarget)
   rememberDismissal(announcementId)
 }
 

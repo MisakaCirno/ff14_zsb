@@ -140,7 +140,7 @@
 
     <section id="app" class="browse-results" aria-labelledby="browse-results-title" data-browse-results>
         <h2 class="visually-hidden" id="browse-results-title">分享列表</h2>
-        <div id="share-grid" class="browse-grid row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
+        <div id="share-grid" class="browse-grid row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4" data-infinite-scroll-region>
             {% if feed_mode == 'infinite' %}
             {% include 'shares/includes/share_cards_page.html' %}
             {% else %}

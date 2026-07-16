@@ -1321,6 +1321,24 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('?tab=review&amp;filter=open&amp;page=1', content)
         self.assertIn('?tab=review&amp;filter=open&amp;page=3', content)
 
+        based_content = render_to_string(
+            'shares/includes/pagination.html',
+            {
+                'page_obj': page_obj,
+                'aria_label': '带基址的测试分页',
+                'base_url': '/staff/reviews/',
+            },
+            request=request,
+        )
+        self.assertIn(
+            '/staff/reviews/?tab=review&amp;filter=open&amp;page=1',
+            based_content,
+        )
+        self.assertIn(
+            '/staff/reviews/?tab=review&amp;filter=open&amp;page=3',
+            based_content,
+        )
+
         first_page_content = render_to_string(
             'shares/includes/pagination.html',
             {'page_obj': paginator.get_page(1), 'aria_label': '测试分页'},

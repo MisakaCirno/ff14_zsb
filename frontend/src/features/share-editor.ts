@@ -290,6 +290,8 @@ function initializeEditor(form: HTMLFormElement): void {
     return
   }
   form.dataset.shareEditorInitialized = 'true'
+  form.querySelector<HTMLElement>('[data-form-error-summary]')
+    ?.focus()
 
   const strategyCodeInput = form.querySelector<HTMLTextAreaElement>(
     '[data-share-strategy-code]',

@@ -6,12 +6,13 @@
         data-infinite-scroll-sentinel
         hx-get="{{ request.path }}?{{ share_cards_next_query }}"
         hx-trigger="intersect, click"
-        hx-swap="outerHTML">
+        hx-swap="outerHTML"
+        hx-sync="this:drop">
     <span class="spinner-border spinner-border-sm me-2 htmx-indicator" aria-hidden="true"></span>
     <span data-infinite-scroll-message role="status" aria-live="polite">继续向下滚动加载更多</span>
 </button>
 {% elif shares.paginator.count > 0 %}
-<div class="col-12 text-center text-muted py-4" data-infinite-scroll-end>
+<div class="col-12 text-center text-muted py-4" data-infinite-scroll-end role="status" tabindex="-1">
     已经到底了
 </div>
 {% endif %}
