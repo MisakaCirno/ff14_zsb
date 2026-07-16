@@ -43,7 +43,7 @@
             {% if share.is_restricted %}
             <div class="alert alert-danger mb-0 py-2 small moderation-review-card__state-copy" role="note">
                 <strong>{{ share.get_restriction_state_display }}：</strong>
-                {{ share.restriction_reason_preview }}
+                <span id="reviewRestrictionReason{{ share.share_id }}">{{ share.restriction_reason_preview }}</span>
             </div>
             {% endif %}
 
@@ -63,7 +63,7 @@
                             <span class="badge bg-secondary">{{ log.get_action_display }}</span>
                             {% if log.details_preview %}
                             <p class="moderation-history__details">
-                                {{ log.details_preview }}{% if log.details_length > 500 %}…{% endif %}
+                                {{ log.details_preview }}{% if log.details_length > 300 %}…{% endif %}
                             </p>
                             {% endif %}
                         </li>
@@ -88,42 +88,15 @@
                 查看详情
             </a>
 
-            {% if item.target_outside_queue %}
+            {% if item.invalid_action %}
             <div class="moderation-action-grid" role="group" aria-label="恢复《{{ share.title }}》未完成的管理操作">
-                <button
-                    type="button"
-                    class="btn btn-sm btn-warning"
-                    data-bs-toggle="modal"
-                    {% if item.invalid_action == 'reject' %}
-                    data-bs-target="#rejectModal{{ share.share_id }}"
-                    {% elif item.invalid_action == 'confirm' %}
-                    data-bs-target="#confirmRestrictionModal{{ share.share_id }}"
-                    {% else %}
-                    data-bs-target="#releaseRestrictionModal{{ share.share_id }}"
-                    {% endif %}>
-                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
-                    检查未完成的操作
-                </button>
+                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action=item.invalid_action confirmation_version=item.confirmation_version button_class='btn btn-sm btn-warning' button_icon='bi bi-arrow-clockwise' button_label='检查未完成的操作' only %}
             </div>
             {% elif share.restriction_state == 'legacy_private' %}
             <div class="moderation-action-grid" role="group" aria-label="确认《{{ share.title }}》的历史私密状态">
-                <button
-                    type="button"
-                    class="btn btn-sm btn-danger"
-                    data-bs-toggle="modal"
-                    data-bs-target="#confirmRestrictionModal{{ share.share_id }}">
-                    <i class="bi bi-shield-lock" aria-hidden="true"></i>
-                    确认为历史下架
-                </button>
+                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='confirm' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-danger' button_icon='bi bi-shield-lock' button_label='确认为历史下架' only %}
                 {% if share.visibility == 'private' %}
-                <button
-                    type="button"
-                    class="btn btn-sm btn-success"
-                    data-bs-toggle="modal"
-                    data-bs-target="#releaseRestrictionModal{{ share.share_id }}">
-                    <i class="bi bi-person-lock" aria-hidden="true"></i>
-                    确认为作者私密
-                </button>
+                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='release' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-success' button_icon='bi bi-person-lock' button_label='确认为作者私密' only %}
                 {% else %}
                 <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">需通过审核后解除</span>
                 {% endif %}
@@ -137,35 +110,14 @@
                         {% if share.is_restricted %}通过并解除限制{% else %}通过{% endif %}
                     </button>
                 </form>
-                <button
-                    type="button"
-                    class="btn btn-sm btn-danger"
-                    data-bs-toggle="modal"
-                    data-bs-target="#rejectModal{{ share.share_id }}">
-                    <i class="bi bi-x-circle" aria-hidden="true"></i>
-                    拒绝
-                </button>
+                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='reject' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-danger' button_icon='bi bi-x-circle' button_label='拒绝' only %}
             </div>
             {% elif share.is_restricted and share.status == 'approved' %}
             <div class="moderation-action-grid" role="group" aria-label="复核《{{ share.title }}》的内容限制">
                 {% if share.restriction_state == 'report_takedown' %}
-                <button
-                    type="button"
-                    class="btn btn-sm btn-outline-danger"
-                    data-bs-toggle="modal"
-                    data-bs-target="#confirmRestrictionModal{{ share.share_id }}">
-                    <i class="bi bi-shield-check" aria-hidden="true"></i>
-                    确认维持
-                </button>
+                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='confirm' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-outline-danger' button_icon='bi bi-shield-check' button_label='确认维持' only %}
                 {% endif %}
-                <button
-                    type="button"
-                    class="btn btn-sm btn-success"
-                    data-bs-toggle="modal"
-                    data-bs-target="#releaseRestrictionModal{{ share.share_id }}">
-                    <i class="bi bi-unlock" aria-hidden="true"></i>
-                    解除限制
-                </button>
+                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='release' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-success' button_icon='bi bi-unlock' button_label='解除限制' only %}
             </div>
             {% else %}
             <p class="small text-muted mb-0">等待作者修改并重新提交审核。</p>
@@ -173,6 +125,5 @@
         </footer>
     </article>
 
-    {% include 'shares/includes/moderation_review_modals.html' with item=item csrf_token=csrf_token only %}
 </div>
 {% endwith %}

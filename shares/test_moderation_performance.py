@@ -8,7 +8,7 @@ from .models import Report, Share, ShareLog
 
 
 class ModerationQueuePerformanceContractTests(TestCase):
-    REVIEW_RESPONSE_BUDGET = 400_000
+    REVIEW_RESPONSE_BUDGET = 300_000
     REPORT_RESPONSE_BUDGET = 350_000
     QUERY_BUDGET = 10
 
@@ -79,6 +79,8 @@ class ModerationQueuePerformanceContractTests(TestCase):
         self.assertLessEqual(full_queries, self.QUERY_BUDGET)
         self.assertLess(response_bytes, self.REVIEW_RESPONSE_BUDGET)
         self.assertEqual(len(response.context['review_items']), 20)
+        self.assertContains(response, 'id="reviewResolutionModal"', count=1)
+        self.assertContains(response, 'name="reason"', count=1)
         for item in response.context['review_items']:
             share = item['share']
             self.assertEqual(len(share.share_logs), 5)

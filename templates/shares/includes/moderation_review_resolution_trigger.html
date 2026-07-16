@@ -1,0 +1,31 @@
+<button
+    type="button"
+    class="{{ button_class }}"
+    data-bs-toggle="modal"
+    data-bs-target="#reviewResolutionModal"
+    data-resolution-trigger
+    {% if action == 'reject' %}
+    data-resolution-action="{% url 'admin_reject_share' share.share_id %}"
+    data-resolution-title="拒绝审核"
+    data-resolution-submit="确认拒绝并通知用户"
+    data-resolution-tone="danger"
+    {% elif action == 'confirm' %}
+    data-resolution-action="{% url 'admin_confirm_share_restriction' share.share_id %}"
+    data-resolution-title="确认继续维持内容限制"
+    data-resolution-context-label="当前原因："
+    data-resolution-context-source="reviewRestrictionReason{{ share.share_id }}"
+    data-resolution-submit="确认维持并通知作者"
+    data-resolution-tone="danger"
+    data-resolution-version="{{ confirmation_version }}"
+    {% else %}
+    data-resolution-action="{% url 'admin_release_share_restriction' share.share_id %}"
+    data-resolution-title="解除内容限制"
+    data-resolution-context-label="当前原因："
+    data-resolution-context-source="reviewRestrictionReason{{ share.share_id }}"
+    data-resolution-submit="确认解除并通知作者"
+    data-resolution-tone="success"
+    {% endif %}
+    data-resolution-subject="分享：{{ share.title }}">
+    <i class="{{ button_icon }}" aria-hidden="true"></i>
+    {{ button_label }}
+</button>

@@ -45,6 +45,7 @@ describe('moderation resolution modal', () => {
             <strong data-resolution-modal-context-label></strong>
             <span data-resolution-modal-context-value></span>
           </p>
+          <input type="hidden" name="version" data-resolution-version>
           <textarea name="reason"></textarea>
           <button type="submit" class="btn btn-secondary" data-resolution-modal-submit></button>
         </form>
@@ -130,6 +131,27 @@ describe('moderation resolution modal', () => {
     expect(value.textContent).toBe('不应优先使用的回退内容')
   })
 
+  it('sets a review concurrency version and success tone, then clears both on close', () => {
+    const modal = document.querySelector<HTMLElement>('[data-moderation-resolution-modal]')!
+    const trigger = document.querySelector<HTMLElement>('#resolve')!
+    const version = modal.querySelector<HTMLInputElement>('[data-resolution-version]')!
+    const submit = modal.querySelector<HTMLButtonElement>('[data-resolution-modal-submit]')!
+    trigger.dataset.resolutionVersion = '2026-07-16T17:00:00+08:00'
+    trigger.dataset.resolutionTone = 'success'
+    initializeModerationResolution()
+
+    dispatchModalEvent(modal, 'show.bs.modal', trigger)
+
+    expect(version.value).toBe('2026-07-16T17:00:00+08:00')
+    expect(submit.classList.contains('btn-success')).toBe(true)
+    expect(submit.classList.contains('btn-danger')).toBe(false)
+    expect(submit.classList.contains('btn-secondary')).toBe(false)
+
+    dispatchModalEvent(modal, 'hidden.bs.modal')
+    expect(version.value).toBe('')
+    expect(submit.disabled).toBe(true)
+  })
+
   it('reopens a server-invalid report action without clearing its reason and focuses errors', () => {
     const modal = document.querySelector<HTMLElement>('[data-moderation-resolution-modal]')!
     const form = modal.querySelector<HTMLFormElement>('form')!
@@ -192,45 +214,55 @@ describe('moderation resolution modal', () => {
     expect(document.activeElement).toBe(reason)
   })
 
-  it('opens only the server-marked review modal and focuses its error summary', () => {
-    document.body.innerHTML = `
-      <div id="unrelated" class="modal"><div tabindex="-1"></div></div>
-      <button id="review-return" data-bs-target="#invalid-review">检查拒绝操作</button>
-      <div id="invalid-review" class="modal" data-moderation-invalid-modal>
-        <div data-moderation-error-summary tabindex="-1">请检查拒绝原因</div>
-      </div>
-    `
-    const invalidModal = document.querySelector<HTMLElement>('#invalid-review')!
-    const summary = invalidModal.querySelector<HTMLElement>(
-      '[data-moderation-error-summary]',
-    )!
+  it('reopens a server-invalid shared review action with its version and exact focus target', () => {
+    const modal = document.querySelector<HTMLElement>('[data-moderation-resolution-modal]')!
+    const form = modal.querySelector<HTMLFormElement>('form')!
+    const reason = modal.querySelector<HTMLTextAreaElement>('textarea')!
+    const version = modal.querySelector<HTMLInputElement>('[data-resolution-version]')!
+    const trigger = document.querySelector<HTMLElement>('#resolve')!
+    const errorSummary = document.createElement('div')
+    errorSummary.tabIndex = -1
+    errorSummary.dataset.moderationErrorSummary = 'true'
+    modal.querySelector('[data-resolution-modal-context]')?.after(errorSummary)
+    trigger.dataset.resolutionAction = '/staff/restrictions/share-1/confirm/'
+    modal.dataset.moderationInvalidModal = 'true'
+    form.action = '/staff/restrictions/share-1/confirm/'
+    form.dataset.resolutionFallbackAction = '/staff/reviews/'
+    reason.value = '保留人工确认说明'
+    version.value = '2026-07-16T17:00:00+08:00'
     const show = vi.fn(() => {
-      dispatchModalEvent(invalidModal, 'shown.bs.modal')
+      dispatchModalEvent(modal, 'show.bs.modal')
+      dispatchModalEvent(modal, 'shown.bs.modal')
     })
-    const getOrCreateInstance = vi.fn(() => ({ hide: vi.fn(), show }))
-    window.bootstrap = { Modal: { getOrCreateInstance } }
+    window.bootstrap = {
+      Modal: { getOrCreateInstance: vi.fn(() => ({ hide: vi.fn(), show })) },
+    }
 
     initializeModerationResolution()
 
-    expect(getOrCreateInstance).toHaveBeenCalledOnce()
-    expect(getOrCreateInstance).toHaveBeenCalledWith(invalidModal)
     expect(show).toHaveBeenCalledOnce()
-    expect(document.activeElement).toBe(summary)
+    expect(reason.value).toBe('保留人工确认说明')
+    expect(version.value).toBe('2026-07-16T17:00:00+08:00')
+    expect(document.activeElement).toBe(errorSummary)
 
-    dispatchModalEvent(invalidModal, 'hidden.bs.modal')
-    expect(document.activeElement).toBe(document.querySelector('#review-return'))
+    dispatchModalEvent(modal, 'hidden.bs.modal')
+    expect(reason.value).toBe('')
+    expect(version.value).toBe('')
+    expect(form.getAttribute('action')).toBe('/staff/reviews/')
+    expect(document.activeElement).toBe(trigger)
   })
 
-  it('returns a stale recovery modal without a matching trigger to main content once', () => {
-    document.body.innerHTML = `
-      <main id="main-content" tabindex="-1"></main>
-      <div id="stale-review" class="modal" data-moderation-invalid-modal>
-        <div data-moderation-error-summary tabindex="-1">目标状态已经变化</div>
-      </div>
-    `
-    const modal = document.querySelector<HTMLElement>('#stale-review')!
-    const main = document.querySelector<HTMLElement>('#main-content')!
+  it('returns an unmatched server-invalid shared action to main content', () => {
+    const main = document.createElement('main')
+    main.id = 'main-content'
+    main.tabIndex = -1
+    document.body.prepend(main)
+    const modal = document.querySelector<HTMLElement>('[data-moderation-resolution-modal]')!
+    const form = modal.querySelector<HTMLFormElement>('form')!
+    modal.dataset.moderationInvalidModal = 'true'
+    form.action = '/staff/reviews/missing-action/'
     const show = vi.fn(() => {
+      dispatchModalEvent(modal, 'show.bs.modal')
       dispatchModalEvent(modal, 'shown.bs.modal')
     })
     window.bootstrap = {
@@ -240,13 +272,7 @@ describe('moderation resolution modal', () => {
     initializeModerationResolution()
     dispatchModalEvent(modal, 'hidden.bs.modal')
 
+    expect(show).toHaveBeenCalledOnce()
     expect(document.activeElement).toBe(main)
-
-    const userTrigger = document.createElement('button')
-    document.body.append(userTrigger)
-    userTrigger.focus()
-    dispatchModalEvent(modal, 'show.bs.modal', userTrigger)
-    dispatchModalEvent(modal, 'hidden.bs.modal')
-    expect(document.activeElement).toBe(userTrigger)
   })
 })

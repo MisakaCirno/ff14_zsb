@@ -1,4 +1,3 @@
-import html
 import re
 from pathlib import Path
 
@@ -40,12 +39,16 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
         self.assertIn("log_kind='review'", log_source)
         self.assertNotIn('<table', log_source)
 
-    def test_review_card_and_modals_preserve_actions_without_inline_fields(self):
+    def test_review_cards_use_one_shared_server_form_and_modal(self):
+        queue_source = self.read_template('shares/admin_review_list.html')
         card_source = self.read_template(
             'shares/includes/moderation_review_card.html'
         )
+        trigger_source = self.read_template(
+            'shares/includes/moderation_review_resolution_trigger.html'
+        )
         modal_source = self.read_template(
-            'shares/includes/moderation_review_modals.html'
+            'shares/includes/moderation_review_resolution_modal.html'
         )
 
         self.assertIn('share-card card-hover moderation-review-card', card_source)
@@ -59,13 +62,10 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
             "{% url 'admin_approve_share' share.share_id %}",
             card_source,
         )
-        for modal_name in (
-            'rejectModal{{ share.share_id }}',
-            'confirmRestrictionModal{{ share.share_id }}',
-            'releaseRestrictionModal{{ share.share_id }}',
-        ):
-            with self.subTest(modal=modal_name):
-                self.assertIn(modal_name, card_source + modal_source)
+        self.assertIn('moderation_review_resolution_trigger.html', card_source)
+        self.assertIn('moderation_review_resolution_modal.html', queue_source)
+        self.assertEqual(modal_source.count('id="reviewResolutionModal"'), 1)
+        self.assertIn('data-resolution-version', modal_source)
 
         for action_name in (
             'admin_reject_share',
@@ -73,28 +73,27 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
             'admin_release_share_restriction',
         ):
             with self.subTest(action=action_name):
-                self.assertIn(action_name, modal_source)
+                self.assertIn(action_name, trigger_source)
 
-        self.assertIn('{{ item.reject_form.reason }}', modal_source)
-        self.assertIn('{{ item.confirmation_form.version }}', modal_source)
-        self.assertIn('{{ item.confirmation_form.reason }}', modal_source)
-        self.assertIn('{{ item.release_form.reason }}', modal_source)
+        self.assertIn('{{ resolution_form.reason }}', modal_source)
         self.assertNotIn('<textarea', modal_source)
-        self.assertNotIn('style=', card_source + modal_source)
+        self.assertNotIn('style=', card_source + trigger_source + modal_source)
 
-    def test_review_view_builds_unique_server_form_instances(self):
+    def test_review_view_builds_one_shared_server_form(self):
         view_source = self.read_project_file('shares/web/moderation.py')
 
         self.assertIn('def _staff_reason_form(', view_source)
         self.assertNotIn('def _review_reason_form(', view_source)
         self.assertIn('def _review_queue_context(', view_source)
         self.assertIn('_review_item(', view_source)
+        self.assertNotIn('def _new_review_form(', view_source)
         for prefix in ('review-reject', 'review-confirm', 'review-release'):
             with self.subTest(prefix=prefix):
                 self.assertIn(f"'{prefix}'", view_source)
         self.assertIn("'auto_id': f'{prefix}-{share_id}-%s'", view_source)
         self.assertIn("'error_id': f'{prefix}-errors-{share_id}'", view_source)
-        self.assertIn("initial={'version': share.updated_at}", view_source)
+        self.assertIn("'confirmation_version': share.updated_at.isoformat()", view_source)
+        self.assertIn('review_resolution_form=resolution_form', view_source)
         self.assertIn("reason_attrs['aria-describedby'] = help_id", view_source)
         self.assertIn("reason_attrs['aria-invalid'] = 'true'", view_source)
 
@@ -177,7 +176,7 @@ class ReviewFrontendRenderingContractTests(TestCase):
             **fields,
         )
 
-    def test_review_queue_renders_unique_bounded_server_forms(self):
+    def test_review_queue_renders_one_bounded_server_form(self):
         for index in range(21):
             self.create_share(share_id=f'2a3b4c{index:02d}')
 
@@ -185,16 +184,15 @@ class ReviewFrontendRenderingContractTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context['review_items']), 20)
-        rendered_ids = set()
-        for item in response.context['review_items']:
-            field_html = str(item['reject_form']['reason'])
-            field_id = item['reject_form']['reason'].id_for_label
-            self.assertNotIn(field_id, rendered_ids)
-            rendered_ids.add(field_id)
-            self.assertIn('name="reason"', field_html)
-            self.assertIn('maxlength="2000"', field_html)
-            self.assertIn('minlength="2"', field_html)
-            self.assertIn('aria-describedby=', field_html)
+        form = response.context['review_resolution_form']
+        field_html = str(form['reason'])
+        self.assertIn('name="reason"', field_html)
+        self.assertIn('maxlength="2000"', field_html)
+        self.assertIn('minlength="2"', field_html)
+        self.assertIn('aria-describedby=', field_html)
+        self.assertContains(response, 'id="reviewResolutionModal"', count=1)
+        self.assertContains(response, 'name="reason"', count=1)
+        self.assertContains(response, 'data-resolution-trigger', count=20)
 
         self.assertContains(response, 'class="app-pagination')
         self.assertContains(response, 'aria-current="page"')
@@ -214,14 +212,16 @@ class ReviewFrontendRenderingContractTests(TestCase):
             item for item in response.context['review_items']
             if item['share'].pk == share.pk
         )
-        hidden_html = str(item['confirmation_form']['version'])
-        version_match = re.search(r'value="([^"]+)"', hidden_html)
-        self.assertIsNotNone(version_match)
+        version = item['confirmation_version']
+        self.assertContains(
+            response,
+            f'data-resolution-version="{version}"',
+        )
 
         confirmation = self.client.post(
             reverse('admin_confirm_share_restriction', args=[share.share_id]),
             {
-                'version': html.unescape(version_match.group(1)),
+                'version': version,
                 'reason': '复核后确认继续维持限制',
             },
         )

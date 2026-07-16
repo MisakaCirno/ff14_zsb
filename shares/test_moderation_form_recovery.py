@@ -83,11 +83,12 @@ class ModerationFormRecoveryTests(TestCase):
             if item['share'].pk == target.pk
         )
         self.assertEqual(invalid_item['invalid_action'], 'reject')
-        self.assertEqual(invalid_item['reject_form']['reason'].value(), '短')
-        self.assertTrue(invalid_item['reject_form'].errors['reason'])
+        form = response.context['review_resolution_form']
+        self.assertEqual(form['reason'].value(), '短')
+        self.assertTrue(form.errors['reason'])
         self.assertContains(
             response,
-            f'id="rejectModal{target.share_id}"',
+            'id="reviewResolutionModal"',
             status_code=400,
         )
         self.assertContains(
@@ -132,11 +133,7 @@ class ModerationFormRecoveryTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 400)
-        invalid_item = next(
-            item for item in response.context['review_items']
-            if item['share'].pk == share.pk
-        )
-        form = invalid_item['confirmation_form']
+        form = response.context['review_resolution_form']
         self.assertEqual(form['reason'].value(), '保留这段人工复核说明')
         self.assertIn('version', form.errors)
         self.assertNotEqual(form['version'].value(), 'not-a-version')
@@ -144,7 +141,7 @@ class ModerationFormRecoveryTests(TestCase):
         self.assertContains(response, '限制版本无效', status_code=400)
         self.assertContains(
             response,
-            f'id="confirmRestrictionModal{share.share_id}"',
+            'id="reviewResolutionModal"',
             status_code=400,
         )
         self.assertContains(
@@ -187,7 +184,10 @@ class ModerationFormRecoveryTests(TestCase):
             if item['share'].pk == share.pk
         )
         self.assertTrue(recovery_item['target_outside_queue'])
-        self.assertEqual(recovery_item['reject_form']['reason'].value(), '短')
+        self.assertEqual(
+            response.context['review_resolution_form']['reason'].value(),
+            '短',
+        )
         self.assertContains(
             response,
             '目标状态已发生变化，本次提交尚未执行',
@@ -195,7 +195,7 @@ class ModerationFormRecoveryTests(TestCase):
         )
         self.assertContains(
             response,
-            f'data-bs-target="#rejectModal{share.share_id}"',
+            'data-bs-target="#reviewResolutionModal"',
             status_code=400,
         )
         self.assertContains(

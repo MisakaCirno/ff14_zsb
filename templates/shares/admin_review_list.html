@@ -35,5 +35,10 @@
     </div>
 
     {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='审核队列分页' nav_class='mt-2' base_url=pagination_base_url %}
+
+    {% if review_items %}
+    {% url 'admin_review_list' as review_queue_url %}
+    {% include 'shares/includes/moderation_review_resolution_modal.html' with resolution_error=review_resolution_error resolution_form=review_resolution_form resolution_error_id=review_resolution_error_id resolution_help_id=review_resolution_help_id resolution_version=review_resolution_version fallback_action=review_queue_url return_page=shares.number csrf_token=csrf_token only %}
+    {% endif %}
 </div>
 {% endblock %}

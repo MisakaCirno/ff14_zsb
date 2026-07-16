@@ -32,6 +32,7 @@ from shares.services.moderation import (
 _QUEUE_LOG_PREVIEW_SIZE = 5
 _QUEUE_REPORT_PREVIEW_SIZE = 5
 _QUEUE_TEXT_PREVIEW_LENGTH = 500
+_QUEUE_LOG_TEXT_PREVIEW_LENGTH = 300
 _QUEUE_REPORT_TEXT_PREVIEW_LENGTH = 160
 _AUDIT_TEXT_PREVIEW_LENGTH = 2000
 
@@ -50,7 +51,9 @@ def _log_preview_queryset(*, text_length=_QUEUE_TEXT_PREVIEW_LENGTH):
 def _queue_log_prefetch():
     return Prefetch(
         'logs',
-        queryset=_log_preview_queryset()[:_QUEUE_LOG_PREVIEW_SIZE + 1],
+        queryset=_log_preview_queryset(
+            text_length=_QUEUE_LOG_TEXT_PREVIEW_LENGTH,
+        )[:_QUEUE_LOG_PREVIEW_SIZE + 1],
         to_attr='share_logs',
     )
 
@@ -129,55 +132,64 @@ def _review_form_ids(action, share_id):
     }
 
 
-def _new_review_form(form_class, action, share, *, data=None, initial=None):
-    return _staff_reason_form(
-        form_class,
-        data=data,
-        initial=initial,
-        **_review_form_ids(action, share.share_id),
-    )
-
-
 def _review_item(
     share,
     *,
     return_page,
     invalid_action=None,
-    invalid_form=None,
     target_outside_queue=False,
 ):
-    """Bind uniquely identified, server-defined forms to one review card."""
-    reject_form = (
-        invalid_form
-        if invalid_action == 'reject'
-        else _new_review_form(AdminReviewRejectForm, 'reject', share)
-    )
-    confirmation_form = (
-        invalid_form
-        if invalid_action == 'confirm'
-        else _new_review_form(
-            RestrictionConfirmationForm,
-            'confirm',
-            share,
-            initial={'version': share.updated_at},
-        )
-    )
-    release_form = (
-        invalid_form
-        if invalid_action == 'release'
-        else _new_review_form(RestrictionReleaseForm, 'release', share)
-    )
     return {
         'share': share,
-        'reject_form': reject_form,
-        'reject_error_id': _review_form_ids('reject', share.share_id)['error_id'],
-        'confirmation_form': confirmation_form,
-        'confirmation_error_id': _review_form_ids('confirm', share.share_id)['error_id'],
-        'release_form': release_form,
-        'release_error_id': _review_form_ids('release', share.share_id)['error_id'],
+        'confirmation_version': share.updated_at.isoformat(),
         'invalid_action': invalid_action,
         'return_page': return_page,
         'target_outside_queue': target_outside_queue,
+    }
+
+
+def _review_action_url(share, action):
+    view_name = {
+        'reject': 'admin_reject_share',
+        'confirm': 'admin_confirm_share_restriction',
+        'release': 'admin_release_share_restriction',
+    }[action]
+    return reverse(view_name, args=[share.share_id])
+
+
+def _review_resolution_error(share, action, *, target_outside_queue):
+    presentation = {
+        'reject': {
+            'title': '拒绝审核',
+            'context_label': '',
+            'context': '',
+            'submit': '确认拒绝并通知用户',
+            'tone': 'danger',
+        },
+        'confirm': {
+            'title': '确认继续维持内容限制',
+            'context_label': '当前原因：',
+            'context': share.restriction_reason_preview,
+            'submit': '确认维持并通知作者',
+            'tone': 'danger',
+        },
+        'release': {
+            'title': '解除内容限制',
+            'context_label': '当前原因：',
+            'context': share.restriction_reason_preview,
+            'submit': '确认解除并通知作者',
+            'tone': 'success',
+        },
+    }[action]
+    return {
+        'action_url': _review_action_url(share, action),
+        'title': presentation['title'],
+        'subject': f'分享：{share.title}',
+        'context_label': presentation['context_label'],
+        'context': presentation['context'],
+        'submit': presentation['submit'],
+        'tone': presentation['tone'],
+        'target_stale': target_outside_queue,
     }
 
 
@@ -222,11 +234,6 @@ def _review_queue_context(
                 if invalid_share is not None and share.pk == invalid_share.pk
                 else None
             ),
-            invalid_form=(
-                invalid_form
-                if invalid_share is not None and share.pk == invalid_share.pk
-                else None
-            ),
         )
         for share in shares
     ]
@@ -240,12 +247,42 @@ def _review_queue_context(
             invalid_share,
             return_page=shares.number,
             invalid_action=invalid_action,
-            invalid_form=invalid_form,
             target_outside_queue=True,
         ))
+    if invalid_form is None:
+        resolution_form = _staff_reason_form(
+            ReportResolutionForm,
+            auto_id='review-resolution-%s',
+            help_id='review-resolution-help',
+            error_id='review-resolution-errors',
+        )
+        resolution_error = None
+        resolution_error_id = 'review-resolution-errors'
+        resolution_help_id = 'review-resolution-help'
+        resolution_version = ''
+    else:
+        form_ids = _review_form_ids(invalid_action, invalid_share.share_id)
+        resolution_form = invalid_form
+        resolution_error = _review_resolution_error(
+            invalid_share,
+            invalid_action,
+            target_outside_queue=not target_is_visible,
+        )
+        resolution_error_id = form_ids['error_id']
+        resolution_help_id = form_ids['help_id']
+        resolution_version = (
+            invalid_form['version'].value()
+            if invalid_action == 'confirm'
+            else ''
+        )
     return _admin_context(
         shares=shares,
         review_items=tuple(review_items),
+        review_resolution_form=resolution_form,
+        review_resolution_error=resolution_error,
+        review_resolution_error_id=resolution_error_id,
+        review_resolution_help_id=resolution_help_id,
+        review_resolution_version=resolution_version,
         moderation_active_tab='admin_review_list',
         pagination_base_url=pagination_base_url,
     )

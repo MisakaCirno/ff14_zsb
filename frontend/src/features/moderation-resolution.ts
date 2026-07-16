@@ -1,6 +1,6 @@
 import { getBootstrapModal } from '../core/bootstrap'
 
-type ResolutionTone = 'danger' | 'secondary'
+type ResolutionTone = 'danger' | 'secondary' | 'success'
 
 interface BootstrapModalEvent extends Event {
   relatedTarget?: EventTarget | null
@@ -27,9 +27,12 @@ function localActionPath(value: string): string | null {
 }
 
 function updateSubmitTone(button: HTMLButtonElement, tone: string | undefined): void {
-  const resolvedTone: ResolutionTone = tone === 'danger' ? 'danger' : 'secondary'
+  const resolvedTone: ResolutionTone = tone === 'danger' || tone === 'success'
+    ? tone
+    : 'secondary'
   button.classList.toggle('btn-danger', resolvedTone === 'danger')
   button.classList.toggle('btn-secondary', resolvedTone === 'secondary')
+  button.classList.toggle('btn-success', resolvedTone === 'success')
 }
 
 function resolutionContext(trigger: HTMLElement): string {
@@ -62,16 +65,6 @@ function matchingResolutionTrigger(action: string): HTMLElement | null {
   )) ?? null
 }
 
-function matchingModalTrigger(modal: HTMLElement): HTMLElement | null {
-  if (!modal.id) {
-    return null
-  }
-  const target = `#${modal.id}`
-  return Array.from(
-    document.querySelectorAll<HTMLElement>('[data-bs-target]'),
-  ).find((trigger) => trigger.dataset.bsTarget === target) ?? null
-}
-
 function restoreRecoveryFocus(preferred: HTMLElement | null): void {
   const target = preferred?.isConnected
     ? preferred
@@ -91,6 +84,7 @@ function initializeResolutionModal(modal: HTMLElement): void {
   const contextLabel = modal.querySelector<HTMLElement>('[data-resolution-modal-context-label]')
   const contextValue = modal.querySelector<HTMLElement>('[data-resolution-modal-context-value]')
   const reason = modal.querySelector<HTMLTextAreaElement>('textarea[name="reason"]')
+  const version = modal.querySelector<HTMLInputElement>('[data-resolution-version]')
   const submit = modal.querySelector<HTMLButtonElement>('[data-resolution-modal-submit]')
   if (
     !form
@@ -138,6 +132,9 @@ function initializeResolutionModal(modal: HTMLElement): void {
   const resetResolutionForm = (): void => {
     form.reset()
     reason.value = ''
+    if (version) {
+      version.value = ''
+    }
     form.setAttribute('action', fallbackAction)
     submit.disabled = true
     clearServerRecoveryState()
@@ -172,6 +169,9 @@ function initializeResolutionModal(modal: HTMLElement): void {
     subject.textContent = trigger.dataset.resolutionSubject ?? ''
     submit.textContent = trigger.dataset.resolutionSubmit ?? '确认处理'
     updateSubmitTone(submit, trigger.dataset.resolutionTone)
+    if (version) {
+      version.value = trigger.dataset.resolutionVersion ?? ''
+    }
 
     const detail = resolutionContext(trigger)
     context.hidden = detail.length === 0
@@ -195,32 +195,7 @@ function initializeResolutionModal(modal: HTMLElement): void {
   }
 }
 
-function initializeInvalidReviewModal(modal: HTMLElement): void {
-  if (modal.dataset.moderationInvalidInitialized === 'true') {
-    return
-  }
-  modal.dataset.moderationInvalidInitialized = 'true'
-  const returnFocus = matchingModalTrigger(modal)
-  let restoreServerFocusOnHide = true
-  modal.addEventListener('show.bs.modal', (event) => {
-    if (resolutionTriggerFrom(event) || (event as BootstrapModalEvent).relatedTarget) {
-      restoreServerFocusOnHide = false
-    }
-  })
-  modal.addEventListener('shown.bs.modal', () => focusModalError(modal))
-  modal.addEventListener('hidden.bs.modal', () => {
-    if (restoreServerFocusOnHide) {
-      restoreServerFocusOnHide = false
-      restoreRecoveryFocus(returnFocus)
-    }
-  })
-  getBootstrapModal(modal)?.show()
-}
-
 export function initializeModerationResolution(): void {
   document.querySelectorAll<HTMLElement>('[data-moderation-resolution-modal]')
     .forEach(initializeResolutionModal)
-  document.querySelectorAll<HTMLElement>(
-    '[data-moderation-invalid-modal]:not([data-moderation-resolution-modal])',
-  ).forEach(initializeInvalidReviewModal)
 }
