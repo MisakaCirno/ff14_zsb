@@ -67,6 +67,17 @@ try {
         }
 
         if (-not $SkipTests) {
+            Invoke-CheckedStep 'SQLite migration snapshot inspection contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-SQLiteSnapshotInspection.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
+                    -PythonExecutable $PythonExecutable
+            }
+
+            Invoke-CheckedStep 'Media snapshot manifest contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-MediaManifest.ps1') `
+                    -PythonExecutable $PythonExecutable
+            }
+
             Invoke-CheckedStep 'Waitress loopback smoke test' {
                 & (Join-Path $PSScriptRoot 'ops\windows\Test-WaitressSmoke.ps1') `
                     -RepositoryRoot $PSScriptRoot `
