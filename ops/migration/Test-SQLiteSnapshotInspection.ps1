@@ -322,6 +322,9 @@ try {
         -Condition ($finalHash -eq $validHashBefore) `
         -Message 'Failure-path checks modified the source SQLite snapshot.'
 
+    # The final native inspector invocation is intentionally expected to fail.
+    # Do not leak that captured exit code to verify.ps1 after all assertions pass.
+    $global:LASTEXITCODE = 0
     Write-Output 'SQLite snapshot inspection contracts passed.'
 }
 finally {
