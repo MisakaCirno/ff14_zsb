@@ -1490,6 +1490,38 @@ def _validate_migration_state(path: Path) -> dict[str, Any]:
     return state
 
 
+def _runtime_checkpoint_label_parts(
+    label: object,
+    *,
+    directory_entry: bool = False,
+) -> tuple[str, tuple[str, ...]]:
+    if (
+        not isinstance(label, str)
+        or not label
+        or "\\" in label
+        or "\x00" in label
+        or label.endswith("/") != directory_entry
+    ):
+        raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
+    core = label[:-1] if directory_entry else label
+    for marker in ("$EXECUTION_ROOT", "$PREFIX", "$BASE_PREFIX"):
+        if core == marker:
+            relative = ""
+        elif core.startswith(marker + "/"):
+            relative = core[len(marker) + 1 :]
+        else:
+            continue
+        parts = tuple(relative.split("/")) if relative else ()
+        if (
+            any(part in {"", ".", ".."} for part in parts)
+            or core != marker + ("/" + "/".join(parts) if parts else "")
+            or (directory_entry and not parts)
+        ):
+            raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
+        return marker, parts
+    raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
+
+
 def _validate_runtime_fingerprint_bytes(raw: bytes) -> dict[str, Any]:
     try:
         report = json.loads(
@@ -1552,10 +1584,14 @@ def _validate_runtime_fingerprint_bytes(raw: bytes) -> dict[str, Any]:
             or item["size"] < 0
         ):
             raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
+        _runtime_checkpoint_label_parts(item["path"])
         inventory_paths.append(item["path"])
     if inventory_paths != sorted(set(inventory_paths)):
         raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
     scope_keys = []
+    scope_roots = set()
+    closure_entries = set()
+    closure_file_paths = set()
     for scope in checkpoint["closure_scopes"]:
         if (
             not isinstance(scope, dict)
@@ -1573,8 +1609,35 @@ def _validate_runtime_fingerprint_bytes(raw: bytes) -> dict[str, Any]:
             or scope["files"] != sorted(set(scope["files"]))
         ):
             raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
+        root_parts = _runtime_checkpoint_label_parts(scope["root"])
+        if scope["root"] in scope_roots:
+            raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
+        scope_roots.add(scope["root"])
+        for entry in scope["files"]:
+            directory_entry = entry.endswith("/")
+            entry_parts = _runtime_checkpoint_label_parts(
+                entry,
+                directory_entry=directory_entry,
+            )
+            top_level = scope["mode"] == "top_level_entries"
+            if (
+                entry_parts[0] != root_parts[0]
+                or entry_parts[1][: len(root_parts[1])] != root_parts[1]
+                or (
+                    len(entry_parts[1]) != len(root_parts[1]) + 1
+                    if top_level
+                    else len(entry_parts[1]) <= len(root_parts[1])
+                )
+                or entry in closure_entries
+            ):
+                raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
+            closure_entries.add(entry)
+            if not directory_entry:
+                closure_file_paths.add(entry)
         scope_keys.append((scope["root"], scope["mode"]))
     if scope_keys != sorted(set(scope_keys)):
+        raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
+    if not closure_file_paths.issubset(set(inventory_paths)):
         raise RehearsalError("runtime_fingerprint_checkpoint_invalid")
     return report
 
@@ -1810,6 +1873,15 @@ reparse_attribute = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 def canonical(path):
     return os.path.normcase(os.path.realpath(os.fspath(path)))
 
+root_key = canonical(root)
+prefix_key = canonical(prefix)
+base_prefix_key = canonical(base_prefix)
+trusted_roots = (
+    ("$EXECUTION_ROOT", root, root_key),
+    ("$PREFIX", prefix, prefix_key),
+    ("$BASE_PREFIX", base_prefix, base_prefix_key),
+)
+
 def file_identity(value):
     return (
         value.st_dev,
@@ -1824,27 +1896,41 @@ if canonical(prefix) == canonical(base_prefix):
 
 def within(path, directory):
     try:
-        return os.path.commonpath((canonical(path), canonical(directory))) == canonical(directory)
+        path_key = canonical(path)
+        directory_key = canonical(directory)
+        return os.path.commonpath((path_key, directory_key)) == directory_key
     except ValueError:
         return False
 
-def path_label(path):
-    path = Path(path)
-    resolved = path.resolve(strict=False)
-    if within(resolved, root):
-        relative = resolved.relative_to(root).as_posix()
-        return (
-            "$EXECUTION_ROOT"
-            if not relative or relative == "."
-            else f"$EXECUTION_ROOT/{relative}"
-        )
-    if within(resolved, prefix):
-        relative = resolved.relative_to(prefix).as_posix()
-        return "$PREFIX" if not relative or relative == "." else f"$PREFIX/{relative}"
-    if within(resolved, base_prefix):
-        relative = resolved.relative_to(base_prefix).as_posix()
-        return "$BASE_PREFIX" if not relative or relative == "." else f"$BASE_PREFIX/{relative}"
+def resolved_within(path, directory_key):
+    path_key = os.path.normcase(os.path.abspath(os.fspath(path)))
+    try:
+        return os.path.commonpath((path_key, directory_key)) == directory_key
+    except ValueError:
+        return False
+
+def absolute_path_label(path):
+    absolute = os.path.abspath(os.fspath(path))
+    absolute_key = os.path.normcase(absolute)
+    for marker, marker_root, marker_key in trusted_roots:
+        try:
+            if os.path.commonpath((absolute_key, marker_key)) != marker_key:
+                continue
+        except ValueError:
+            continue
+        relative = os.path.relpath(absolute, os.fspath(marker_root)).replace(os.sep, "/")
+        return marker if relative == "." else f"{marker}/{relative}"
     raise RuntimeError(f"Runtime path escaped trusted roots: {path}")
+
+def path_label(path):
+    return absolute_path_label(Path(path).resolve(strict=False))
+
+def hashed_path_label(path):
+    key = os.path.normcase(os.path.abspath(os.fspath(path)))
+    item = identity_cache.get(key)
+    if item is None:
+        raise RuntimeError(f"Runtime path was not hashed before projection: {path}")
+    return item["path"]
 
 def digest_file(path):
     path = Path(path)
@@ -1857,7 +1943,7 @@ def digest_file(path):
         or stat.S_ISLNK(before_path.st_mode)
         or getattr(before_path, "st_file_attributes", 0) & reparse_attribute
         or before_path.st_nlink != 1
-        or canonical(path) != os.path.normcase(os.path.abspath(os.fspath(path)))
+        or key != os.path.normcase(os.path.abspath(os.fspath(path)))
     ):
         raise RuntimeError(f"Runtime file identity is unsafe: {path}")
     digest = sha256()
@@ -1869,12 +1955,13 @@ def digest_file(path):
             digest.update(chunk)
         after = os.fstat(stream.fileno())
     current = os.lstat(path)
+    current_key = canonical(path)
     if (
         not stat.S_ISREG(current.st_mode)
         or stat.S_ISLNK(current.st_mode)
         or getattr(current, "st_file_attributes", 0) & reparse_attribute
         or current.st_nlink != 1
-        or canonical(path) != os.path.normcase(os.path.abspath(os.fspath(path)))
+        or current_key != os.path.normcase(os.path.abspath(os.fspath(path)))
         or file_identity(before_path) != file_identity(before)
         or file_identity(before) != file_identity(after)
         or file_identity(after) != file_identity(current)
@@ -1883,7 +1970,7 @@ def digest_file(path):
     result = (size, digest.hexdigest())
     hash_cache[key] = result
     identity_cache[key] = {
-        "path": path_label(path),
+        "path": absolute_path_label(path),
         "device": current.st_dev,
         "inode": current.st_ino,
         "size": current.st_size,
@@ -1987,7 +2074,7 @@ for raw_entry in sys.path:
     if entry.exists():
         resolved_sys_paths.append(entry.resolve(strict=True))
 
-site_package_roots = set()
+site_package_candidates = {}
 for candidate in [
     *site.getsitepackages(),
     sysconfig.get_path("purelib"),
@@ -1998,7 +2085,22 @@ for candidate in [
     candidate_path = Path(candidate).resolve(strict=True)
     if not within(candidate_path, prefix):
         raise RuntimeError("A site-packages root escaped the virtual environment.")
-    site_package_roots.add(candidate_path)
+    site_package_candidates.setdefault(canonical(candidate_path), candidate_path)
+
+# CPython on Windows can report both the virtual-environment prefix and its
+# nested Lib/site-packages directory. The outer recursive scan already covers
+# the complete union, so retaining the nested root only repeats path resolution,
+# closure construction, and checkpoint work without adding any coverage.
+site_package_roots = []
+for candidate_path in sorted(
+    site_package_candidates.values(),
+    key=lambda path: (len(Path(canonical(path)).parts), canonical(path)),
+):
+    if any(within(candidate_path, existing) for existing in site_package_roots):
+        continue
+    site_package_roots.append(candidate_path)
+if not site_package_roots:
+    raise RuntimeError("The virtual environment has no site-packages roots.")
 
 distribution_projection = []
 seen_distributions = set()
@@ -2014,12 +2116,14 @@ for distribution in installed:
         raise RuntimeError(f"Duplicate installed distribution: {name}")
     seen_distributions.add(name)
     metadata_directory = Path(distribution._path).resolve(strict=True)
-    if not within(metadata_directory, prefix):
+    if not resolved_within(metadata_directory, prefix_key):
         raise RuntimeError(f"Distribution escaped the virtual environment: {name}")
     metadata_path = metadata_directory / "METADATA"
     record_path = metadata_directory / "RECORD"
     metadata_size, metadata_sha256 = digest_file(metadata_path)
     record_size, record_sha256 = digest_file(record_path)
+    metadata_file_key = os.path.normcase(os.path.abspath(os.fspath(metadata_path)))
+    record_file_key = os.path.normcase(os.path.abspath(os.fspath(record_path)))
     try:
         with record_path.open("r", encoding="utf-8", newline="") as record_stream:
             rows = list(csv.reader(record_stream))
@@ -2033,26 +2137,26 @@ for distribution in installed:
         if len(row) != 3 or not row[0] or "\x00" in row[0]:
             raise RuntimeError(f"Distribution RECORD row is invalid: {name}")
         record_name = row[0].replace("\\", "/")
-        record_key = record_name.casefold()
-        if record_key in seen_record_names:
+        record_name_key = record_name.casefold()
+        if record_name_key in seen_record_names:
             raise RuntimeError(f"Distribution RECORD contains duplicates: {name}")
-        seen_record_names.add(record_key)
+        seen_record_names.add(record_name_key)
         target = Path(distribution.locate_file(metadata.PackagePath(record_name)))
         try:
             target = target.resolve(strict=True)
         except OSError as exc:
             raise RuntimeError(f"Distribution RECORD target is missing: {name}") from exc
-        if not within(target, prefix):
+        target_key = os.path.normcase(os.fspath(target))
+        if not resolved_within(target, prefix_key):
             raise RuntimeError(f"Distribution RECORD escaped the virtual environment: {name}")
-        target_key = canonical(target)
         owner = claimed_paths.setdefault(target_key, name)
         if owner != name:
             raise RuntimeError(f"Distribution RECORD target has multiple owners: {record_name}")
         size, digest = digest_file(target)
-        label = path_label(target)
+        label = hashed_path_label(target)
         entries.append({"path": label, "size": size, "sha256": digest})
-        metadata_was_recorded = metadata_was_recorded or target_key == canonical(metadata_path)
-        record_was_recorded = record_was_recorded or target_key == canonical(record_path)
+        metadata_was_recorded = metadata_was_recorded or target_key == metadata_file_key
+        record_was_recorded = record_was_recorded or target_key == record_file_key
     if not metadata_was_recorded or not record_was_recorded:
         raise RuntimeError(f"Distribution metadata files are absent from RECORD: {name}")
     if name in pins and pins[name] != version:
@@ -2076,12 +2180,13 @@ if missing_direct:
     raise RuntimeError(f"Required distributions are missing: {missing_direct}")
 distribution_projection.sort(key=lambda item: item["name"])
 
-site_files = []
-pth_files = []
+site_files_by_path = {}
+pth_files_by_path = {}
 closure_scopes = []
 closure_scope_keys = set()
 recursive_scope_roots = []
 import_closure_paths = {}
+directory_identity_cache = {}
 importable_suffixes = tuple(
     sorted(
         {suffix.casefold() for suffix in machinery.all_suffixes()},
@@ -2117,14 +2222,40 @@ def add_closure_scope(root_path, mode, entries):
     closure_scope_keys.add(key)
     closure_scopes.append(scope)
 
-def safe_directory(path, *, label):
-    metadata = os.lstat(path)
+def safe_directory(path, *, label, metadata=None):
+    path = Path(path)
+    metadata = os.lstat(path) if metadata is None else metadata
     if (
         not stat.S_ISDIR(metadata.st_mode)
         or stat.S_ISLNK(metadata.st_mode)
         or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
     ):
         raise RuntimeError(f"{label} is not a real directory: {path}")
+    key = os.path.normcase(os.path.abspath(os.fspath(path)))
+    expected = file_identity(metadata)
+    existing = directory_identity_cache.get(key)
+    if existing is not None and existing[1] != expected:
+        raise RuntimeError(f"{label} changed while being checked: {path}")
+    directory_identity_cache.setdefault(key, (path, expected))
+
+def revalidate_runtime_directory_identities():
+    for key in sorted(directory_identity_cache):
+        path, expected = directory_identity_cache[key]
+        try:
+            current = os.lstat(path)
+        except OSError as exc:
+            raise RuntimeError(
+                f"Runtime directory disappeared before fingerprint publication: {path}"
+            ) from exc
+        if (
+            not stat.S_ISDIR(current.st_mode)
+            or stat.S_ISLNK(current.st_mode)
+            or getattr(current, "st_file_attributes", 0) & reparse_attribute
+            or file_identity(current) != expected
+        ):
+            raise RuntimeError(
+                f"Runtime directory changed before fingerprint publication: {path}"
+            )
 
 def top_level_entries(directory):
     safe_directory(directory, label="Runtime sys.path closure root")
@@ -2138,6 +2269,11 @@ def top_level_entries(directory):
         ):
             raise RuntimeError(f"Runtime closure contains a linked entry: {candidate}")
         if stat.S_ISDIR(metadata.st_mode):
+            safe_directory(
+                candidate,
+                label="Runtime sys.path closure entry",
+                metadata=metadata,
+            )
             entries.append(path_label(candidate) + "/")
             children.append(candidate)
         elif stat.S_ISREG(metadata.st_mode):
@@ -2189,6 +2325,14 @@ def add_partitioned_recursive_scope(directory):
     directory = Path(directory).resolve(strict=True)
     if any(within(directory, existing) for existing in recursive_scope_roots):
         return
+    directory_label = path_label(directory)
+    if (directory_label, "top_level_entries") in closure_scope_keys:
+        entries, children = top_level_entries(directory)
+        add_closure_scope(directory, "top_level_entries", entries)
+        for child in children:
+            if child.name.isidentifier():
+                add_partitioned_recursive_scope(child)
+        return
     nested_existing = [
         existing
         for existing in recursive_scope_roots
@@ -2207,32 +2351,37 @@ def add_partitioned_recursive_scope(directory):
 
 for site_root in sorted(site_package_roots, key=canonical):
     scope_entries = []
+    safe_directory(site_root, label="Site-packages root")
     for current, directory_names, file_names in os.walk(site_root, followlinks=False):
         current_path = Path(current)
         safe_directories = []
         for directory_name in sorted(directory_names):
             directory_path = current_path / directory_name
             directory_metadata = os.lstat(directory_path)
-            if (
-                stat.S_ISLNK(directory_metadata.st_mode)
-                or getattr(directory_metadata, "st_file_attributes", 0) & reparse_attribute
-            ):
-                raise RuntimeError(f"Site-packages directory is a link: {directory_path}")
+            safe_directory(
+                directory_path,
+                label="Site-packages directory",
+                metadata=directory_metadata,
+            )
             scope_entries.append(path_label(directory_path) + "/")
             safe_directories.append(directory_name)
         directory_names[:] = safe_directories
         for file_name in sorted(file_names):
             path = current_path / file_name
             size, digest = digest_file(path)
-            item = {"path": path_label(path), "size": size, "sha256": digest}
-            site_files.append(item)
+            item = {"path": hashed_path_label(path), "size": size, "sha256": digest}
+            existing = site_files_by_path.setdefault(item["path"], item)
+            if existing != item:
+                raise RuntimeError(f"Site-packages file projection is ambiguous: {path}")
             scope_entries.append(item["path"])
             if path.suffix.lower() == ".pth":
-                pth_files.append(item)
+                existing_pth = pth_files_by_path.setdefault(item["path"], item)
+                if existing_pth != item:
+                    raise RuntimeError(f"Site-packages .pth projection is ambiguous: {path}")
     add_closure_scope(site_root, "recursive", scope_entries)
     recursive_scope_roots.append(site_root)
-site_files.sort(key=lambda item: item["path"])
-pth_files.sort(key=lambda item: item["path"])
+site_files = [site_files_by_path[path] for path in sorted(site_files_by_path)]
+pth_files = [pth_files_by_path[path] for path in sorted(pth_files_by_path)]
 
 base_runtime_files = []
 seen_base_runtime_paths = set()
@@ -2312,7 +2461,7 @@ for raw_entry in sys.path:
         seen_base_runtime_paths.add(key)
         size, digest = digest_file(path)
         base_runtime_files.append({
-            "path": path_label(path),
+            "path": hashed_path_label(path),
             "size": size,
             "sha256": digest,
         })
@@ -2339,6 +2488,8 @@ for raw_entry in sys.path:
     if not stat.S_ISDIR(entry_metadata.st_mode):
         continue
     entry = entry.resolve(strict=True)
+    if any(within(entry, covered_root) for covered_root in recursive_scope_roots):
+        continue
     entries, children = top_level_entries(entry)
     add_closure_scope(entry, "top_level_entries", entries)
     for child in children:
@@ -2389,7 +2540,7 @@ for role, path in sorted(runtime_paths.items()):
     size, digest = digest_file(path)
     runtime_files.append({
         "role": role,
-        "path": path_label(path),
+        "path": hashed_path_label(path),
         "size": size,
         "sha256": digest,
     })
@@ -2408,7 +2559,7 @@ for key, path in sorted(
         continue
     size, digest = digest_file(path)
     sys_path_import_closure_files.append({
-        "path": path_label(path),
+        "path": hashed_path_label(path),
         "size": size,
         "sha256": digest,
     })
@@ -2463,6 +2614,29 @@ encoded = (
     json.dumps(projection, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     + "\n"
 ).encode("utf-8")
+checkpoint_identity_inventory = sorted(
+    identity_cache.values(), key=lambda item: item["path"]
+)
+checkpoint_closure_scopes = sorted(
+    closure_scopes, key=lambda item: (item["root"], item["mode"])
+)
+checkpoint_scope_roots = [scope["root"] for scope in checkpoint_closure_scopes]
+checkpoint_closure_entries = [
+    entry
+    for scope in checkpoint_closure_scopes
+    for entry in scope["files"]
+]
+checkpoint_closure_files = {
+    entry for entry in checkpoint_closure_entries if not entry.endswith("/")
+}
+if (
+    checkpoint_scope_roots != sorted(set(checkpoint_scope_roots))
+    or len(checkpoint_closure_entries) != len(set(checkpoint_closure_entries))
+    or not checkpoint_closure_files.issubset(
+        {item["path"] for item in checkpoint_identity_inventory}
+    )
+):
+    raise RuntimeError("Runtime checkpoint scopes are not disjoint and complete.")
 payload = {
     "format": "ffxivshare-runtime-fingerprint",
     "format_version": 1,
@@ -2472,12 +2646,8 @@ payload = {
         "format": "ffxivshare-runtime-identity-checkpoint-source",
         "format_version": 1,
         "content_hashed": True,
-        "identity_inventory": sorted(
-            identity_cache.values(), key=lambda item: item["path"]
-        ),
-        "closure_scopes": sorted(
-            closure_scopes, key=lambda item: (item["root"], item["mode"])
-        ),
+        "identity_inventory": checkpoint_identity_inventory,
+        "closure_scopes": checkpoint_closure_scopes,
     },
 }
 destination = Path(sys.argv[1])
@@ -2490,6 +2660,7 @@ try:
         stream.write("\n")
         stream.flush()
         os.fsync(stream.fileno())
+    revalidate_runtime_directory_identities()
     revalidate_hashed_file_identities()
 except BaseException:
     if output_identity is not None:
@@ -2538,15 +2709,6 @@ def strict_object(pairs):
         value[key] = item
     return value
 
-def canonical(path):
-    return os.path.normcase(os.path.realpath(os.fspath(path)))
-
-def within(path, directory):
-    try:
-        return os.path.commonpath((canonical(path), canonical(directory))) == canonical(directory)
-    except ValueError:
-        return False
-
 roots = {
     "$EXECUTION_ROOT": execution_root,
     "$PREFIX": prefix,
@@ -2573,47 +2735,137 @@ def identity(value):
         value.st_ctime_ns,
     )
 
-def path_label(path):
-    path = Path(path).resolve(strict=True)
-    for marker, marker_root in roots.items():
-        if within(path, marker_root):
-            relative = path.relative_to(marker_root).as_posix()
-            return marker if relative == "." else f"{marker}/{relative}"
-    raise RuntimeError("Runtime checkpoint path escaped trusted roots.")
+def path_key(path):
+    return os.path.normcase(os.path.abspath(os.fspath(path)))
 
-def expand_label(label):
-    if not isinstance(label, str) or "\\" in label:
+def parse_label(label, *, directory_entry=False):
+    if (
+        not isinstance(label, str)
+        or not label
+        or "\\" in label
+        or "\x00" in label
+        or (label.endswith("/") != directory_entry)
+    ):
         raise RuntimeError("Runtime checkpoint path label is invalid.")
+    core = label[:-1] if directory_entry else label
     for marker, root in roots.items():
-        if label == marker:
-            relative = PurePosixPath(".")
-        elif label.startswith(marker + "/"):
-            relative = PurePosixPath(label[len(marker) + 1:])
+        if core == marker:
+            relative_text = ""
+        elif core.startswith(marker + "/"):
+            relative_text = core[len(marker) + 1:]
         else:
             continue
-        if relative.is_absolute() or ".." in relative.parts:
-            raise RuntimeError("Runtime checkpoint path escaped its root.")
-        candidate = root.joinpath(*relative.parts)
-        current = root
-        for part in relative.parts:
-            metadata = os.lstat(current)
-            if (
-                stat.S_ISLNK(metadata.st_mode)
-                or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
-            ):
-                raise RuntimeError("Runtime checkpoint path traversed a linked entry.")
-            current /= part
-        metadata = os.lstat(candidate)
+        relative = PurePosixPath(relative_text or ".")
+        parts = () if not relative_text else relative.parts
         if (
-            stat.S_ISLNK(metadata.st_mode)
-            or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
+            relative.is_absolute()
+            or any(part in {"", ".", ".."} for part in parts)
+            or core != marker + ("/" + "/".join(parts) if parts else "")
+            or (directory_entry and not parts)
         ):
-            raise RuntimeError("Runtime checkpoint path is a linked entry.")
-        candidate = candidate.resolve(strict=True)
-        if not within(candidate, root):
             raise RuntimeError("Runtime checkpoint path escaped its root.")
-        return candidate
+        return marker, root, parts
     raise RuntimeError("Runtime checkpoint path uses an unknown root.")
+
+def label_within_scope(label_parts, root_parts, *, top_level):
+    marker, _, parts = label_parts
+    root_marker, _, scope_parts = root_parts
+    if marker != root_marker or parts[:len(scope_parts)] != scope_parts:
+        return False
+    return (
+        len(parts) == len(scope_parts) + 1
+        if top_level
+        else len(parts) > len(scope_parts)
+    )
+
+directory_guards = {}
+
+def guard_directory(path, *, issue, metadata=None):
+    path = Path(path)
+    metadata = os.lstat(path) if metadata is None else metadata
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_ISLNK(metadata.st_mode)
+        or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
+    ):
+        raise RuntimeError(f"{issue} is not a real directory: {path}")
+    key = path_key(path)
+    expected = identity(metadata)
+    existing = directory_guards.get(key)
+    if existing is not None and existing[1] != expected:
+        raise RuntimeError(f"{issue} changed while being checked: {path}")
+    directory_guards.setdefault(key, (path, expected))
+    return path
+
+def guard_marker_root(root):
+    root = Path(root)
+    if not root.is_absolute() or not root.anchor:
+        raise RuntimeError("Runtime checkpoint marker root is not absolute.")
+    current = Path(root.anchor)
+    guard_directory(current, issue="Runtime checkpoint marker component")
+    for part in root.parts[1:]:
+        current /= part
+        guard_directory(current, issue="Runtime checkpoint marker component")
+
+def expand_directory_label(label):
+    marker, root, parts = parse_label(label)
+    current = root
+    guard_directory(current, issue="Runtime checkpoint marker root")
+    for part in parts:
+        current /= part
+        guard_directory(current, issue="Runtime checkpoint scope component")
+    return current
+
+def expand_file_label(label):
+    marker, root, parts = parse_label(label)
+    if not parts:
+        raise RuntimeError("Runtime checkpoint file label names a root directory.")
+    current = root
+    guard_directory(current, issue="Runtime checkpoint marker root")
+    for part in parts[:-1]:
+        current /= part
+        guard_directory(current, issue="Runtime checkpoint file component")
+    path = current / parts[-1]
+    try:
+        metadata = os.lstat(path)
+    except OSError as exc:
+        raise RuntimeError(f"Runtime inventory file disappeared: {label}") from exc
+    return path, metadata
+
+def compose_label(scope_root, relative_parts, *, directory_entry=False):
+    if not relative_parts or any("\\" in part or "\x00" in part for part in relative_parts):
+        raise RuntimeError("Runtime closure contains an invalid path name.")
+    label = scope_root + "/" + "/".join(relative_parts)
+    return label + "/" if directory_entry else label
+
+def safe_file_metadata(path, metadata):
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or stat.S_ISLNK(metadata.st_mode)
+        or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
+        or metadata.st_nlink != 1
+    ):
+        raise RuntimeError(f"Runtime closure file is unsafe: {path}")
+
+def revalidate_runtime_files(file_guards):
+    for label in sorted(file_guards):
+        path, expected = file_guards[label]
+        metadata = os.lstat(path)
+        safe_file_metadata(path, metadata)
+        if identity(metadata) != expected:
+            raise RuntimeError(f"Runtime file identity changed: {label}")
+
+def revalidate_runtime_directories():
+    for key in sorted(directory_guards):
+        path, expected = directory_guards[key]
+        metadata = os.lstat(path)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or stat.S_ISLNK(metadata.st_mode)
+            or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
+            or identity(metadata) != expected
+        ):
+            raise RuntimeError(f"Runtime directory identity changed: {path}")
 
 source_path = Path(sys.argv[1])
 expected_fingerprint = sys.argv[2]
@@ -2698,6 +2950,10 @@ if (
 ):
     raise RuntimeError("Runtime checkpoint source is invalid.")
 
+for marker_root in roots.values():
+    guard_marker_root(marker_root)
+
+inventory_by_path = {}
 inventory_paths = []
 for item in checkpoint["identity_inventory"]:
     if (
@@ -2711,34 +2967,23 @@ for item in checkpoint["identity_inventory"]:
         or item["size"] < 0
     ):
         raise RuntimeError("Runtime checkpoint inventory is invalid.")
-    path = expand_label(item["path"])
-    metadata = os.lstat(path)
-    if (
-        not stat.S_ISREG(metadata.st_mode)
-        or stat.S_ISLNK(metadata.st_mode)
-        or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
-        or metadata.st_nlink != 1
-        or (
-            metadata.st_dev,
-            metadata.st_ino,
-            metadata.st_size,
-            metadata.st_mtime_ns,
-            metadata.st_ctime_ns,
-        )
-        != (
-            item["device"],
-            item["inode"],
-            item["size"],
-            item["mtime_ns"],
-            item["ctime_ns"],
-        )
-    ):
-        raise RuntimeError(f"Runtime file identity changed: {item['path']}")
+    parse_label(item["path"])
     inventory_paths.append(item["path"])
+    inventory_by_path[item["path"]] = (
+        item["device"],
+        item["inode"],
+        item["size"],
+        item["mtime_ns"],
+        item["ctime_ns"],
+    )
 if inventory_paths != sorted(set(inventory_paths)):
     raise RuntimeError("Runtime checkpoint inventory is not canonical.")
 
+scope_plans = []
 scope_keys = []
+scope_roots = set()
+closure_entries = set()
+closure_file_labels = set()
 for scope in checkpoint["closure_scopes"]:
     if (
         not isinstance(scope, dict)
@@ -2756,61 +3001,137 @@ for scope in checkpoint["closure_scopes"]:
         or scope["files"] != sorted(set(scope["files"]))
     ):
         raise RuntimeError("Runtime checkpoint closure is invalid.")
-    root = expand_label(scope["root"])
-    root_metadata = os.lstat(root)
-    if not stat.S_ISDIR(root_metadata.st_mode):
-        raise RuntimeError("Runtime checkpoint closure root is not a directory.")
+    root_parts = parse_label(scope["root"])
+    if scope["root"] in scope_roots:
+        raise RuntimeError("Runtime checkpoint closure roots are not unique.")
+    scope_roots.add(scope["root"])
+    for entry in scope["files"]:
+        directory_entry = entry.endswith("/")
+        entry_parts = parse_label(entry, directory_entry=directory_entry)
+        if not label_within_scope(
+            entry_parts,
+            root_parts,
+            top_level=scope["mode"] == "top_level_entries",
+        ):
+            raise RuntimeError("Runtime checkpoint closure entry escaped its scope.")
+        if (
+            scope["mode"] == "recursive_import_entries"
+            and not directory_entry
+            and not is_importable_file(entry)
+        ):
+            raise RuntimeError("Runtime import-only closure contains an ordinary file.")
+        if entry in closure_entries:
+            raise RuntimeError("Runtime checkpoint closure entries overlap.")
+        closure_entries.add(entry)
+        if not directory_entry:
+            closure_file_labels.add(entry)
+    scope_keys.append((scope["root"], scope["mode"]))
+    scope_plans.append((scope, root_parts))
+if scope_keys != sorted(set(scope_keys)):
+    raise RuntimeError("Runtime checkpoint closures are not canonical.")
+if not closure_file_labels.issubset(set(inventory_paths)):
+    raise RuntimeError("Runtime checkpoint closure references an untracked file.")
+
+expanded_plans = []
+expanded_root_keys = set()
+expanded_scope_roots = []
+for scope, root_parts in scope_plans:
+    root = expand_directory_label(scope["root"])
+    root_key = path_key(root)
+    if root_key in expanded_root_keys:
+        raise RuntimeError("Runtime checkpoint closure roots resolve to the same directory.")
+    expanded_root_keys.add(root_key)
+    for existing_root, existing_mode in expanded_scope_roots:
+        try:
+            common = os.path.commonpath((root_key, existing_root))
+        except ValueError:
+            continue
+        if (
+            scope["mode"] != "top_level_entries" and common == root_key
+            or existing_mode != "top_level_entries" and common == existing_root
+        ):
+            raise RuntimeError("Runtime recursive closure scopes overlap.")
+    expanded_scope_roots.append((root_key, scope["mode"]))
+    expanded_plans.append((scope, root))
+
+verified_files = {}
+verified_file_keys = set()
+
+def inspect_file(path, label, metadata, *, included):
+    safe_file_metadata(path, metadata)
+    if not included:
+        return
+    expected = inventory_by_path.get(label)
+    observed = identity(metadata)
+    if expected is None or observed != expected:
+        raise RuntimeError(f"Runtime file identity changed: {label}")
+    if label in verified_files:
+        raise RuntimeError(f"Runtime file was checked more than once: {label}")
+    key = path_key(path)
+    if key in verified_file_keys:
+        raise RuntimeError(f"Runtime file has more than one checkpoint label: {label}")
+    verified_file_keys.add(key)
+    verified_files[label] = (Path(path), expected)
+
+for label in sorted(set(inventory_paths) - closure_file_labels):
+    path, metadata = expand_file_label(label)
+    inspect_file(path, label, metadata, included=True)
+
+for scope, root in expanded_plans:
     discovered = []
-    if scope["mode"] == "top_level_entries":
-        for candidate in sorted(root.iterdir(), key=lambda item: item.name.casefold()):
-            metadata = os.lstat(candidate)
+    pending = [(root, ())]
+    while pending:
+        current_path, current_parts = pending.pop()
+        guard_directory(current_path, issue="Runtime closure directory")
+        try:
+            with os.scandir(current_path) as stream:
+                entries = sorted(stream, key=lambda item: item.name.casefold())
+        except OSError as exc:
+            raise RuntimeError(
+                f"Runtime closure directory could not be enumerated: {current_path}"
+            ) from exc
+        child_directories = []
+        for entry in entries:
+            candidate = current_path / entry.name
+            try:
+                metadata = os.lstat(candidate)
+            except OSError as exc:
+                raise RuntimeError(f"Runtime closure entry disappeared: {candidate}") from exc
+            relative_parts = current_parts + (entry.name,)
             if (
                 stat.S_ISLNK(metadata.st_mode)
                 or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
             ):
                 raise RuntimeError(f"Runtime closure contains a linked entry: {candidate}")
             if stat.S_ISDIR(metadata.st_mode):
-                discovered.append(path_label(candidate) + "/")
-            elif stat.S_ISREG(metadata.st_mode):
-                discovered.append(path_label(candidate))
-            else:
-                raise RuntimeError(f"Runtime closure contains a special entry: {candidate}")
-    else:
-        for current, directory_names, file_names in os.walk(root, followlinks=False):
-            current_path = Path(current)
-            safe_directories = []
-            for directory_name in sorted(directory_names):
-                directory = current_path / directory_name
-                metadata = os.lstat(directory)
-                if (
-                    not stat.S_ISDIR(metadata.st_mode)
-                    or stat.S_ISLNK(metadata.st_mode)
-                    or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
-                ):
-                    raise RuntimeError(f"Runtime closure contains a linked directory: {directory}")
-                discovered.append(path_label(directory) + "/")
-                safe_directories.append(directory_name)
-            directory_names[:] = safe_directories
-            for file_name in sorted(file_names):
-                candidate = current_path / file_name
-                if (
-                    scope["mode"] == "recursive_import_entries"
-                    and not is_importable_file(candidate)
-                ):
-                    continue
-                metadata = os.lstat(candidate)
-                if (
-                    not stat.S_ISREG(metadata.st_mode)
-                    or stat.S_ISLNK(metadata.st_mode)
-                    or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
-                ):
-                    raise RuntimeError(f"Runtime closure file is unsafe: {candidate}")
-                discovered.append(path_label(candidate))
+                guard_directory(
+                    candidate,
+                    issue="Runtime closure directory",
+                    metadata=metadata,
+                )
+                discovered.append(
+                    compose_label(scope["root"], relative_parts, directory_entry=True)
+                )
+                if scope["mode"] != "top_level_entries":
+                    child_directories.append((candidate, relative_parts))
+                continue
+            included = (
+                scope["mode"] != "recursive_import_entries"
+                or is_importable_file(candidate)
+            )
+            label = compose_label(scope["root"], relative_parts)
+            inspect_file(candidate, label, metadata, included=included)
+            if included:
+                discovered.append(label)
+        pending.extend(reversed(child_directories))
+        if scope["mode"] == "top_level_entries":
+            break
     if sorted(discovered) != scope["files"]:
         raise RuntimeError(f"Runtime closure changed: {scope['root']}")
-    scope_keys.append((scope["root"], scope["mode"]))
-if scope_keys != sorted(set(scope_keys)):
-    raise RuntimeError("Runtime checkpoint closures are not canonical.")
+
+if set(verified_files) != set(inventory_paths):
+    raise RuntimeError("Runtime checkpoint did not verify every inventory file.")
+revalidate_runtime_directories()
 
 payload = {
     "format": "ffxivshare-runtime-identity-checkpoint",
@@ -2822,12 +3143,65 @@ payload = {
     "closure_scopes_checked": len(scope_keys),
     "unchanged": True,
 }
-with destination.open("x", encoding="utf-8", newline="\n") as stream:
-    json.dump(payload, stream, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    stream.write("\n")
-    stream.flush()
-    os.fsync(stream.fileno())
+output_identity = None
+try:
+    with destination.open("x", encoding="utf-8", newline="\n") as stream:
+        output_metadata = os.fstat(stream.fileno())
+        output_identity = (output_metadata.st_dev, output_metadata.st_ino)
+        json.dump(payload, stream, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    revalidate_runtime_directories()
+    revalidate_runtime_files(verified_files)
+    final_source = os.lstat(source_path)
+    if (
+        not stat.S_ISREG(final_source.st_mode)
+        or stat.S_ISLNK(final_source.st_mode)
+        or getattr(final_source, "st_file_attributes", 0) & reparse_attribute
+        or final_source.st_nlink != 1
+        or identity(final_source) != identity(current)
+    ):
+        raise RuntimeError("Runtime checkpoint source changed before publication.")
+except BaseException:
+    if output_identity is not None:
+        try:
+            current_output = os.lstat(destination)
+            if (
+                stat.S_ISREG(current_output.st_mode)
+                and not stat.S_ISLNK(current_output.st_mode)
+                and not (
+                    getattr(current_output, "st_file_attributes", 0)
+                    & reparse_attribute
+                )
+                and current_output.st_nlink == 1
+                and (current_output.st_dev, current_output.st_ino)
+                == output_identity
+            ):
+                destination.unlink()
+        except FileNotFoundError:
+            pass
+    raise
 '''
+
+
+def _compressed_python_command(source: str, *, filename: str) -> str:
+    """Keep audited embedded programs below the Windows command-line limit."""
+
+    import base64
+    import zlib
+
+    encoded = base64.b85encode(zlib.compress(source.encode("utf-8"), level=9)).decode(
+        "ascii"
+    )
+    command = (
+        "import base64,zlib;"
+        "exec(compile(zlib.decompress(base64.b85decode("
+        f"{encoded!r})).decode('utf-8'),{filename!r},'exec'))"
+    )
+    if len(command) >= 24_000:
+        raise RehearsalError("embedded_python_command_too_large")
+    return command
 
 
 def _secure_run_root(path: Path) -> str:
@@ -3944,7 +4318,10 @@ class Rehearsal:
                     "-X",
                     "utf8",
                     "-c",
-                    RUNTIME_FINGERPRINT_SCRIPT,
+                    _compressed_python_command(
+                        RUNTIME_FINGERPRINT_SCRIPT,
+                        filename="<ffxivshare-runtime-fingerprint>",
+                    ),
                     str(output),
                 ],
                 env=env,
@@ -4026,7 +4403,10 @@ class Rehearsal:
                     "-X",
                     "utf8",
                     "-c",
-                    RUNTIME_IDENTITY_CHECKPOINT_SCRIPT,
+                    _compressed_python_command(
+                        RUNTIME_IDENTITY_CHECKPOINT_SCRIPT,
+                        filename="<ffxivshare-runtime-checkpoint>",
+                    ),
                     str(self.runtime_fingerprint_report_path),
                     str(self.runtime_fingerprint_expected),
                     self.runtime_fingerprint_report_sha256,

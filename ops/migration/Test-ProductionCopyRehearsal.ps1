@@ -100,6 +100,22 @@ module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
+compressed_probe = module._compressed_python_command(
+    "probe_value = 41\nprobe_value += 1\n",
+    filename="<compressed-probe>",
+)
+compressed_namespace: dict[str, object] = {}
+exec(compressed_probe, compressed_namespace)
+assert compressed_namespace["probe_value"] == 42
+for source, filename in (
+    (module.RUNTIME_FINGERPRINT_SCRIPT, "<runtime-fingerprint-contract>"),
+    (module.RUNTIME_IDENTITY_CHECKPOINT_SCRIPT, "<runtime-checkpoint-contract>"),
+):
+    compressed = module._compressed_python_command(source, filename=filename)
+    assert compressed == module._compressed_python_command(source, filename=filename)
+    assert len(compressed) < 12_000
+    compile(compressed, filename, "exec")
+
 execute_source = inspect.getsource(module.Rehearsal.execute)
 approval_child_index = execute_source.index('"approved_policy_evidence_verification"')
 bootstrap_initial_gate_index = execute_source.rfind(
@@ -298,6 +314,21 @@ class StubRunner:
             return module.CommandResult(17, stdout_path, stderr_path)
 
         if stage.startswith("runtime_fingerprint_"):
+            inline_index = argv.index("-c") + 1
+            expected_inline = module._compressed_python_command(
+                (
+                    module.RUNTIME_FINGERPRINT_SCRIPT
+                    if stage in {"runtime_fingerprint_initial", "runtime_fingerprint_final"}
+                    else module.RUNTIME_IDENTITY_CHECKPOINT_SCRIPT
+                ),
+                filename=(
+                    "<ffxivshare-runtime-fingerprint>"
+                    if stage in {"runtime_fingerprint_initial", "runtime_fingerprint_final"}
+                    else "<ffxivshare-runtime-checkpoint>"
+                ),
+            )
+            assert argv[inline_index] == expected_inline
+            assert len(argv[inline_index]) < 12_000
             if stage in {"runtime_fingerprint_initial", "runtime_fingerprint_final"}:
                 runtime_projection = (
                     {"fixture": "runtime-mutated"}
@@ -315,7 +346,7 @@ class StubRunner:
                         "format_version": 1,
                         "content_hashed": True,
                         "identity_inventory": [{
-                            "path": "$PREFIX/fixture",
+                            "path": "$PREFIX/fixture.py",
                             "device": 1,
                             "inode": 1,
                             "size": 1,
@@ -1048,8 +1079,14 @@ assert real_state["applied_leaf_nodes"] == real_state["repository_leaf_nodes"], 
 # introduced after the full report was captured.
 checkpoint_root = test_root / "runtime-checkpoint-script"
 checkpoint_root.mkdir()
-identity_file = checkpoint_root / "identity.bin"
+checkpoint_output_root = test_root / "runtime-checkpoint-output"
+checkpoint_output_root.mkdir()
+identity_scope = checkpoint_root / "identity-scope"
+identity_scope.mkdir()
+identity_file = identity_scope / "identity.bin"
 identity_file.write_bytes(b"runtime identity\n")
+standalone_identity_file = checkpoint_root / "standalone-runtime.bin"
+standalone_identity_file.write_bytes(b"standalone runtime\n")
 
 def top_level_runtime_entries(root: Path, marker: str) -> list[str]:
     entries: list[str] = []
@@ -1064,7 +1101,39 @@ def top_level_runtime_entries(root: Path, marker: str) -> list[str]:
             raise AssertionError(f"Unexpected runtime entry: {candidate}")
     return sorted(entries)
 
-identity = identity_file.stat()
+def runtime_identity_entry(path: Path, label: str) -> dict[str, object]:
+    metadata = path.stat()
+    return {
+        "path": label,
+        "device": metadata.st_dev,
+        "inode": metadata.st_ino,
+        "size": metadata.st_size,
+        "mtime_ns": metadata.st_mtime_ns,
+        "ctime_ns": metadata.st_ctime_ns,
+    }
+
+checkpoint_inventory = [
+    runtime_identity_entry(
+        identity_file,
+        "$EXECUTION_ROOT/identity-scope/identity.bin",
+    ),
+    runtime_identity_entry(
+        standalone_identity_file,
+        "$EXECUTION_ROOT/standalone-runtime.bin",
+    ),
+]
+for runtime_root, marker in (
+    (Path(sys.prefix).resolve(), "$PREFIX"),
+    (Path(sys.base_prefix).resolve(), "$BASE_PREFIX"),
+):
+    checkpoint_inventory.extend(
+        runtime_identity_entry(candidate, f"{marker}/{candidate.name}")
+        for candidate in sorted(
+            runtime_root.iterdir(), key=lambda item: item.name.casefold()
+        )
+        if candidate.is_file()
+    )
+
 checkpoint_projection = {"fixture": "checkpoint-authority"}
 checkpoint_fingerprint = module._canonical_json_sha256(checkpoint_projection)
 checkpoint_payload = {
@@ -1076,16 +1145,18 @@ checkpoint_payload = {
         "format": "ffxivshare-runtime-identity-checkpoint-source",
         "format_version": 1,
         "content_hashed": True,
-        "identity_inventory": [{
-            "path": "$EXECUTION_ROOT/identity.bin",
-            "device": identity.st_dev,
-            "inode": identity.st_ino,
-            "size": identity.st_size,
-            "mtime_ns": identity.st_mtime_ns,
-            "ctime_ns": identity.st_ctime_ns,
-        }],
+        "identity_inventory": sorted(
+            checkpoint_inventory, key=lambda item: item["path"]
+        ),
         "closure_scopes": sorted(
             [
+                {
+                    "root": "$EXECUTION_ROOT/identity-scope",
+                    "mode": "top_level_entries",
+                    "files": top_level_runtime_entries(
+                        identity_scope, "$EXECUTION_ROOT/identity-scope"
+                    ),
+                },
                 {
                     "root": "$PREFIX",
                     "mode": "top_level_entries",
@@ -1149,7 +1220,51 @@ checkpoint_bound_report = module._validate_runtime_fingerprint_bytes(
 )
 assert checkpoint_bound_size == checkpoint_source.stat().st_size
 assert checkpoint_bound_sha256 == checkpoint_source_sha256
-checkpoint_output = checkpoint_root / "checkpoint-pass.json"
+
+def assert_invalid_checkpoint_report(payload: dict[str, object]) -> None:
+    raw = (json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+    try:
+        module._validate_runtime_fingerprint_bytes(raw)
+    except module.RehearsalError:
+        pass
+    else:
+        raise AssertionError("Invalid runtime checkpoint report was accepted")
+
+duplicate_root_payload = json.loads(json.dumps(checkpoint_payload))
+duplicate_root_payload["checkpoint"]["closure_scopes"].append({
+    "root": "$EXECUTION_ROOT/identity-scope",
+    "mode": "recursive",
+    "files": [],
+})
+duplicate_root_payload["checkpoint"]["closure_scopes"].sort(
+    key=lambda item: (item["root"], item["mode"])
+)
+assert_invalid_checkpoint_report(duplicate_root_payload)
+
+untracked_closure_payload = json.loads(json.dumps(checkpoint_payload))
+identity_scope_payload = next(
+    scope
+    for scope in untracked_closure_payload["checkpoint"]["closure_scopes"]
+    if scope["root"] == "$EXECUTION_ROOT/identity-scope"
+)
+identity_scope_payload["files"].append(
+    "$EXECUTION_ROOT/identity-scope/untracked.py"
+)
+identity_scope_payload["files"].sort()
+assert_invalid_checkpoint_report(untracked_closure_payload)
+
+escaped_scope_payload = json.loads(json.dumps(checkpoint_payload))
+identity_scope_payload = next(
+    scope
+    for scope in escaped_scope_payload["checkpoint"]["closure_scopes"]
+    if scope["root"] == "$EXECUTION_ROOT/identity-scope"
+)
+identity_scope_payload["files"] = ["$EXECUTION_ROOT/outside.py"]
+assert_invalid_checkpoint_report(escaped_scope_payload)
+
+checkpoint_output = checkpoint_output_root / "checkpoint-pass.json"
 completed = run_quick_checkpoint(
     checkpoint_source,
     checkpoint_source_sha256,
@@ -1184,7 +1299,7 @@ else:
 completed = run_quick_checkpoint(
     checkpoint_source,
     checkpoint_source_sha256,
-    checkpoint_root / "checkpoint-rewritten.json",
+    checkpoint_output_root / "checkpoint-rewritten.json",
 )
 assert completed.returncode != 0
 
@@ -1202,7 +1317,7 @@ for marker, name in (("$PREFIX", "prefix"), ("$BASE_PREFIX", "base-prefix")):
     completed = run_quick_checkpoint(
         missing_entry_source,
         file_hash(missing_entry_source),
-        checkpoint_root / f"checkpoint-missing-{name}.json",
+        checkpoint_output_root / f"checkpoint-missing-{name}.json",
     )
     assert completed.returncode != 0, marker
 
@@ -1216,6 +1331,7 @@ synthetic_parent = test_root / "synthetic-runtime"
 synthetic_execution = synthetic_parent / "execution"
 synthetic_prefix = synthetic_parent / "prefix"
 synthetic_base = synthetic_parent / "base"
+synthetic_quick_output = synthetic_parent / "quick-output"
 synthetic_site = synthetic_prefix / "Lib" / "site-packages"
 synthetic_base_lib = synthetic_base / "Lib"
 synthetic_base_site = synthetic_base_lib / "site-packages"
@@ -1223,6 +1339,7 @@ synthetic_package = synthetic_prefix / "django"
 synthetic_dormant = synthetic_prefix / "frontend"
 for directory in (
     synthetic_execution,
+    synthetic_quick_output,
     synthetic_site,
     synthetic_package,
     synthetic_dormant,
@@ -1268,10 +1385,18 @@ import sysconfig
 import _sqlite3
 
 orchestrator, destination, prefix, base = map(Path, sys.argv[1:5])
-activate_base_site = len(sys.argv) == 6 and sys.argv[5] == "--activate-base-site"
+options = sys.argv[5:]
+activate_base_site = "--activate-base-site" in options
+overlap_site_roots = "--overlap-site-roots" in options
+tamper_candidates = [
+    value
+    for value in options
+    if value not in {"--activate-base-site", "--overlap-site-roots"}
+]
+assert len(tamper_candidates) <= 1
 tamper_after_fsync = (
-    Path(sys.argv[5]).resolve(strict=True)
-    if len(sys.argv) == 6 and not activate_base_site
+    Path(tamper_candidates[0]).resolve(strict=False)
+    if tamper_candidates
     else None
 )
 spec = importlib.util.spec_from_file_location("synthetic_rehearsal", orchestrator)
@@ -1297,7 +1422,11 @@ if activate_base_site:
     sys.path.insert(0, str(base / "Lib" / "site-packages"))
 site.ENABLE_USER_SITE = False
 site.getusersitepackages = lambda: str(prefix / "user-site")
-site.getsitepackages = lambda: [str(site_root)]
+site.getsitepackages = lambda: (
+    [str(prefix), str(site_root)]
+    if overlap_site_roots
+    else [str(site_root)]
+)
 def synthetic_get_path(name, *, scheme=None, vars=None, expand=True):
     if vars is not None and name in {"purelib", "platlib"}:
         return str(base / "Lib" / "site-packages")
@@ -1330,9 +1459,11 @@ synthetic_quick_wrapper.write_text(
     """from __future__ import annotations
 import importlib.machinery
 import importlib.util
+import os
 from pathlib import Path
 import sys
 
+arguments = sys.argv[1:]
 (
     orchestrator,
     source,
@@ -1341,7 +1472,9 @@ import sys
     destination,
     prefix,
     base,
-) = sys.argv[1:]
+) = arguments[:7]
+tamper_after_fsync = Path(arguments[7]) if len(arguments) == 8 else None
+assert len(arguments) in {7, 8}
 spec = importlib.util.spec_from_file_location("synthetic_quick_rehearsal", orchestrator)
 assert spec is not None and spec.loader is not None
 module = importlib.util.module_from_spec(spec)
@@ -1358,6 +1491,18 @@ sys.path[:] = [
     str(prefix),
     str(prefix / "Lib" / "site-packages"),
 ]
+if tamper_after_fsync is not None:
+    original_fsync = os.fsync
+    tampered = False
+
+    def fsync_then_tamper(descriptor):
+        global tampered
+        original_fsync(descriptor)
+        if not tampered:
+            tamper_after_fsync.write_bytes(b"VALUE = 'late'\\n")
+            tampered = True
+
+    os.fsync = fsync_then_tamper
 sys.argv = [
     "runtime-checkpoint",
     source,
@@ -1371,7 +1516,10 @@ exec(module.RUNTIME_IDENTITY_CHECKPOINT_SCRIPT, {"__name__": "__main__"})
     newline="\n",
 )
 
-def run_synthetic_full(destination: Path) -> dict[str, object]:
+def run_synthetic_full(
+    destination: Path,
+    *options: str,
+) -> dict[str, object]:
     completed = subprocess.run(
         [
             sys.executable,
@@ -1385,6 +1533,7 @@ def run_synthetic_full(destination: Path) -> dict[str, object]:
             str(destination),
             str(synthetic_prefix),
             str(synthetic_base),
+            *options,
         ],
         cwd=synthetic_execution,
         stdin=subprocess.DEVNULL,
@@ -1396,6 +1545,37 @@ def run_synthetic_full(destination: Path) -> dict[str, object]:
         "utf-8", errors="replace"
     )
     return module._validate_runtime_fingerprint(destination)
+
+def run_synthetic_quick(
+    source: Path,
+    source_report: dict[str, object],
+    destination: Path,
+    tamper_after_fsync: Path | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        [
+            sys.executable,
+            "-E",
+            "-s",
+            "-B",
+            "-X",
+            "utf8",
+            str(synthetic_quick_wrapper),
+            str(orchestrator_path),
+            str(source),
+            source_report["fingerprint_sha256"],
+            file_hash(source),
+            str(destination),
+            str(synthetic_prefix),
+            str(synthetic_base),
+            *([str(tamper_after_fsync)] if tamper_after_fsync is not None else []),
+        ],
+        cwd=synthetic_execution,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
 
 terminal_drift_output = synthetic_parent / "terminal-drift.json"
 terminal_drift = subprocess.run(
@@ -1425,7 +1605,166 @@ assert synthetic_package_file.read_bytes() == b"VALUE = 'drift!'\n", (
     terminal_drift.stderr.decode("utf-8", errors="replace")
 )
 synthetic_package_file.write_bytes(b"VALUE = 'stable'\n")
-synthetic_before = run_synthetic_full(synthetic_parent / "before.json")
+terminal_new_entry = synthetic_site / "full_fsync_late_probe.py"
+terminal_new_entry_output = synthetic_parent / "terminal-new-entry.json"
+terminal_new_entry_result = subprocess.run(
+    [
+        sys.executable,
+        "-E",
+        "-s",
+        "-B",
+        "-X",
+        "utf8",
+        str(synthetic_wrapper),
+        str(orchestrator_path),
+        str(terminal_new_entry_output),
+        str(synthetic_prefix),
+        str(synthetic_base),
+        str(terminal_new_entry),
+    ],
+    cwd=synthetic_execution,
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=False,
+)
+assert terminal_new_entry_result.returncode != 0
+assert terminal_new_entry.is_file(), terminal_new_entry_result.stderr.decode(
+    "utf-8", errors="replace"
+)
+assert not terminal_new_entry_output.exists()
+terminal_new_entry.unlink()
+synthetic_before_source = synthetic_parent / "before.json"
+synthetic_before = run_synthetic_full(synthetic_before_source)
+synthetic_overlap_source = synthetic_parent / "before-overlapping-site-roots.json"
+synthetic_overlap_before = run_synthetic_full(
+    synthetic_overlap_source,
+    "--overlap-site-roots",
+)
+overlap_site_projection = synthetic_overlap_before["projection"]["site_packages"]
+expected_overlap_site_files = sorted(
+    path
+    for path in synthetic_prefix.rglob("*")
+    if path.is_file()
+)
+assert overlap_site_projection["roots"] == ["$PREFIX"]
+assert overlap_site_projection["file_count"] == len(expected_overlap_site_files)
+assert overlap_site_projection["total_size"] == sum(
+    path.stat().st_size for path in expected_overlap_site_files
+)
+recursive_modes = {
+    "recursive",
+    "recursive_import_entries",
+    "recursive_package_entries",
+}
+overlap_recursive_scopes = [
+    scope
+    for scope in synthetic_overlap_before["checkpoint"]["closure_scopes"]
+    if scope["mode"] in recursive_modes
+]
+overlap_recursive_roots = [scope["root"] for scope in overlap_recursive_scopes]
+assert overlap_recursive_roots == sorted(set(overlap_recursive_roots))
+
+def label_is_within(candidate: str, root: str) -> bool:
+    return candidate == root or candidate.startswith(root.rstrip("/") + "/")
+
+for index, left_root in enumerate(overlap_recursive_roots):
+    for right_root in overlap_recursive_roots[index + 1:]:
+        assert not label_is_within(left_root, right_root)
+        assert not label_is_within(right_root, left_root)
+overlap_recursive_entries = [
+    entry
+    for scope in overlap_recursive_scopes
+    for entry in scope["files"]
+]
+assert len(overlap_recursive_entries) == len(set(overlap_recursive_entries))
+
+synthetic_site_package.write_bytes(b"VALUE = 'drift!'\n")
+synthetic_overlap_quick = run_synthetic_quick(
+    synthetic_overlap_source,
+    synthetic_overlap_before,
+    synthetic_quick_output / "quick-overlapping-site-roots-drift.json",
+)
+assert synthetic_overlap_quick.returncode != 0
+synthetic_overlap_changed = run_synthetic_full(
+    synthetic_parent / "after-overlapping-site-roots-drift.json",
+    "--overlap-site-roots",
+)
+assert (
+    synthetic_overlap_before["fingerprint_sha256"]
+    != synthetic_overlap_changed["fingerprint_sha256"]
+)
+synthetic_site_package.write_bytes(b"VALUE = 'stable'\n")
+synthetic_overlap_restored_source = (
+    synthetic_parent / "before-overlapping-site-roots-added-file.json"
+)
+synthetic_overlap_restored = run_synthetic_full(
+    synthetic_overlap_restored_source,
+    "--overlap-site-roots",
+)
+assert (
+    synthetic_overlap_before["fingerprint_sha256"]
+    == synthetic_overlap_restored["fingerprint_sha256"]
+)
+
+synthetic_overlap_added_file = synthetic_site / "late_overlap_probe.py"
+synthetic_overlap_added_file.write_bytes(b"VALUE = 'late'\n")
+synthetic_overlap_quick = run_synthetic_quick(
+    synthetic_overlap_restored_source,
+    synthetic_overlap_restored,
+    synthetic_quick_output / "quick-overlapping-site-roots-added.json",
+)
+assert synthetic_overlap_quick.returncode != 0
+synthetic_overlap_added = run_synthetic_full(
+    synthetic_parent / "after-overlapping-site-roots-added.json",
+    "--overlap-site-roots",
+)
+assert (
+    synthetic_overlap_before["fingerprint_sha256"]
+    != synthetic_overlap_added["fingerprint_sha256"]
+)
+synthetic_overlap_added_file.unlink()
+synthetic_overlap_fsync_source = (
+    synthetic_parent / "before-overlapping-site-roots-fsync-drift.json"
+)
+synthetic_overlap_fsync = run_synthetic_full(
+    synthetic_overlap_fsync_source,
+    "--overlap-site-roots",
+)
+fsync_tamper_file = synthetic_site / "fsync_late_probe.py"
+fsync_tamper_output = synthetic_quick_output / "quick-fsync-directory-drift.json"
+synthetic_overlap_quick = run_synthetic_quick(
+    synthetic_overlap_fsync_source,
+    synthetic_overlap_fsync,
+    fsync_tamper_output,
+    tamper_after_fsync=fsync_tamper_file,
+)
+assert synthetic_overlap_quick.returncode != 0
+assert fsync_tamper_file.is_file(), synthetic_overlap_quick.stderr.decode(
+    "utf-8", errors="replace"
+)
+assert not fsync_tamper_output.exists()
+fsync_tamper_file.unlink()
+synthetic_overlap_post_fsync_source = (
+    synthetic_parent / "before-overlapping-site-roots-post-fsync-drift.json"
+)
+synthetic_overlap_post_fsync = run_synthetic_full(
+    synthetic_overlap_post_fsync_source,
+    "--overlap-site-roots",
+)
+synthetic_overlap_quick = run_synthetic_quick(
+    synthetic_overlap_post_fsync_source,
+    synthetic_overlap_post_fsync,
+    synthetic_quick_output / "quick-overlapping-site-roots-restored.json",
+)
+assert synthetic_overlap_quick.returncode == 0, synthetic_overlap_quick.stderr.decode(
+    "utf-8", errors="replace"
+)
+synthetic_before_source = (
+    synthetic_parent / "before-after-overlapping-site-roots.json"
+)
+synthetic_before = run_synthetic_full(synthetic_before_source)
+
 base_runtime_closure = synthetic_before["projection"]["python"][
     "base_runtime_closure"
 ]
@@ -1470,10 +1809,10 @@ synthetic_quick = subprocess.run(
         "utf8",
         str(synthetic_quick_wrapper),
         str(orchestrator_path),
-        str(synthetic_parent / "before.json"),
+        str(synthetic_before_source),
         synthetic_before["fingerprint_sha256"],
-        file_hash(synthetic_parent / "before.json"),
-        str(synthetic_parent / "quick-inactive-base-site.json"),
+        file_hash(synthetic_before_source),
+        str(synthetic_quick_output / "quick-inactive-base-site.json"),
         str(synthetic_prefix),
         str(synthetic_base),
     ],
@@ -1543,10 +1882,10 @@ synthetic_quick = subprocess.run(
         "utf8",
         str(synthetic_quick_wrapper),
         str(orchestrator_path),
-        str(synthetic_parent / "before.json"),
+        str(synthetic_before_source),
         synthetic_before["fingerprint_sha256"],
-        file_hash(synthetic_parent / "before.json"),
-        str(synthetic_parent / "quick-base-stdlib-drift.json"),
+        file_hash(synthetic_before_source),
+        str(synthetic_quick_output / "quick-base-stdlib-drift.json"),
         str(synthetic_prefix),
         str(synthetic_base),
     ],
@@ -1576,10 +1915,10 @@ synthetic_quick = subprocess.run(
         "utf8",
         str(synthetic_quick_wrapper),
         str(orchestrator_path),
-        str(synthetic_parent / "before.json"),
+        str(synthetic_before_source),
         synthetic_before["fingerprint_sha256"],
-        file_hash(synthetic_parent / "before.json"),
-        str(synthetic_parent / "quick-venv-site-drift.json"),
+        file_hash(synthetic_before_source),
+        str(synthetic_quick_output / "quick-venv-site-drift.json"),
         str(synthetic_prefix),
         str(synthetic_base),
     ],
@@ -1610,10 +1949,10 @@ synthetic_quick = subprocess.run(
         "utf8",
         str(synthetic_quick_wrapper),
         str(orchestrator_path),
-        str(synthetic_parent / "before.json"),
+        str(synthetic_before_source),
         synthetic_before["fingerprint_sha256"],
-        file_hash(synthetic_parent / "before.json"),
-        str(synthetic_parent / "quick-new-resource.json"),
+        file_hash(synthetic_before_source),
+        str(synthetic_quick_output / "quick-new-resource.json"),
         str(synthetic_prefix),
         str(synthetic_base),
     ],
@@ -1637,10 +1976,10 @@ synthetic_quick = subprocess.run(
         "utf8",
         str(synthetic_quick_wrapper),
         str(orchestrator_path),
-        str(synthetic_parent / "before.json"),
+        str(synthetic_before_source),
         synthetic_before["fingerprint_sha256"],
-        file_hash(synthetic_parent / "before.json"),
-        str(synthetic_parent / "quick-new-code.json"),
+        file_hash(synthetic_before_source),
+        str(synthetic_quick_output / "quick-new-code.json"),
         str(synthetic_prefix),
         str(synthetic_base),
     ],
