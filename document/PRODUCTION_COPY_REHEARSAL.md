@@ -10,9 +10,9 @@
 - 源数据库三件套、源媒体清单、源媒体目录和两个演练媒体副本在整个流程中保持封存。数据库三件套必须独占一个只含三个文件的目录；源媒体清单必须是位于另一目录的独立文件；五个外部范围彼此、与仓库及任何 RunRoot 都不得重叠。工具只把稳定复制后的数据库放进 RunRoot，再对私有副本执行检查和迁移。
 - Proposal RunRoot、两个 Rehearsal RunRoot 必须是三个全新的本机 NTFS 目录。Bootstrap 会审查从直接父目录到卷根的完整祖先链：owner 必须可信，不可信主体不能拥有删除、修改 DACL/owner 或在直接父目录创建/继承可写子项的权限。优先使用当前用户的本机 LocalAppData 私有目录；禁止使用 UNC、映射盘、重解析点、共享临时目录、仓库目录、输入目录或媒体目录。
 - RunRoot 创建后由 Bootstrap 收紧 ACL；`approval` 目录还会单独收紧。ACL 校验失败时不得通过放宽脚本或换到共享目录绕过。
-- 整个 RunRoot、源输入目录、源媒体和两个 TargetMediaRoot 都含有生产用户数据，必须分别使用私有 DACL 并纳入保留、归档和安全销毁制度。RunRoot 期满后可整体安全销毁；源输入是演练权威副本时不得误删唯一备份，必须先按备份保留制度确认存在独立可恢复副本。
+- 整个 RunRoot、源输入目录、源媒体和两个 TargetMediaRoot 都含有生产用户数据，双轮报告也包含敏感生产证据；它们必须分别使用私有 DACL 并纳入保留、归档和安全销毁制度。RunRoot 期满后可整体安全销毁；源输入是演练权威副本时不得误删唯一备份，必须先按备份保留制度确认存在独立可恢复副本。
 - 外部源输入和媒体目录的 DACL 由运维人员预先封存，但不再依赖人工 `Get-Acl` 文本作为主要证据。`ProductionCopyHandoff.py` 会使用只读 Win32 handle 自动验证五个范围、完整祖先链、owner、DACL、ACE、重解析点、硬链接和节点身份，并把逐节点清单及可复算摘要写入结构化 handoff；Proposal 开始和结束以及两次 Rehearsal 的前后门禁都会复核它。任何漂移都必须使用新 handoff、ProposalId 和 RunRoot 从头重跑。
-- Proposal ledger 只绑定提案阶段的本地证据。Proposal completion、Review 和 Policy 随后通过精确字节 SHA-256 与字段互相绑定，再由 Rehearsal Bootstrap 冻结；ledger 是 `self_consistent_local_chain` 且 `tamper_proof=false`，不是签名或不可篡改存储。应把 proposal/review/policy/completion/result SHA-256 和 ledger head 另行归档到受控工单。
+- Proposal ledger 只绑定提案阶段的本地证据。Proposal completion、Review 和 Policy 随后通过精确字节 SHA-256 与字段互相绑定，再由 Rehearsal Bootstrap 冻结；ledger 是 `self_consistent_local_chain` 且 `tamper_proof=false`，不是签名或不可篡改存储。应把 proposal/review/policy/completion/result、双轮报告的 SHA-256 和 ledger head 另行归档到受控工单。
 - 操作员属于受信任边界；本地指纹、DACL、handoff 和 ledger 用于发现普通并发漂移、误操作和其他未授权主体的写入，不构成对恶意同一操作员或进程内存篡改的防护，也不是原子文件系统快照。handoff 明确记录 `tamper_proof=false`、`continuous_acl_stability_proven=false`、`offline_process_state=operator_asserted` 和 `trusted_operator_can_override_acl=true`。尤其当当前用户启用了 Administrators 组权限时，Administrators 的 Full Control 仍可能让该受信任操作员有效写入；“封存”不等于抵抗同一管理员。
 - 编排器不会主动请求线上服务访问，但 Django 启动、migration 和 `RunPython` 可以包含任意网络、文件或子进程副作用。工具目前不实施或证明网络隔离，也不使用 Windows Job Object 管理脱离进程或孙进程；证据会记录 `network_isolation_enforced=false` 或 `network_access_observation=not_measured`。演练机必须由外部防火墙隔离，人工审阅也必须检查所有 pending migration 的外部副作用，并拒绝会启动后台或脱离进程的 migration。任何终态之后，尤其发生中断时，必须先确认没有遗留进程仍在访问 RunRoot，并把确认结果单独记录到工单，才能归档、销毁现场，把候选物视为稳定，或使用新的 RunRoot 重跑。
 - CLI 退出码约定为：0 成功；1 表示 Bootstrap、Proposal 或 Approval 拒绝/失败，也用于 Rehearsal 配置错误和普通执行失败；2 只表示 Rehearsal 已经发布 `blocked` 终态；130 表示中断。Bootstrap 和 Invoke 会原样传播已经启动的内层 CLI 退出码。任意非零、被 Ctrl+C 中断、缺少 completion/result，或证据校验失败时，保留现场用于诊断；即使中断后存在 completion/result，也不得向同一 RunRoot 补文件或续跑。确认原因后使用全新的 RunRoot 从头重跑。
@@ -52,6 +52,13 @@ $HandoffParent = Join-Path $PrivateBase 'FFXIVShare\R19\Handoff-20260717-01'
 if (Test-Path -LiteralPath $HandoffParent) { throw 'Handoff parent must be new.' }
 [System.IO.Directory]::CreateDirectory($HandoffParent) | Out-Null
 $SourceHandoffManifest = Join-Path $HandoffParent 'production-20260717-handoff.json'
+
+$PairVerificationParent = Join-Path $PrivateBase 'FFXIVShare\R19\PairVerification-20260717-01'
+if (Test-Path -LiteralPath $PairVerificationParent) {
+  throw 'Pair-verification parent must be new.'
+}
+[System.IO.Directory]::CreateDirectory($PairVerificationParent) | Out-Null
+$PairVerification = Join-Path $PairVerificationParent 'production-20260717-pair.json'
 ```
 
 先在旧应用环境使用 SQLite Backup API 的 `backup_database` 创建在线数据库备份三件套；不要直接复制活动数据库。记录来源主机、UTC 时点、应用版本、数据库摘要和操作员，并取得与该时点一致的离线媒体或存储快照。若跨数据库与媒体的一致性必须短暂冻结写入，应使用另行批准并记录的 R19 取样窗口；它不等于 R20 的最终停写或切换窗口。然后逐字节复制数据库三件套与媒体快照到演练机。媒体清单必须针对离线媒体源生成：
@@ -102,6 +109,7 @@ function Set-ExactTreeDacl {
 Set-ExactTreeDacl -LiteralPath $SourceCopyParent -Sddl $SealedSddl
 Set-ExactTreeDacl -LiteralPath $TargetMediaParent -Sddl $SealedSddl
 Set-ExactTreeDacl -LiteralPath $HandoffParent -Sddl $PrivateOutputSddl
+Set-ExactTreeDacl -LiteralPath $PairVerificationParent -Sddl $PrivateOutputSddl
 ```
 
 封存后创建结构化 handoff。输出使用 create-new 语义，已存在时拒绝覆盖；创建过程会重复校验数据库三件套、源媒体和两个目标媒体副本，并自动归档五个范围及祖先链的路径身份、owner、DACL 和 ACE 投影。
@@ -295,6 +303,45 @@ if ($LASTEXITCODE -ne 0) { throw "First rehearsal failed: $LASTEXITCODE" }
 if ($LASTEXITCODE -ne 0) { throw "Second rehearsal failed: $LASTEXITCODE" }
 ```
 
+两次演练完成后，必须使用第一轮 RunRoot 中被冻结的 verifier 生成一份 create-new 双轮验证报告；不得改用审批后工作区中的同名脚本。该报告重新绑定 Proposal、Review、Policy 和两轮 RunRoot，校验每轮完成门禁，并把业务语义一致性、允许差异及未解释差异汇总为可归档 JSON。
+
+```powershell
+$PairVerifier = Join-Path `
+  $RehearsalRunRoot1 `
+  'code\ops\migration\Verify-ProductionCopyRehearsalPair.py'
+
+& $Python -I -S -B -X utf8 $PairVerifier `
+  --first-run-root $RehearsalRunRoot1 `
+  --second-run-root $RehearsalRunRoot2 `
+  --proposal-run-root $ProposalRunRoot `
+  --policy $Policy `
+  --proposal $Proposal `
+  --review $Review `
+  --expected-policy-sha256 $PolicySha256 `
+  --expected-proposal-sha256 $ProposalSha256 `
+  --expected-review-sha256 $ReviewSha256 `
+  --output $PairVerification
+if ($LASTEXITCODE -ne 0) { throw "Pair verification failed: $LASTEXITCODE" }
+
+$PairReport = Get-Content -LiteralPath $PairVerification -Raw | ConvertFrom-Json
+if (
+  $PairReport.status -ne 'verified' -or
+  $PairReport.comparison.matched -ne $true -or
+  $PairReport.comparison.issues.Count -ne 0 -or
+  $PairReport.comparison.unexplained_differences.Count -ne 0 -or
+  $PairReport.verification -ne 'self_consistent_local_chain' -or
+  $PairReport.tamper_proof -ne $false -or
+  $PairReport.contains_production_user_data -ne $true -or
+  $PairReport.retained_on_success -ne $true -or
+  $PairReport.secure_disposal_required -ne $true -or
+  $PairReport.live_handoff_final_verification.content_reverified -ne $true -or
+  $PairReport.live_handoff_final_verification.access_baseline_matches_approved_handoff -ne $true -or
+  $PairReport.cutover_authorized -ne $false
+) {
+  throw 'Pair verification report did not publish a verified non-cutover result.'
+}
+```
+
 ## 5. 验收证据
 
 两次 RunRoot 都必须独立满足以下条件：
@@ -304,13 +351,14 @@ if ($LASTEXITCODE -ne 0) { throw "Second rehearsal failed: $LASTEXITCODE" }
 - `evidence\external-handoff-preflight.json` 和 `evidence\external-handoff-final.json` 均绑定同一 handoff SHA-256 和五个 scope，对应 ledger event 的 `details.active_target_slot` 绑定本次目标副本；final 位于最后一次外部内容读取之后，且访问快照与 preflight 完全一致；
 - `evidence\target-import.json` 为 `status=imported`、`target_state=empty`（记录导入前状态），`evidence\target-import-idempotence.json` 为 `status=already_imported`、`target_state=complete`；
 - `evidence\site-data-comparison.json` 和 `evidence\final-target-site-data-comparison.json` 证明源导出、目标导出和最终备份恢复后的再次导出逐实体等价；
-- `evidence\restriction-preflight.json` 和 `evidence\final-target-restriction-preflight.json` 都没有 blocking error 或 manual review；
+- `evidence\restriction-preflight.json` 和 `evidence\final-target-restriction-preflight.json` 都具有完整计数、状态分布与 manual-review 结构，没有 blocking error 或待人工处理项，且去除生成时间后的语义投影完全一致；
 - preflight 中的 `ready_for_cutover=true` 只表示“内容限制数据”这一项检查已就绪，不是整体切换授权，绝不覆盖 result 与 deployment-candidate 的 `cutover_authorized=false`；正式停写、最终备份、冒烟和授权仍属于 R20；
-- `evidence\target-backup-set.json`、`evidence\target-backup-inspection.json` 和 `evidence\target-backup-set-final.json` 证明目标数据库备份三件套通过初次、独立 SQLite 检查和最终复核；
+- `evidence\target-backup-set.json`、`evidence\target-backup-inspection.json` 和 `evidence\target-backup-set-final.json` 证明目标数据库备份三件套通过初次、独立 SQLite 检查和最终复核；双轮 verifier 还会重新绑定 database/checksum/metadata，要求四个 backup checks 全为 true，并把规范化 `sqlite_schema`（table/index/trigger/view）纳入跨轮语义比较；
 - 目标媒体在数据库验证完成后被重新扫描，`artifacts\target-media-manifest-final.json` 与 `evidence\media-comparison-final.json` 仍证明它与源媒体清单一致；
 - `evidence\runtime-fingerprint-initial.json` 在任何审批或业务子进程前建立全量内容指纹，`evidence\runtime-fingerprint-final.json` 在最后一个业务子进程结束后再次执行全量内容哈希，随后仍须通过 source final、external handoff final 和 deployment candidate 门禁；pre/post migrate 等中间门禁只做绑定原始报告 SHA 的 metadata identity+closure checkpoint，必须明确记录 `content_rehashed=false`。指纹覆盖解释器、基础标准库、实际 `sys.path` 导入闭包和 venv 自身 `site-packages`；基础 Python 中未进入 `sys.path` 的全局 `purelib/platlib` 内容会作为 `excluded_inactive_site_package_roots` 明示排除，若该根或其子路径实际进入 `sys.path` 则直接阻断。它用于发现普通漂移，不证明抵抗同一受信任操作员刻意等长改写并恢复时间戳；
 - `evidence\events.jsonl` 连续、终态为 `completed`，且 `deployment_candidate_verified` 早于终态；该事件仍包含 `cutover_authorized=false`；
 - 两次运行的关键业务计数、实体摘要、源/目标导出比较结果和最终备份摘要一致。RunId、时间戳和独立目标备份文件摘要以外的差异都必须解释。
+- 双轮报告的 `status=verified`、`comparison.matched=true`、`comparison.issues=[]`、`comparison.unexplained_differences=[]`、`cutover_authorized=false`；`authority` 必须绑定本次 Proposal/Review/Policy，`runs.first` 和 `runs.second` 必须分别绑定两轮 completion、result、ledger 及 ledger head。verifier 会在两轮结束后再次复核 live handoff 的内容与访问基线；`comparison.allowed_differences` 中每一项都必须在 `allowed_difference_values` 逐值归档，不能用于豁免业务语义或审批权威漂移。报告本身明确标记含生产证据、成功后保留并要求安全销毁。
 
 任何一项不满足都表示 R19 未通过。不要删除失败证据，也不要进入 R20。
 
@@ -331,7 +379,11 @@ foreach ($RunRoot in @($RehearsalRunRoot1, $RehearsalRunRoot2)) {
     TerminalStage = $Terminal.stage
   }
 }
+
+Get-FileHash -Algorithm SHA256 -LiteralPath $PairVerification
 ```
+
+工单必须附上完整双轮验证报告及其 SHA-256，而不只是控制台中的“通过”文字；同时保留两轮 RunRoot，才能复算报告内的 artifact 引用。双轮报告验证的仍是 `self_consistent_local_chain` 本地证据，不是签名、不可篡改存储或 R20 切换授权。归档时还要附上人工无损审阅记录，以及每轮终态后“没有遗留进程访问 RunRoot”的外部确认。
 
 ## 6. 仓库侧自动化验证
 
@@ -343,6 +395,7 @@ foreach ($RunRoot in @($RehearsalRunRoot1, $RehearsalRunRoot2)) {
 & "$Repo\ops\migration\Test-ProductionCopyPolicyApproval.ps1" -RepositoryRoot $Repo -PythonExecutable $Python
 & "$Repo\ops\migration\Test-ProductionCopyPolicyProposal.ps1" -RepositoryRoot $Repo -PythonExecutable $Python
 & "$Repo\ops\migration\Test-ProductionCopyRehearsal.ps1" -RepositoryRoot $Repo -PythonExecutable $Python
+& "$Repo\ops\migration\Test-ProductionCopyRehearsalPairVerifier.ps1" -RepositoryRoot $Repo -PythonExecutable $Python
 & "$Repo\ops\migration\Test-ProductionCopyEndToEnd.ps1" `
   -IncludeSlow `
   -RepositoryRoot $Repo `
