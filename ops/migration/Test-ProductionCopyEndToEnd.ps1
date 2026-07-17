@@ -168,9 +168,12 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import time
 from typing import Any
 
 
+e2e_started_at = time.perf_counter()
+stage_timings: dict[str, float] = {}
 bootstrap_path = Path(sys.argv[1]).resolve()
 repository = Path(sys.argv[2]).resolve()
 test_root = Path(sys.argv[3]).resolve()
@@ -817,6 +820,7 @@ proposal_args = proposal_arguments(
     source_media_manifest,
     source_handoff_manifest,
 )
+stage_started_at = time.perf_counter()
 proposal_outcome = bootstrap.run_bootstrap(
     bootstrap.BootstrapConfig(
         repository_root=repository,
@@ -860,7 +864,9 @@ assert PENDING_MIGRATION in {
     tuple(node)
     for node in proposal["body"]["review_requirements"]["pending_migration_nodes"]
 }
+stage_timings["proposal"] = time.perf_counter() - stage_started_at
 
+stage_started_at = time.perf_counter()
 approval_cli = (
     proposal_root
     / "code"
@@ -977,6 +983,7 @@ approval_before_rehearsals = {
     path: protected_snapshot(path)
     for path in (proposal_path, review_path, policy_path)
 }
+stage_timings["review_and_approval"] = time.perf_counter() - stage_started_at
 
 
 def assert_entity_counts(manifest: dict[str, Any]) -> None:
@@ -1308,16 +1315,21 @@ def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
     return summary
 
 
+stage_started_at = time.perf_counter()
 first_summary = run_approved_rehearsal(
     "approved-rehearsal-one",
     "production-copy-e2e-target-media-one",
 )
+stage_timings["approved_rehearsal_one"] = time.perf_counter() - stage_started_at
+stage_started_at = time.perf_counter()
 second_summary = run_approved_rehearsal(
     "approved-rehearsal-two",
     "production-copy-e2e-target-media-two",
 )
+stage_timings["approved_rehearsal_two"] = time.perf_counter() - stage_started_at
 assert first_summary == second_summary
 
+stage_started_at = time.perf_counter()
 first_run_root = runs / "approved-rehearsal-one"
 second_run_root = runs / "approved-rehearsal-two"
 pair_verifier = (
@@ -1430,6 +1442,21 @@ assert {
     path: protected_snapshot(path)
     for path in (proposal_path, review_path, policy_path)
 } == approval_before_rehearsals
+stage_timings["pair_verifier"] = time.perf_counter() - stage_started_at
+timing_summary = {
+    "diagnostic_only": True,
+    "format": "ffxivshare-production-copy-e2e-timing",
+    "format_version": 1,
+    "stages_seconds": {
+        name: round(seconds, 6)
+        for name, seconds in stage_timings.items()
+    },
+    "total_seconds": round(time.perf_counter() - e2e_started_at, 6),
+}
+print(
+    "PRODUCTION_COPY_E2E_TIMING_JSON="
+    + json.dumps(timing_summary, sort_keys=True, separators=(",", ":"))
+)
 print(
     "Production-copy E2E passed: Proposal -> record-review -> approve -> "
     "two independent approved rehearsals; critical semantic digests match."

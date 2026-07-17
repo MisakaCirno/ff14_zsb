@@ -355,7 +355,7 @@ if (
 - preflight 中的 `ready_for_cutover=true` 只表示“内容限制数据”这一项检查已就绪，不是整体切换授权，绝不覆盖 result 与 deployment-candidate 的 `cutover_authorized=false`；正式停写、最终备份、冒烟和授权仍属于 R20；
 - `evidence\target-backup-set.json`、`evidence\target-backup-inspection.json` 和 `evidence\target-backup-set-final.json` 证明目标数据库备份三件套通过初次、独立 SQLite 检查和最终复核；双轮 verifier 还会重新绑定 database/checksum/metadata，要求四个 backup checks 全为 true，并把规范化 `sqlite_schema`（table/index/trigger/view）纳入跨轮语义比较；
 - 目标媒体在数据库验证完成后被重新扫描，`artifacts\target-media-manifest-final.json` 与 `evidence\media-comparison-final.json` 仍证明它与源媒体清单一致；
-- `evidence\runtime-fingerprint-initial.json` 在任何审批或业务子进程前建立全量内容指纹，`evidence\runtime-fingerprint-final.json` 在最后一个业务子进程结束后再次执行全量内容哈希，随后仍须通过 source final、external handoff final 和 deployment candidate 门禁；pre/post migrate 等中间门禁只做绑定原始报告 SHA 的 metadata identity+closure checkpoint，必须明确记录 `content_rehashed=false`。指纹覆盖解释器、基础标准库、实际 `sys.path` 导入闭包和 venv 自身 `site-packages`；基础 Python 中未进入 `sys.path` 的全局 `purelib/platlib` 内容会作为 `excluded_inactive_site_package_roots` 明示排除，若该根或其子路径实际进入 `sys.path` 则直接阻断。它用于发现普通漂移，不证明抵抗同一受信任操作员刻意等长改写并恢复时间戳；
+- `evidence\runtime-fingerprint-initial.json` 在任何审批或业务子进程前建立全量内容指纹，`evidence\runtime-fingerprint-final.json` 在最后一个业务子进程结束后再次执行全量内容哈希，随后仍须通过 source final、external handoff final 和 deployment candidate 门禁；pre/post migrate 等中间门禁只做绑定原始报告 SHA 的 metadata identity+closure checkpoint，必须明确记录 `content_rehashed=false`。指纹覆盖解释器、基础标准库、实际 `sys.path` 导入闭包和 venv 自身 `site-packages`；同一信任根下相互包含的全递归根会归一为不重叠物理根，closure 条目必须全局唯一，closure 文件必须属于 identity inventory，未落入 closure 的少量独立 runtime 文件仍会逐组件单独复验。quick checkpoint 会在一次不重叠遍历中同时核对闭包和文件身份；full producer 在输出 `fsync` 后也会终检闭包目录身份及全部已哈希文件，晚到条目会失败关闭并清理本次输出。两者均不使用跨运行内容缓存，也不减少 initial/final 的全量内容哈希。基础 Python 中未进入 `sys.path` 的全局 `purelib/platlib` 内容会作为 `excluded_inactive_site_package_roots` 明示排除，若该根或其子路径实际进入 `sys.path` 则直接阻断。它用于发现普通漂移，不证明抵抗同一受信任操作员刻意等长改写并恢复时间戳；
 - `evidence\events.jsonl` 连续、终态为 `completed`，且 `deployment_candidate_verified` 早于终态；该事件仍包含 `cutover_authorized=false`；
 - 两次运行的关键业务计数、实体摘要、源/目标导出比较结果和最终备份摘要一致。RunId、时间戳和独立目标备份文件摘要以外的差异都必须解释。
 - 双轮报告的 `status=verified`、`comparison.matched=true`、`comparison.issues=[]`、`comparison.unexplained_differences=[]`、`cutover_authorized=false`；`authority` 必须绑定本次 Proposal/Review/Policy，`runs.first` 和 `runs.second` 必须分别绑定两轮 completion、result、ledger 及 ledger head。verifier 会在两轮结束后再次复核 live handoff 的内容与访问基线；`comparison.allowed_differences` 中每一项都必须在 `allowed_difference_values` 逐值归档，不能用于豁免业务语义或审批权威漂移。报告本身明确标记含生产证据、成功后保留并要求安全销毁。
@@ -404,6 +404,8 @@ Get-FileHash -Algorithm SHA256 -LiteralPath $PairVerification
 ```
 
 带 `-IncludeSlow` 的 Proposal 测试会创建真实 SQLite 备份并执行完整只读提案。`Test-ProductionCopyEndToEnd.ps1 -IncludeSlow` 执行完整 Proposal→Review→Approval→两次 Rehearsal 离线测试；它耗时较长，只使用自己创建的唯一测试根，不应指向任何活动生产输入目录。
+
+成功时端到端脚本还会输出单行 `PRODUCTION_COPY_E2E_TIMING_JSON=...`，分别记录 Proposal、Review/Approval、两轮 rehearsal、双轮 verifier 和总耗时。该数据明确标记为 `diagnostic_only=true`，只用于发现性能回归，不参与任何证据或通过判定。
 
 handoff 合同和端到端脚本使用真实 NTFS/DACL；其余快速合同的部分成功路径为了可重复测试会使用严格限域的 ACL 回调，不能单独证明目标机能够写入和复核生产 DACL。端到端脚本在指定的真实 RunParent 下调用生产 `run_bootstrap` 三次（一次 Proposal、两次 approved rehearsal），并使用冻结 Approval CLI；Bootstrap CLI 参数解析和 Invoke wrapper 另由快速合同覆盖。必须先用非敏感合成数据在计划使用的演练机与 RunParent 上让这些命令完整通过，再放入生产副本；若 `SetFileSecurityW`、祖先链、handoff 或 approval 输出 DACL 校验失败，不得绕过。
 
