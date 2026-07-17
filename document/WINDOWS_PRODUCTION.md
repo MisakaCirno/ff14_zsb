@@ -40,7 +40,7 @@ WinSW 服务 ID 固定为 `FFXIVShare`，使用无需人工维护密码的虚拟
 1. 从已完整验证的提交准备一个独立 release，不要在生产目录直接 `git pull` 覆盖当前版本。
 2. 在 release 内创建虚拟环境并安装 `requirements.txt`。
 3. 构建主站前端，并在 release 内运行 `collectstatic`。
-4. 把 `.env.production.sample` 复制到 `D:\FFXIVShareData\config\ffxivshare.env` 后替换所有占位值。
+4. 把 `.env.production.sample` 复制到 `D:\FFXIVShareData\config\ffxivshare.env` 后替换所有占位值。`APP_VERSION` 必须填写本次部署的不可变 release 标识；数据库备份 metadata 会记录它，生产副本 handoff 会拒绝空值、`unknown` 和示例占位符。
 5. 确认 `DATABASE_PATH` 指向 `D:\FFXIVShareData\database\ffxivshare.sqlite3`，`MEDIA_ROOT` 指向 `D:\FFXIVShareData\media`。
 6. 让 `D:\FFXIVShareApp\current` 指向已经准备好的 release。
 

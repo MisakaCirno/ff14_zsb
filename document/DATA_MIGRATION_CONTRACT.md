@@ -15,7 +15,7 @@
 - 迁移工具必须版本化、幂等、可中断重跑，并纳入自动化测试。
 - 旧库在切换后保持只读并至少保留一个完整观察周期。
 
-R19 的生产副本验证必须按 `PRODUCTION_COPY_REHEARSAL.md` 执行：先生成不应用 migration 的只读 Proposal，再由人工逐项审阅并绑定 Review/Policy，最后使用两个全新 RunRoot 完成两次独立离线演练。任一非零或中断运行都不能续跑；工具不会产生切换授权，具有该字段的结果必须保持 `cutover_authorized=false`。
+R19 的生产副本验证必须按 `PRODUCTION_COPY_REHEARSAL.md` 执行：先为数据库三件套、源媒体及两个独立媒体副本生成结构化 handoff 并封存五个互不重叠的外部范围，再生成不应用 migration 的只读 Proposal，由人工逐项审阅并绑定 Review/Policy，最后使用两个全新 RunRoot 完成两次独立离线演练。任一非零或中断运行都不能续跑；工具不会产生切换授权，具有该字段的结果必须保持 `cutover_authorized=false`。
 
 ## 迁移方式
 
