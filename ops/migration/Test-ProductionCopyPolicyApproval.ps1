@@ -56,7 +56,8 @@ else {
 $approvalTool = Join-Path $PSScriptRoot 'Approve-ProductionCopyPolicy.py'
 $bootstrapTool = Join-Path $PSScriptRoot 'ProductionCopyBootstrap.py'
 $rehearsalTool = Join-Path $PSScriptRoot 'Rehearse-ProductionCopy.py'
-foreach ($tool in @($approvalTool, $bootstrapTool, $rehearsalTool)) {
+$handoffTool = Join-Path $PSScriptRoot 'ProductionCopyHandoff.py'
+foreach ($tool in @($approvalTool, $bootstrapTool, $rehearsalTool, $handoffTool)) {
     Assert-Contract `
         -Condition (Test-Path -LiteralPath $tool -PathType Leaf) `
         -Message "Production-copy policy contract dependency is missing: $tool"
@@ -89,7 +90,8 @@ python = Path(sys.argv[1]).resolve()
 approval_tool = Path(sys.argv[2]).resolve()
 bootstrap_tool = Path(sys.argv[3]).resolve()
 rehearsal_tool = Path(sys.argv[4]).resolve()
-root = Path(sys.argv[5]).resolve()
+handoff_tool = Path(sys.argv[5]).resolve()
+root = Path(sys.argv[6]).resolve()
 
 
 def load_module(path: Path, name: str):
@@ -103,6 +105,7 @@ def load_module(path: Path, name: str):
 
 bootstrap = load_module(bootstrap_tool, "policy_contract_bootstrap")
 rehearsal = load_module(rehearsal_tool, "policy_contract_rehearsal")
+handoff = load_module(handoff_tool, "policy_contract_handoff")
 approval = load_module(approval_tool, "policy_contract_approval")
 approval._assert_isolated_stdlib_runtime()
 production_private_validator = approval._assert_private_approval_directory
@@ -159,6 +162,7 @@ MANDATORY = (
     "ops/migration/Rehearse-ProductionCopy.py",
     "ops/migration/Approve-ProductionCopyPolicy.py",
     "ops/migration/Propose-ProductionCopyPolicy.py",
+    "ops/migration/ProductionCopyHandoff.py",
     "ops/migration/Verify-SQLiteBackupSet.py",
     "ops/migration/Inspect-SQLiteSnapshot.py",
     "ops/migration/Compare-SiteDataExports.py",
@@ -171,6 +175,13 @@ TARGET_NODE = ["shares", "0025_add_share_browse_indexes"]
 SOURCE_DATABASE_SHA256 = "1" * 64
 MIGRATION_RUNTIME_SHA256 = "4" * 64
 IDENTITY = "operator_asserted_not_cryptographically_verified"
+HANDOFF_SCOPE_ROLES = (
+    "database_backup_set",
+    "source_media_root",
+    "source_media_manifest",
+    "target_media_root_1",
+    "target_media_root_2",
+)
 
 
 @dataclass
@@ -207,11 +218,230 @@ def make_event(
     return event
 
 
+def make_handoff(media_reference: dict[str, Any]) -> dict[str, Any]:
+    owner_sid = "S-1-5-21-1000"
+    aces = [{"type": 0, "flags": 0, "mask": 0xA0000000, "sid": owner_sid}]
+    dacl_sha256 = digest_value(aces)
+
+    def scope(
+        role: str,
+        path: str,
+        *,
+        entry_count: int,
+        directory_count: int,
+        file_count: int,
+        total_size: int,
+        file_id: str,
+    ) -> dict[str, Any]:
+        ancestors = [
+            {
+                "path": "D:\\",
+                "volume_serial_number": "1234abcd",
+                "file_id": "0000000000000001",
+                "owner_sid": owner_sid,
+                "dacl_protected": True,
+                "dacl_sha256": dacl_sha256,
+                "aces": aces,
+            }
+        ]
+        if role == "database_backup_set":
+            node_rows = [
+                (".", "directory", 0),
+                ("production.sqlite3", "file", 4096),
+                ("production.sqlite3.metadata.json", "file", 256),
+                ("production.sqlite3.sha256", "file", 65),
+            ]
+        elif role == "source_media_manifest":
+            node_rows = [(".", "file", total_size)]
+        else:
+            node_rows = [(".", "directory", 0)]
+        nodes = []
+        for index, (relative_path, kind, size) in enumerate(node_rows):
+            nodes.append(
+                {
+                    "relative_path": relative_path,
+                    "kind": kind,
+                    "volume_serial_number": "1234abcd",
+                    "file_id": f"{int(file_id, 16) + index:016x}",
+                    "attributes": 0x10 if kind == "directory" else 0x20,
+                    "last_write_time": 133970112000000000 + index,
+                    "size": size,
+                    "link_count": 1,
+                    "owner_sid": owner_sid,
+                    "dacl_protected": True,
+                    "dacl_sha256": dacl_sha256,
+                }
+            )
+        assert len(nodes) == entry_count
+        reconstructed = [{**node, "aces": aces} for node in nodes]
+        return {
+            "role": role,
+            "path": path,
+            "root": {
+                "volume_serial_number": "1234abcd",
+                "file_id": file_id,
+                "owner_sid": owner_sid,
+                "dacl_protected": True,
+                "dacl_sha256": dacl_sha256,
+            },
+            "ancestor_chain": ancestors,
+            "ancestor_chain_sha256": digest_value(ancestors),
+            "dacl_inventory": [
+                {
+                    "dacl_sha256": dacl_sha256,
+                    "aces": aces,
+                    "node_count": entry_count,
+                }
+            ],
+            "node_inventory": nodes,
+            "owner_inventory": [
+                {"owner_sid": owner_sid, "node_count": entry_count}
+            ],
+            "tree_sha256": digest_value(reconstructed),
+            "entry_count": entry_count,
+            "directory_count": directory_count,
+            "file_count": file_count,
+            "total_size": total_size,
+        }
+
+    database_path = r"D:\Fixture\Database\production.sqlite3"
+    source_media_root = r"D:\Fixture\SourceMedia"
+    manifest_path = r"D:\Fixture\Manifest\source-media-manifest.json"
+    target_one = r"D:\Fixture\TargetOne"
+    target_two = r"D:\Fixture\TargetTwo"
+    scopes = [
+        scope(
+            "database_backup_set",
+            r"D:\Fixture\Database",
+            entry_count=4,
+            directory_count=1,
+            file_count=3,
+            total_size=4096 + 65 + 256,
+            file_id="0000000000000010",
+        ),
+        scope(
+            "source_media_root",
+            source_media_root,
+            entry_count=1,
+            directory_count=1,
+            file_count=0,
+            total_size=0,
+            file_id="0000000000000020",
+        ),
+        scope(
+            "source_media_manifest",
+            manifest_path,
+            entry_count=1,
+            directory_count=0,
+            file_count=1,
+            total_size=media_reference["size"],
+            file_id="0000000000000030",
+        ),
+        scope(
+            "target_media_root_1",
+            target_one,
+            entry_count=1,
+            directory_count=1,
+            file_count=0,
+            total_size=0,
+            file_id="0000000000000040",
+        ),
+        scope(
+            "target_media_root_2",
+            target_two,
+            entry_count=1,
+            directory_count=1,
+            file_count=0,
+            total_size=0,
+            file_id="0000000000000050",
+        ),
+    ]
+    access_projection = {
+        "verification": "windows_acl_snapshot",
+        "scope_policy": "sealed_read_only_v1",
+        "scopes": scopes,
+    }
+    value = {
+        "format": "ffxivshare-production-copy-handoff",
+        "format_version": 1,
+        "generated_at": "2026-07-16T00:01:30Z",
+        "source": {
+            "host": "fixture-production-host",
+            "captured_at": "2026-07-16T00:00:00Z",
+            "operator": "fixture-operator",
+            "operator_identity_verification": IDENTITY,
+            "release_application_version": "fixture-release-20260716",
+            "database_media_consistency": (
+                "operator_asserted_same_capture_window_not_cryptographically_verified"
+            ),
+            "source_immutable": "operator_asserted",
+            "target_media_offline": "operator_asserted",
+        },
+        "database_backup_set": {
+            "database": {
+                "path": database_path,
+                "sha256": SOURCE_DATABASE_SHA256,
+                "size": 4096,
+            },
+            "checksum": {
+                "path": f"{database_path}.sha256",
+                "sha256": "c" * 64,
+                "size": 65,
+            },
+            "metadata": {
+                "path": f"{database_path}.metadata.json",
+                "sha256": "d" * 64,
+                "size": 256,
+            },
+        },
+        "source_media": {
+            "root": source_media_root,
+            "snapshot_id": "fixture-media",
+            "manifest": {
+                "path": manifest_path,
+                "sha256": media_reference["sha256"],
+                "size": media_reference["size"],
+                "generated_at": "2026-07-16T00:01:00Z",
+                "snapshot_id": "fixture-media",
+                "file_count": 0,
+                "total_size": 0,
+            },
+        },
+        "rehearsal_targets": [
+            {"slot": "first", "path": target_one, "snapshot_id": "fixture-target-1"},
+            {"slot": "second", "path": target_two, "snapshot_id": "fixture-target-2"},
+        ],
+        "access_baseline": {
+            **access_projection,
+            "snapshot_sha256": digest_value(access_projection),
+        },
+        "limitations": {
+            "tamper_proof": False,
+            "continuous_acl_stability_proven": False,
+            "offline_process_state": "operator_asserted",
+            "trusted_operator_can_override_acl": True,
+        },
+    }
+    assert handoff.validate_handoff(value) == value
+    return value
+
+
 def build_fixture(
     name: str,
     *,
     pending: bool = True,
     include_bundle_final: bool = True,
+    include_handoff_evidence: bool = True,
+    include_handoff_initial: bool = True,
+    duplicate_handoff_initial: bool = False,
+    handoff_initial_after_body: bool = False,
+    exact_handoff_initial: bool = True,
+    include_handoff_final: bool = True,
+    duplicate_handoff_final: bool = False,
+    handoff_final_before_body: bool = False,
+    exact_handoff_final: bool = True,
+    proposal_version: int = 2,
+    proposal_body_version: int = 2,
     completion_exit: int = 0,
     secure: bool = True,
 ) -> Fixture:
@@ -417,6 +647,11 @@ def build_fixture(
         },
         canonical=False,
     )
+    media_reference = reference(run_root, media_path)
+    handoff_value = make_handoff(media_reference)
+    handoff_path = run_root / "artifacts" / "source-handoff-manifest.json"
+    write_json(handoff_path, handoff_value)
+    handoff_reference = reference(run_root, handoff_path)
 
     bootstrap_path = run_root / "evidence" / "bootstrap.json"
     inventory_reference = reference(run_root, inventory_path)
@@ -462,10 +697,16 @@ def build_fixture(
         "migration_review_plan": reference(run_root, review_plan_path),
         "runtime_fingerprint": reference(run_root, runtime_path),
         "source_backup_verification": reference(run_root, backup_path),
-        "source_media_manifest": reference(run_root, media_path),
-        "source_migration_state": reference(run_root, state_path),
-        "source_snapshot_inspection": reference(run_root, inspection_path),
     }
+    if include_handoff_evidence:
+        evidence["source_handoff_manifest"] = handoff_reference
+    evidence.update(
+        {
+            "source_media_manifest": media_reference,
+            "source_migration_state": reference(run_root, state_path),
+            "source_snapshot_inspection": reference(run_root, inspection_path),
+        }
+    )
     evidence_set_sha256 = digest_value(evidence)
     projection = {
         "format": "ffxivshare-source-upgrade-policy",
@@ -485,7 +726,7 @@ def build_fixture(
     pending_nodes = [TARGET_NODE] if pending else []
     body = {
         "format": "ffxivshare-source-upgrade-policy-proposal-body",
-        "format_version": 1,
+        "format_version": proposal_body_version,
         "proposal_id": f"{name}-proposal",
         "run_id": bootstrap_payload["run_id"],
         "bootstrap_nonce": bootstrap_payload["bootstrap_nonce"],
@@ -518,13 +759,61 @@ def build_fixture(
         events.append(event)
         previous = event["event_sha256"]
 
-    add_event("proposal_started", "passed", {"run_id": body["run_id"]}, 1)
+    minute = 1
+
+    def next_minute() -> int:
+        nonlocal minute
+        value = minute
+        minute += 1
+        return value
+
+    add_event("proposal_started", "passed", {"run_id": body["run_id"]}, next_minute())
+    initial_handoff_details = {
+        "artifact": handoff_reference,
+        "access_snapshot_sha256": handoff_value["access_baseline"][
+            "snapshot_sha256"
+        ],
+        "scope_roles": list(HANDOFF_SCOPE_ROLES),
+    }
+    if not exact_handoff_initial:
+        initial_handoff_details = {**initial_handoff_details, "unexpected": True}
+    if include_handoff_initial and not handoff_initial_after_body:
+        add_event(
+            "source_handoff_verified",
+            "passed",
+            initial_handoff_details,
+            next_minute(),
+        )
+    if duplicate_handoff_initial:
+        add_event(
+            "source_handoff_verified",
+            "passed",
+            initial_handoff_details,
+            next_minute(),
+        )
     add_event(
         "proposal_runtime_fingerprint_verified",
         "passed",
         {"artifact": evidence["runtime_fingerprint"]},
-        2,
+        next_minute(),
     )
+    final_handoff_details = {
+        "artifact": handoff_reference,
+        "access_snapshot_sha256": handoff_value["access_baseline"][
+            "snapshot_sha256"
+        ],
+        "scope_roles": list(HANDOFF_SCOPE_ROLES),
+        "content_verified": True,
+    }
+    if not exact_handoff_final:
+        final_handoff_details = {**final_handoff_details, "unexpected": True}
+    if include_handoff_final and handoff_final_before_body:
+        add_event(
+            "source_handoff_final_verified",
+            "passed",
+            final_handoff_details,
+            next_minute(),
+        )
     add_event(
         "policy_proposal_body_created",
         "passed",
@@ -536,8 +825,29 @@ def build_fixture(
             "migration_applied": False,
             "review_required": True,
         },
-        3,
+        next_minute(),
     )
+    if include_handoff_initial and handoff_initial_after_body:
+        add_event(
+            "source_handoff_verified",
+            "passed",
+            initial_handoff_details,
+            next_minute(),
+        )
+    if include_handoff_final and not handoff_final_before_body:
+        add_event(
+            "source_handoff_final_verified",
+            "passed",
+            final_handoff_details,
+            next_minute(),
+        )
+    if duplicate_handoff_final:
+        add_event(
+            "source_handoff_final_verified",
+            "passed",
+            final_handoff_details,
+            next_minute(),
+        )
     add_event(
         "source_final_verified",
         "passed",
@@ -549,7 +859,7 @@ def build_fixture(
                 "metadata": {"size": 256, "sha256": "d" * 64},
             },
         },
-        4,
+        next_minute(),
     )
     if include_bundle_final:
         add_event(
@@ -559,7 +869,7 @@ def build_fixture(
                 "bundle_unchanged": True,
                 "execution_bundle_sha256": bundle_sha256,
             },
-            5,
+            next_minute(),
         )
     add_event(
         "review_required",
@@ -575,14 +885,14 @@ def build_fixture(
             "secure_disposal_required": True,
             "sensitive_retention_scope": "entire_run_root",
         },
-        6,
+        next_minute(),
     )
     ledger_path = run_root / "evidence" / "events.jsonl"
     ledger_path.write_bytes(b"".join(encoded(event) for event in events))
     ledger_reference = reference(run_root, ledger_path)
     proposal = {
         "format": "ffxivshare-source-upgrade-policy-proposal",
-        "format_version": 1,
+        "format_version": proposal_version,
         "generated_at": "2026-07-16T00:10:00Z",
         "proposal_id": body["proposal_id"],
         "run_id": body["run_id"],
@@ -1058,10 +1368,87 @@ tampered_evidence_run = invoke_approve(tampered_evidence)
 assert tampered_evidence_run.returncode == 1
 assert not tampered_evidence.output_path.exists()
 
-missing_final = build_fixture("missing-final", include_bundle_final=False)
-missing_final_run = invoke_approve(missing_final)
-assert missing_final_run.returncode == 1
-assert not missing_final.output_path.exists()
+legacy_proposal = build_fixture(
+    "legacy-proposal-v1",
+    proposal_version=1,
+    proposal_body_version=1,
+)
+legacy_proposal_run = invoke_approve(legacy_proposal)
+assert legacy_proposal_run.returncode == 1
+assert not legacy_proposal.output_path.exists()
+
+legacy_body = build_fixture("legacy-proposal-body-v1", proposal_body_version=1)
+legacy_body_run = invoke_approve(legacy_body)
+assert legacy_body_run.returncode == 1
+assert not legacy_body.output_path.exists()
+
+missing_handoff_evidence = build_fixture(
+    "missing-handoff-evidence", include_handoff_evidence=False
+)
+missing_handoff_evidence_run = invoke_approve(missing_handoff_evidence)
+assert missing_handoff_evidence_run.returncode == 1
+assert not missing_handoff_evidence.output_path.exists()
+
+missing_handoff_initial = build_fixture(
+    "missing-handoff-initial", include_handoff_initial=False
+)
+missing_handoff_initial_run = invoke_approve(missing_handoff_initial)
+assert missing_handoff_initial_run.returncode == 1
+assert not missing_handoff_initial.output_path.exists()
+
+duplicate_handoff_initial = build_fixture(
+    "duplicate-handoff-initial", duplicate_handoff_initial=True
+)
+duplicate_handoff_initial_run = invoke_approve(duplicate_handoff_initial)
+assert duplicate_handoff_initial_run.returncode == 1
+assert not duplicate_handoff_initial.output_path.exists()
+
+late_handoff_initial = build_fixture(
+    "late-handoff-initial", handoff_initial_after_body=True
+)
+late_handoff_initial_run = invoke_approve(late_handoff_initial)
+assert late_handoff_initial_run.returncode == 1
+assert not late_handoff_initial.output_path.exists()
+
+nonexact_handoff_initial = build_fixture(
+    "nonexact-handoff-initial", exact_handoff_initial=False
+)
+nonexact_handoff_initial_run = invoke_approve(nonexact_handoff_initial)
+assert nonexact_handoff_initial_run.returncode == 1
+assert not nonexact_handoff_initial.output_path.exists()
+
+missing_handoff_final = build_fixture(
+    "missing-handoff-final", include_handoff_final=False
+)
+missing_handoff_final_run = invoke_approve(missing_handoff_final)
+assert missing_handoff_final_run.returncode == 1
+assert not missing_handoff_final.output_path.exists()
+
+duplicate_handoff_final = build_fixture(
+    "duplicate-handoff-final", duplicate_handoff_final=True
+)
+duplicate_handoff_final_run = invoke_approve(duplicate_handoff_final)
+assert duplicate_handoff_final_run.returncode == 1
+assert not duplicate_handoff_final.output_path.exists()
+
+early_handoff_final = build_fixture(
+    "early-handoff-final", handoff_final_before_body=True
+)
+early_handoff_final_run = invoke_approve(early_handoff_final)
+assert early_handoff_final_run.returncode == 1
+assert not early_handoff_final.output_path.exists()
+
+nonexact_handoff_final = build_fixture(
+    "nonexact-handoff-final", exact_handoff_final=False
+)
+nonexact_handoff_final_run = invoke_approve(nonexact_handoff_final)
+assert nonexact_handoff_final_run.returncode == 1
+assert not nonexact_handoff_final.output_path.exists()
+
+missing_bundle_final = build_fixture("missing-bundle-final", include_bundle_final=False)
+missing_bundle_final_run = invoke_approve(missing_bundle_final)
+assert missing_bundle_final_run.returncode == 1
+assert not missing_bundle_final.output_path.exists()
 
 missing_pending = build_fixture("missing-pending", pending=False)
 missing_pending_run = invoke_approve(missing_pending)
@@ -1136,6 +1523,7 @@ try {
         $approvalTool `
         $bootstrapTool `
         $rehearsalTool `
+        $handoffTool `
         $temporaryRoot
     if ($LASTEXITCODE -ne 0) {
         throw "Production-copy policy approval contract tests failed with exit code $LASTEXITCODE."

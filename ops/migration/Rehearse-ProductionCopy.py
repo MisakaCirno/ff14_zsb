@@ -4,6 +4,7 @@ import argparse
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
+import importlib.util
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -34,6 +35,7 @@ EXECUTION_FIXED_FILES = (
     "manage.py",
     "requirements.txt",
     "ops/migration/ProductionCopyBootstrap.py",
+    "ops/migration/ProductionCopyHandoff.py",
     "ops/migration/Rehearse-ProductionCopy.py",
     "ops/migration/Approve-ProductionCopyPolicy.py",
     "ops/migration/Propose-ProductionCopyPolicy.py",
@@ -126,6 +128,7 @@ class BootstrapInnerContext:
     policy_path: Path
     proposal_path: Path
     review_path: Path
+    repository_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -432,7 +435,17 @@ def _regular_file_checkpoint(
     issue_prefix: str,
     expected_sha256: str | None = None,
     expected_identity: tuple[int, int, int, int, int] | None = None,
+    maximum_size: int | None = None,
 ) -> tuple[int, str, tuple[int, int, int, int, int]]:
+    if maximum_size is not None:
+        _, size, digest, identity = _read_stable_regular_bytes(
+            path,
+            maximum_size=maximum_size,
+            issue_prefix=issue_prefix,
+            expected_sha256=expected_sha256,
+            expected_identity=expected_identity,
+        )
+        return size, digest, identity
     try:
         before = os.lstat(path)
     except OSError as exc:
@@ -712,6 +725,10 @@ def _load_bootstrap_inner_context(run_root_raw: str | Path) -> BootstrapInnerCon
         or _canonical_key(Path(configuration["run_root"])) != _canonical_key(run_root)
     ):
         raise ConfigurationError("Bootstrap rehearsal launch configuration is invalid.")
+    repository_root = _absolute_path(
+        configuration["repository_root"],
+        label="Bootstrap repository root",
+    )
     code_root = _existing_path(run_root / "code", label="Frozen code", directory=True)
     loaded = _existing_path(Path(__file__), label="Loaded rehearsal", directory=False)
     expected_loaded = code_root / "ops" / "migration" / "Rehearse-ProductionCopy.py"
@@ -912,6 +929,7 @@ def _load_bootstrap_inner_context(run_root_raw: str | Path) -> BootstrapInnerCon
         policy_path=policy_path,
         proposal_path=proposal_path,
         review_path=review_path,
+        repository_root=repository_root,
     )
 
 
@@ -934,6 +952,25 @@ def _source_media_manifest_identity(path: Path) -> tuple[str, str]:
     ):
         raise RehearsalBlocked("source_media_manifest_identity_invalid")
     return digest, source_snapshot["id"]
+
+
+def _assert_external_handoff_artifact_checkpoint(
+    handoff: dict[str, Any] | None,
+    artifact_name: str,
+    size: int,
+    digest: str,
+) -> None:
+    if handoff is None:
+        return
+    try:
+        artifact = handoff["database_backup_set"][artifact_name]
+        matched = artifact["size"] == size and artifact["sha256"] == digest
+    except (KeyError, TypeError):
+        matched = False
+    if not matched:
+        raise RehearsalBlocked(
+            f"external_handoff_source_{artifact_name}_mismatch"
+        )
 
 
 def _copy_stable(source: Path, destination: Path) -> tuple[int, str]:
@@ -1938,6 +1975,7 @@ if any(canonical(entry) == canonical(user) for entry in sys.path for user in use
 
 sys_path_projection = []
 seen_sys_paths = set()
+resolved_sys_paths = []
 for raw_entry in sys.path:
     entry = root if raw_entry == "" else Path(raw_entry)
     label = path_label(entry)
@@ -1945,6 +1983,8 @@ for raw_entry in sys.path:
         raise RuntimeError(f"Duplicate sys.path entry: {label}")
     seen_sys_paths.add(label)
     sys_path_projection.append({"path": label, "exists": entry.exists()})
+    if entry.exists():
+        resolved_sys_paths.append(entry.resolve(strict=True))
 
 site_package_roots = set()
 for candidate in [
@@ -2195,6 +2235,44 @@ pth_files.sort(key=lambda item: item["path"])
 
 base_runtime_files = []
 seen_base_runtime_paths = set()
+base_scheme_variables = dict(sysconfig.get_config_vars())
+base_scheme_variables.update({
+    "base": str(base_prefix),
+    "exec_prefix": str(base_prefix),
+    "installed_base": str(base_prefix),
+    "installed_platbase": str(base_prefix),
+    "platbase": str(base_prefix),
+    "prefix": str(base_prefix),
+})
+inactive_base_site_package_roots = set()
+for path_name in ("purelib", "platlib"):
+    candidate = sysconfig.get_path(
+        path_name,
+        vars=dict(base_scheme_variables),
+    )
+    if not candidate:
+        continue
+    candidate_path = Path(candidate).resolve(strict=False)
+    if not within(candidate_path, base_prefix) or within(candidate_path, prefix):
+        continue
+    if any(within(entry, candidate_path) for entry in resolved_sys_paths):
+        raise RuntimeError(
+            "The base Python site-packages directory is active on sys.path; "
+            "the rehearsal requires an isolated virtual environment."
+        )
+    inactive_base_site_package_roots.add(candidate_path)
+
+def is_inactive_base_site_package_root(path):
+    return any(
+        canonical(path) == canonical(candidate)
+        for candidate in inactive_base_site_package_roots
+    )
+
+# Treat inactive base package roots as partition boundaries for the later
+# sys.path closure as well as for the full base-runtime hash. Their presence at
+# the base Lib level remains guarded, but their unused contents are not walked.
+recursive_scope_roots.extend(inactive_base_site_package_roots)
+
 for raw_entry in sys.path:
     entry = root if raw_entry == "" else Path(raw_entry)
     if not entry.exists() or not within(entry, base_prefix) or within(entry, prefix):
@@ -2215,6 +2293,8 @@ for raw_entry in sys.path:
             safe_directories = []
             for directory_name in sorted(directory_names):
                 directory_path = current_path / directory_name
+                if is_inactive_base_site_package_root(directory_path):
+                    continue
                 directory_metadata = os.lstat(directory_path)
                 if (
                     stat.S_ISLNK(directory_metadata.st_mode)
@@ -2348,6 +2428,9 @@ projection = {
         "sys_path": sys_path_projection,
         "runtime_files": runtime_files,
         "base_runtime_closure": {
+            "excluded_inactive_site_package_roots": sorted(
+                path_label(path) for path in inactive_base_site_package_roots
+            ),
             "file_count": len(base_runtime_files),
             "total_size": sum(item["size"] for item in base_runtime_files),
             "files_sha256": canonical_digest(base_runtime_files),
@@ -3088,15 +3171,45 @@ def _prepare_config(
     if POLICY_ID_PATTERN.fullmatch(config.target_media_snapshot_id) is None:
         raise ConfigurationError("Target media snapshot ID is invalid.")
 
+    def prepare_external_path(
+        raw: str | Path,
+        *,
+        label: str,
+        directory: bool,
+    ) -> Path:
+        if bootstrap_context is None:
+            return _existing_path(raw, label=label, directory=directory)
+        return _absolute_path(raw, label=label)
+
     resolved = RehearsalConfig(
         repository_root=_existing_path(config.repository_root, label="Repository root", directory=True),
         python_executable=_existing_path(config.python_executable, label="Python executable", directory=False),
-        source_database=_existing_path(config.source_database, label="Source database", directory=False),
-        source_checksum=_existing_path(config.source_checksum, label="Source checksum", directory=False),
-        source_metadata=_existing_path(config.source_metadata, label="Source metadata", directory=False),
+        source_database=prepare_external_path(
+            config.source_database,
+            label="Source database",
+            directory=False,
+        ),
+        source_checksum=prepare_external_path(
+            config.source_checksum,
+            label="Source checksum",
+            directory=False,
+        ),
+        source_metadata=prepare_external_path(
+            config.source_metadata,
+            label="Source metadata",
+            directory=False,
+        ),
         source_upgrade_policy=_existing_path(config.source_upgrade_policy, label="Source upgrade policy", directory=False),
-        source_media_manifest=_existing_path(config.source_media_manifest, label="Source media manifest", directory=False),
-        target_media_root=_existing_path(config.target_media_root, label="Target media root", directory=True),
+        source_media_manifest=prepare_external_path(
+            config.source_media_manifest,
+            label="Source media manifest",
+            directory=False,
+        ),
+        target_media_root=prepare_external_path(
+            config.target_media_root,
+            label="Target media root",
+            directory=True,
+        ),
         target_media_snapshot_id=config.target_media_snapshot_id,
         run_root=_absolute_path(config.run_root, label="Run root"),
         confirm_source_immutable=True,
@@ -3168,26 +3281,27 @@ def _prepare_config(
         raise ConfigurationError(
             "Loaded rehearsal orchestrator does not belong to the repository root."
         )
-    expected_checksum = resolved.source_database.with_name(
-        f"{resolved.source_database.name}.sha256"
-    )
-    expected_metadata = resolved.source_database.with_name(
-        f"{resolved.source_database.name}.metadata.json"
-    )
-    if (
-        _canonical_key(resolved.source_checksum) != _canonical_key(expected_checksum)
-        or _canonical_key(resolved.source_metadata) != _canonical_key(expected_metadata)
-    ):
-        raise ConfigurationError("Source backup sidecars do not use the required names.")
-    try:
-        source_metadata = os.lstat(resolved.source_database)
-    except OSError as exc:
-        raise ConfigurationError("Source database identity cannot be inspected.") from exc
-    if source_metadata.st_nlink != 1:
-        raise ConfigurationError("Source database must not have hard-link aliases.")
-    for suffix in ("-wal", "-shm", "-journal"):
-        if os.path.lexists(Path(f"{resolved.source_database}{suffix}")):
-            raise ConfigurationError("Source database has a live SQLite sidecar.")
+    if bootstrap_context is None:
+        expected_checksum = resolved.source_database.with_name(
+            f"{resolved.source_database.name}.sha256"
+        )
+        expected_metadata = resolved.source_database.with_name(
+            f"{resolved.source_database.name}.metadata.json"
+        )
+        if (
+            _canonical_key(resolved.source_checksum) != _canonical_key(expected_checksum)
+            or _canonical_key(resolved.source_metadata) != _canonical_key(expected_metadata)
+        ):
+            raise ConfigurationError("Source backup sidecars do not use the required names.")
+        try:
+            source_metadata = os.lstat(resolved.source_database)
+        except OSError as exc:
+            raise ConfigurationError("Source database identity cannot be inspected.") from exc
+        if source_metadata.st_nlink != 1:
+            raise ConfigurationError("Source database must not have hard-link aliases.")
+        for suffix in ("-wal", "-shm", "-journal"):
+            if os.path.lexists(Path(f"{resolved.source_database}{suffix}")):
+                raise ConfigurationError("Source database has a live SQLite sidecar.")
     fixed_tools = (
         resolved.repository_root / "manage.py",
         resolved.repository_root / "ops" / "migration" / "Verify-SQLiteBackupSet.py",
@@ -3213,12 +3327,13 @@ def _prepare_config(
         raise ConfigurationError("Run root parent must be an existing directory.") from exc
     if not parent.is_dir():
         raise ConfigurationError("Run root parent must be an existing directory.")
-    forbidden_directories = {
-        resolved.source_database.parent,
-        resolved.source_media_manifest.parent,
-        resolved.target_media_root,
-    }
+    forbidden_directories: set[Path] = set()
     if bootstrap_context is None:
+        forbidden_directories.update({
+            resolved.source_database.parent,
+            resolved.source_media_manifest.parent,
+            resolved.target_media_root,
+        })
         forbidden_directories.add(resolved.repository_root)
         forbidden_directories.add(resolved.source_upgrade_policy.parent)
     if resolved.source_proposal_run_root is not None:
@@ -3299,6 +3414,15 @@ class Rehearsal:
         self.runtime_fingerprint_report_identity: (
             tuple[int, int, int, int, int] | None
         ) = None
+        self.external_handoff: dict[str, Any] | None = None
+        self.external_handoff_path: Path | None = None
+        self.external_handoff_sha256: str | None = None
+        self.external_handoff_identity: (
+            tuple[int, int, int, int, int] | None
+        ) = None
+        self.external_handoff_preflight_baseline: dict[str, Any] | None = None
+        self.external_handoff_active_target_slot: str | None = None
+        self.external_handoff_verifier: Any | None = None
         self.deployment_candidate_details: dict[str, Any] | None = None
         self.workspace_access_control = workspace_access_control
         self.bootstrap_context = bootstrap_context
@@ -3449,6 +3573,352 @@ class Rehearsal:
             stage,
             "passed",
             {"artifact": _artifact_reference(path, self.root), **details},
+        )
+
+    def _load_external_handoff_verifier(self) -> Any:
+        if self.external_handoff_verifier is not None:
+            return self.external_handoff_verifier
+        stage = "external_handoff_preflight_verified"
+        module_path = (
+            self.execution_root
+            / "ops"
+            / "migration"
+            / "ProductionCopyHandoff.py"
+        )
+        try:
+            if (
+                self.execution_bundle_expected is None
+                or _execution_snapshot_sha256(
+                    self.execution_root,
+                    self.execution_bundle_files,
+                )
+                != self.execution_bundle_expected
+            ):
+                raise RuntimeError("Frozen execution bundle changed.")
+            module_path = _existing_path(
+                module_path,
+                label="Frozen production-copy handoff verifier",
+                directory=False,
+            )
+            if not _is_within(module_path, self.execution_root):
+                raise RuntimeError("Frozen handoff verifier escaped the execution root.")
+            module_name = (
+                f"ffxivshare_frozen_handoff_rehearsal_{os.getpid()}_{id(self):x}"
+            )
+            specification = importlib.util.spec_from_file_location(
+                module_name,
+                module_path,
+            )
+            if specification is None or specification.loader is None:
+                raise RuntimeError("Frozen handoff verifier cannot be loaded.")
+            module = importlib.util.module_from_spec(specification)
+            sys.modules[module_name] = module
+            try:
+                specification.loader.exec_module(module)
+            except Exception:
+                sys.modules.pop(module_name, None)
+                raise
+            if not all(
+                callable(getattr(module, name, None))
+                for name in (
+                    "load_handoff",
+                    "verify_live_handoff",
+                    "compare_access_baselines",
+                )
+            ) or not isinstance(getattr(module, "HandoffError", None), type):
+                raise RuntimeError("Frozen handoff verifier API is incomplete.")
+        except Exception as exc:
+            raise RehearsalBlocked(
+                "external_handoff_verifier_invalid",
+                stage=stage,
+            ) from exc
+        self.external_handoff_verifier = module
+        return module
+
+    def _verify_external_handoff_preflight(
+        self,
+        *,
+        expected_proposal_sha256: str,
+    ) -> None:
+        stage = "external_handoff_preflight_verified"
+        if (
+            self.bootstrap_context is None
+            or self.bootstrap_context.repository_root is None
+            or self.config.source_policy_proposal is None
+            or self.config.source_proposal_run_root is None
+        ):
+            raise RehearsalBlocked(
+                "external_handoff_approval_context_missing",
+                stage=stage,
+            )
+        # From this point onward the run can read the production handoff and
+        # external DB/media path metadata. Any failure must therefore retain
+        # the RunRoot under the production-data disposal policy.
+        self.production_copy_read_performed = True
+        verifier = self._load_external_handoff_verifier()
+        handoff_path = (
+            self.config.source_proposal_run_root
+            / "artifacts"
+            / "source-handoff-manifest.json"
+        )
+        try:
+            _, proposal_sha256, proposal_identity = _regular_file_checkpoint(
+                self.config.source_policy_proposal,
+                issue_prefix="approved_proposal",
+                expected_sha256=expected_proposal_sha256,
+                maximum_size=32 * 1024 * 1024,
+            )
+            proposal = _load_json(
+                self.config.source_policy_proposal,
+                maximum_size=32 * 1024 * 1024,
+            )
+            _regular_file_checkpoint(
+                self.config.source_policy_proposal,
+                issue_prefix="approved_proposal",
+                expected_sha256=proposal_sha256,
+                expected_identity=proposal_identity,
+            )
+            handoff_reference = proposal["body"]["evidence"][
+                "source_handoff_manifest"
+            ]
+            if (
+                not isinstance(handoff_reference, dict)
+                or set(handoff_reference) != {"path", "sha256", "size"}
+                or handoff_reference["path"]
+                != "artifacts/source-handoff-manifest.json"
+                or not isinstance(handoff_reference["sha256"], str)
+                or SHA256_PATTERN.fullmatch(handoff_reference["sha256"]) is None
+                or not isinstance(handoff_reference["size"], int)
+                or isinstance(handoff_reference["size"], bool)
+                or handoff_reference["size"] <= 0
+            ):
+                raise RuntimeError("Approved handoff artifact reference is invalid.")
+        except Exception as exc:
+            raise RehearsalBlocked(
+                "external_handoff_approval_binding_invalid",
+                stage=stage,
+            ) from exc
+        try:
+            handoff_path = _existing_path(
+                handoff_path,
+                label="Approved source handoff manifest",
+                directory=False,
+            )
+            handoff_size, handoff_sha256, handoff_identity = (
+                _regular_file_checkpoint(
+                    handoff_path,
+                    issue_prefix="external_handoff_manifest",
+                    maximum_size=handoff_reference["size"],
+                )
+            )
+            if (
+                handoff_size != handoff_reference["size"]
+                or handoff_sha256 != handoff_reference["sha256"]
+            ):
+                raise RuntimeError("Approved handoff artifact reference changed.")
+            handoff = verifier.load_handoff(handoff_path)
+            _regular_file_checkpoint(
+                handoff_path,
+                issue_prefix="external_handoff_manifest",
+                expected_sha256=handoff_sha256,
+                expected_identity=handoff_identity,
+            )
+        except Exception as exc:
+            raise RehearsalBlocked(
+                "external_handoff_manifest_invalid",
+                stage=stage,
+            ) from exc
+
+        try:
+            configured_paths = {
+                "database": _existing_path(
+                    self.config.source_database,
+                    label="Source database",
+                    directory=False,
+                ),
+                "checksum": _existing_path(
+                    self.config.source_checksum,
+                    label="Source checksum",
+                    directory=False,
+                ),
+                "metadata": _existing_path(
+                    self.config.source_metadata,
+                    label="Source metadata",
+                    directory=False,
+                ),
+                "source_media_manifest": _existing_path(
+                    self.config.source_media_manifest,
+                    label="Source media manifest",
+                    directory=False,
+                ),
+            }
+            configured_target_media_root = _existing_path(
+                self.config.target_media_root,
+                label="Target media root",
+                directory=True,
+            )
+        except ConfigurationError as exc:
+            raise RehearsalBlocked(
+                "external_handoff_configuration_invalid",
+                stage=stage,
+            ) from exc
+        handoff_paths = {
+            "database": handoff["database_backup_set"]["database"]["path"],
+            "checksum": handoff["database_backup_set"]["checksum"]["path"],
+            "metadata": handoff["database_backup_set"]["metadata"]["path"],
+            "source_media_manifest": handoff["source_media"]["manifest"]["path"],
+        }
+        if any(
+            _canonical_key(configured_paths[name])
+            != _canonical_key(Path(handoff_paths[name]))
+            for name in configured_paths
+        ):
+            raise RehearsalBlocked(
+                "external_handoff_configuration_mismatch",
+                stage=stage,
+            )
+        active_targets = [
+            target
+            for target in handoff["rehearsal_targets"]
+            if _canonical_key(Path(target["path"]))
+            == _canonical_key(configured_target_media_root)
+            and target["snapshot_id"] == self.config.target_media_snapshot_id
+        ]
+        if len(active_targets) != 1:
+            raise RehearsalBlocked(
+                "external_handoff_target_mismatch",
+                stage=stage,
+            )
+        active_target_slot = active_targets[0]["slot"]
+        try:
+            access_baseline = verifier.verify_live_handoff(
+                handoff,
+                self.bootstrap_context.repository_root,
+                disallowed_roots=(
+                    self.execution_root,
+                    self.root,
+                    self.config.source_proposal_run_root,
+                    handoff_path,
+                ),
+                verify_content=False,
+            )
+            _regular_file_checkpoint(
+                handoff_path,
+                issue_prefix="external_handoff_manifest",
+                expected_sha256=handoff_sha256,
+                expected_identity=handoff_identity,
+            )
+        except Exception as exc:
+            raise RehearsalBlocked(
+                "external_handoff_preflight_invalid",
+                stage=stage,
+            ) from exc
+
+        report_path = self.evidence / "external-handoff-preflight.json"
+        try:
+            _write_json_create_new(
+                report_path,
+                {
+                    "format": "ffxivshare-production-copy-external-handoff-verification",
+                    "format_version": 1,
+                    "generated_at": _utc_now(),
+                    "phase": "preflight",
+                    "handoff_sha256": handoff_sha256,
+                    "access_baseline": access_baseline,
+                    "limitations": handoff["limitations"],
+                },
+            )
+        except Exception as exc:
+            raise RehearsalError(
+                "external_handoff_preflight_evidence_write_failed",
+                stage=stage,
+            ) from exc
+        self._record_artifact(
+            stage,
+            report_path,
+            active_target_slot=active_target_slot,
+            handoff_sha256=handoff_sha256,
+        )
+        self.external_handoff = handoff
+        self.external_handoff_path = handoff_path
+        self.external_handoff_sha256 = handoff_sha256
+        self.external_handoff_identity = handoff_identity
+        self.external_handoff_preflight_baseline = access_baseline
+        self.external_handoff_active_target_slot = active_target_slot
+
+    def _verify_external_handoff_final(self) -> None:
+        stage = "external_handoff_final_verified"
+        verifier = self.external_handoff_verifier
+        if (
+            verifier is None
+            or self.bootstrap_context is None
+            or self.bootstrap_context.repository_root is None
+            or self.external_handoff is None
+            or self.external_handoff_path is None
+            or self.external_handoff_sha256 is None
+            or self.external_handoff_identity is None
+            or self.external_handoff_preflight_baseline is None
+            or self.external_handoff_active_target_slot is None
+        ):
+            raise RehearsalError("external_handoff_preflight_missing", stage=stage)
+        try:
+            _regular_file_checkpoint(
+                self.external_handoff_path,
+                issue_prefix="external_handoff_manifest",
+                expected_sha256=self.external_handoff_sha256,
+                expected_identity=self.external_handoff_identity,
+            )
+            access_baseline = verifier.verify_live_handoff(
+                self.external_handoff,
+                self.bootstrap_context.repository_root,
+                disallowed_roots=(
+                    self.execution_root,
+                    self.root,
+                    self.config.source_proposal_run_root,
+                    self.external_handoff_path,
+                ),
+                verify_content=False,
+            )
+            verifier.compare_access_baselines(
+                self.external_handoff_preflight_baseline,
+                access_baseline,
+            )
+            _regular_file_checkpoint(
+                self.external_handoff_path,
+                issue_prefix="external_handoff_manifest",
+                expected_sha256=self.external_handoff_sha256,
+                expected_identity=self.external_handoff_identity,
+            )
+        except Exception as exc:
+            raise RehearsalBlocked(
+                "external_handoff_final_invalid",
+                stage=stage,
+            ) from exc
+
+        report_path = self.evidence / "external-handoff-final.json"
+        try:
+            _write_json_create_new(
+                report_path,
+                {
+                    "format": "ffxivshare-production-copy-external-handoff-verification",
+                    "format_version": 1,
+                    "generated_at": _utc_now(),
+                    "phase": "final",
+                    "handoff_sha256": self.external_handoff_sha256,
+                    "access_baseline": access_baseline,
+                    "limitations": self.external_handoff["limitations"],
+                },
+            )
+        except Exception as exc:
+            raise RehearsalError(
+                "external_handoff_final_evidence_write_failed",
+                stage=stage,
+            ) from exc
+        self._record_artifact(
+            stage,
+            report_path,
+            active_target_slot=self.external_handoff_active_target_slot,
+            handoff_sha256=self.external_handoff_sha256,
         )
 
     def _verify_runtime_fingerprint(
@@ -3691,8 +4161,6 @@ class Rehearsal:
             policy_copy = config.source_upgrade_policy
         policy = _load_policy(policy_copy)
         self.runtime_fingerprint_expected = policy["runtime_fingerprint_sha256"]
-        media_manifest_copy = self.artifacts / "source-media-manifest.json"
-        _copy_stable(config.source_media_manifest, media_manifest_copy)
 
         if self.bootstrap_context is None:
             repository_bundle = _execution_bundle_sha256(config.repository_root)
@@ -3775,6 +4243,14 @@ class Rehearsal:
                 proposal_sha256=policy["proposal_sha256"],
                 review_record_sha256=policy["review_record_sha256"],
             )
+            # Keep this as the first approved-mode DB/media live-path gate.
+            # The trusted Approval replay above must finish before it runs.
+            self._verify_external_handoff_preflight(
+                expected_proposal_sha256=policy["proposal_sha256"],
+            )
+
+        media_manifest_copy = self.artifacts / "source-media-manifest.json"
+        _copy_stable(config.source_media_manifest, media_manifest_copy)
         dependency_check = self._command(
             "runtime_dependencies_check",
             [
@@ -3814,6 +4290,12 @@ class Rehearsal:
                 expected_identity=None,
             )
         )
+        _assert_external_handoff_artifact_checkpoint(
+            self.external_handoff,
+            "database",
+            source_size,
+            source_digest,
+        )
 
         source_input_directory = self.root / "work" / "source-input"
         source_input_directory.mkdir()
@@ -3842,6 +4324,12 @@ class Rehearsal:
                 sidecar_size,
                 sidecar_digest,
                 sidecar_identity,
+            )
+            _assert_external_handoff_artifact_checkpoint(
+                self.external_handoff,
+                label,
+                sidecar_size,
+                sidecar_digest,
             )
             copied_sidecar_size, copied_sidecar_digest = _copy_stable(
                 source,
@@ -4733,6 +5221,9 @@ class Rehearsal:
         if self.deployment_candidate_details is None:
             raise RehearsalError("deployment_candidate_not_ready")
         self._record_source_final()
+        if self.bootstrap_context is not None:
+            # Seal the last external content read before publishing the candidate.
+            self._verify_external_handoff_final()
         self.ledger.record(
             "deployment_candidate_verified",
             "passed",
@@ -4868,10 +5359,22 @@ def run_rehearsal(
                     status = "blocked"
                     if exc.code not in issues:
                         issues.append(exc.code)
+                    if exc.stage is not None:
+                        rehearsal.ledger.record(
+                            exc.stage,
+                            "blocked",
+                            {"issue": exc.code},
+                        )
                 except RehearsalError as exc:
                     status = "failed"
                     if exc.code not in issues:
                         issues.append(exc.code)
+                    if exc.stage is not None:
+                        rehearsal.ledger.record(
+                            exc.stage,
+                            "failed",
+                            {"issue": exc.code},
+                        )
             elif rehearsal.source_expected_sha256 is not None:
                 try:
                     rehearsal._record_source_final()

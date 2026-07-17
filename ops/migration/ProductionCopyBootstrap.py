@@ -78,6 +78,7 @@ EXECUTION_FIXED_FILES = (
     "manage.py",
     "requirements.txt",
     "ops/migration/ProductionCopyBootstrap.py",
+    "ops/migration/ProductionCopyHandoff.py",
     "ops/migration/Rehearse-ProductionCopy.py",
     "ops/migration/Approve-ProductionCopyPolicy.py",
     "ops/migration/Propose-ProductionCopyPolicy.py",

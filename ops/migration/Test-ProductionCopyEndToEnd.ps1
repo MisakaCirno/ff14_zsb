@@ -47,6 +47,17 @@ function Remove-UniqueTestRoot {
             '^ffxivshare-production-e2e-[a-f0-9]{32}$') `
         -Message 'Refusing to clean an E2E directory with an unexpected name.'
     if (Test-Path -LiteralPath $resolved) {
+        if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+            $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+            $icacls = Join-Path $env:SystemRoot 'System32\icacls.exe'
+            Assert-Contract `
+                -Condition (Test-Path -LiteralPath $icacls -PathType Leaf) `
+                -Message 'Trusted Windows icacls executable is missing.'
+            & $icacls $resolved /grant:r "${identity}:F" /T /C /Q | Out-Null
+            Assert-Contract `
+                -Condition ($LASTEXITCODE -eq 0) `
+                -Message 'Failed to restore E2E test-only cleanup access.'
+        }
         Remove-Item -LiteralPath $resolved -Recurse -Force
     }
 }
@@ -146,6 +157,8 @@ Assert-Contract `
 $fixtureSource = @'
 from __future__ import annotations
 
+import ctypes
+from ctypes import wintypes
 from hashlib import sha256
 import importlib.util
 import json
@@ -170,6 +183,16 @@ assert spec is not None and spec.loader is not None
 bootstrap = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = bootstrap
 spec.loader.exec_module(bootstrap)
+
+handoff_path = repository / "ops" / "migration" / "ProductionCopyHandoff.py"
+handoff_spec = importlib.util.spec_from_file_location(
+    "ffxivshare_production_copy_e2e_handoff",
+    handoff_path,
+)
+assert handoff_spec is not None and handoff_spec.loader is not None
+handoff = importlib.util.module_from_spec(handoff_spec)
+sys.modules[handoff_spec.name] = handoff
+handoff_spec.loader.exec_module(handoff)
 
 assert os.name == "nt", "This contract currently proves the Windows production DACL path."
 assert sys.flags.isolated
@@ -198,6 +221,49 @@ EXPECTED_ENTITY_COUNTS = {
     "site_messages": 1,
     "admin_log_entries": 1,
 }
+
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+kernel32.LocalFree.restype = ctypes.c_void_p
+advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+    wintypes.LPCWSTR,
+    wintypes.DWORD,
+    ctypes.POINTER(ctypes.c_void_p),
+    ctypes.POINTER(wintypes.DWORD),
+]
+advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
+advapi32.SetFileSecurityW.argtypes = [
+    wintypes.LPCWSTR,
+    wintypes.DWORD,
+    ctypes.c_void_p,
+]
+advapi32.SetFileSecurityW.restype = wintypes.BOOL
+
+
+def set_dacl(path: Path, sddl: str) -> None:
+    descriptor = ctypes.c_void_p()
+    size = wintypes.DWORD()
+    if not advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        sddl,
+        1,
+        ctypes.byref(descriptor),
+        ctypes.byref(size),
+    ):
+        raise OSError(ctypes.get_last_error(), "Cannot build E2E security descriptor")
+    try:
+        if not advapi32.SetFileSecurityW(str(path), 0x00000004, descriptor):
+            raise OSError(ctypes.get_last_error(), f"Cannot apply E2E DACL: {path}")
+    finally:
+        kernel32.LocalFree(descriptor)
+
+
+def apply_tree_dacl(path: Path, sddl: str) -> None:
+    rows = [path]
+    if path.is_dir():
+        rows.extend(sorted(path.rglob("*"), key=lambda item: len(item.parts), reverse=True))
+    for item in rows:
+        set_dacl(item, sddl)
 
 
 def load_json(path: Path) -> Any:
@@ -358,6 +424,7 @@ def proposal_arguments(
     checksum: Path,
     metadata: Path,
     media_manifest: Path,
+    source_handoff_manifest: Path,
 ) -> tuple[str, ...]:
     return (
         "--source-database",
@@ -368,6 +435,8 @@ def proposal_arguments(
         str(metadata),
         "--source-media-manifest",
         str(media_manifest),
+        "--source-handoff-manifest",
+        str(source_handoff_manifest),
         "--policy-id",
         "production-copy-e2e-policy",
         "--proposal-id",
@@ -637,6 +706,94 @@ assert media_manifest["source_snapshot"] == {
 assert media_manifest["file_count"] == 1
 assert media_manifest["files"][0]["path"] == "uploads/e2e/strategy-preview.bin"
 
+target_media_roots = {
+    "approved-rehearsal-one": targets / "approved-rehearsal-one-media",
+    "approved-rehearsal-two": targets / "approved-rehearsal-two-media",
+}
+target_media_snapshot_ids = {
+    "approved-rehearsal-one": "production-copy-e2e-target-media-one",
+    "approved-rehearsal-two": "production-copy-e2e-target-media-two",
+}
+for target_media_root in target_media_roots.values():
+    shutil.copytree(source_media_root, target_media_root)
+    target_media_file = target_media_root / "uploads" / "e2e" / "strategy-preview.bin"
+    assert target_media_file.read_bytes() == media_file.read_bytes()
+    assert file_identity(target_media_file)[:2] != file_identity(media_file)[:2]
+
+current_sid = handoff._Win32Api().current_user_sid
+sealed_sddl = (
+    "D:P"
+    f"(A;;GRGX;;;{current_sid})"
+    "(A;;FA;;;S-1-5-18)"
+    "(A;;FA;;;S-1-5-32-544)"
+)
+for sealed_scope in (
+    backup_directory,
+    source_media_root,
+    source_media_manifest,
+    *target_media_roots.values(),
+):
+    apply_tree_dacl(sealed_scope, sealed_sddl)
+
+handoff_directory = test_root / "handoff"
+handoff_directory.mkdir()
+assert bootstrap._secure_run_root(handoff_directory) == PRIVATE_DACL_STATUS
+source_handoff_manifest = handoff_directory / "source-handoff-manifest.json"
+run_command(
+    [
+        str(Path(sys.executable).resolve()),
+        "-I",
+        "-S",
+        "-B",
+        "-X",
+        "utf8",
+        str(handoff_path),
+        "create",
+        "--repository-root",
+        str(repository),
+        "--source-database",
+        str(source_backup),
+        "--source-checksum",
+        str(source_checksum),
+        "--source-metadata",
+        str(source_metadata),
+        "--source-media-root",
+        str(source_media_root),
+        "--source-media-manifest",
+        str(source_media_manifest),
+        "--target-media-root-one",
+        str(target_media_roots["approved-rehearsal-one"]),
+        "--target-media-root-one-snapshot-id",
+        target_media_snapshot_ids["approved-rehearsal-one"],
+        "--target-media-root-two",
+        str(target_media_roots["approved-rehearsal-two"]),
+        "--target-media-root-two-snapshot-id",
+        target_media_snapshot_ids["approved-rehearsal-two"],
+        "--source-host",
+        "production-copy-e2e-source-host",
+        "--operator",
+        "production-copy-e2e-operator",
+        "--expected-application-version",
+        "production-copy-e2e-contract",
+        "--output",
+        str(source_handoff_manifest),
+        "--confirm-source-immutable",
+        "--confirm-target-media-offline",
+        "--confirm-database-media-consistent",
+        "--confirm-operator-identity-asserted",
+    ],
+    label="real production-copy handoff",
+    cwd=repository,
+)
+handoff_payload = handoff.load_handoff(source_handoff_manifest)
+assert handoff_payload["source"]["release_application_version"] == (
+    "production-copy-e2e-contract"
+)
+assert [target["path"] for target in handoff_payload["rehearsal_targets"]] == [
+    str(target_media_roots["approved-rehearsal-one"]),
+    str(target_media_roots["approved-rehearsal-two"]),
+]
+
 protected_paths = (
     source_database,
     source_backup,
@@ -644,6 +801,7 @@ protected_paths = (
     source_metadata,
     source_media_manifest,
     media_file,
+    source_handoff_manifest,
 )
 protected_before = {path: protected_snapshot(path) for path in protected_paths}
 source_media_tree_before = tree_snapshot(source_media_root)
@@ -654,6 +812,7 @@ proposal_args = proposal_arguments(
     source_checksum,
     source_metadata,
     source_media_manifest,
+    source_handoff_manifest,
 )
 proposal_outcome = bootstrap.run_bootstrap(
     bootstrap.BootstrapConfig(
@@ -674,8 +833,25 @@ proposal_path = proposal_root / "evidence" / "policy-proposal.json"
 proposal = load_json(proposal_path)
 proposal_sha256 = file_hash(proposal_path)
 assert proposal["state"] == "review_required"
+assert proposal["format_version"] == 2
+assert proposal["body"]["format_version"] == 2
 assert proposal["body"]["policy_projection"]["source_database_sha256"] == file_hash(
     source_backup
+)
+frozen_handoff = assert_artifact_reference(
+    proposal_root,
+    proposal["body"]["evidence"]["source_handoff_manifest"],
+)
+assert file_hash(frozen_handoff) == file_hash(source_handoff_manifest)
+proposal_stages = [event["stage"] for event in read_ledger(proposal_root)]
+assert proposal_stages.index("source_handoff_verified") < proposal_stages.index(
+    "policy_proposal_body_created"
+)
+assert proposal_stages.index(
+    "policy_proposal_body_created"
+) < proposal_stages.index("source_handoff_final_verified")
+assert proposal_stages.index("source_handoff_final_verified") < proposal_stages.index(
+    "source_final_verified"
 )
 assert PENDING_MIGRATION in {
     tuple(node)
@@ -807,8 +983,8 @@ def assert_entity_counts(manifest: dict[str, Any]) -> None:
 
 
 def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
-    target_media_root = targets / f"{name}-media"
-    shutil.copytree(source_media_root, target_media_root)
+    target_media_root = target_media_roots[name]
+    assert media_snapshot_id == target_media_snapshot_ids[name]
     target_media_before = tree_snapshot(target_media_root)
     target_media_file = target_media_root / "uploads" / "e2e" / "strategy-preview.bin"
     assert target_media_file.read_bytes() == media_file.read_bytes()
@@ -1015,9 +1191,50 @@ def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
         post_migrate_runtime["details"]["runtime_fingerprint_sha256"]
         == runtime_fingerprint
     )
+    runtime_report = load_json(
+        run_root / "evidence" / "runtime-fingerprint-initial.json"
+    )
+    python_projection = runtime_report["projection"]["python"]
+    projected_sys_paths = {
+        item["path"]
+        for item in python_projection["sys_path"]
+        if item["exists"] is True
+    }
+    excluded_base_sites = python_projection["base_runtime_closure"][
+        "excluded_inactive_site_package_roots"
+    ]
+    active_venv_sites = runtime_report["projection"]["site_packages"]["roots"]
+    identity_paths = {
+        item["path"]
+        for item in runtime_report["checkpoint"]["identity_inventory"]
+    }
+    assert excluded_base_sites
+    assert active_venv_sites
+    assert all(path.startswith("$BASE_PREFIX/") for path in excluded_base_sites)
+    assert all(
+        path == "$PREFIX" or path.startswith("$PREFIX/")
+        for path in active_venv_sites
+    )
+    assert all(path in projected_sys_paths for path in active_venv_sites)
+    assert all(
+        any(item.startswith(f"{path}/") for item in identity_paths)
+        for path in active_venv_sites
+    )
+    for path in excluded_base_sites:
+        assert not any(
+            item == path or item.startswith(f"{path}/")
+            for item in projected_sys_paths
+        )
+        assert not any(
+            item == path or item.startswith(f"{path}/")
+            for item in identity_paths
+        )
     stage_sequence = [event["stage"] for event in events]
     assert stage_sequence.index("runtime_fingerprint_initial_verified") < (
         stage_sequence.index("approved_policy_evidence_verified")
+    )
+    assert stage_sequence.index("approved_policy_evidence_verified") < (
+        stage_sequence.index("external_handoff_preflight_verified")
     )
     assert stage_sequence.index("runtime_fingerprint_pre_migrate_verified") < (
         stage_sequence.index("runtime_fingerprint_post_migrate_verified")
@@ -1026,8 +1243,20 @@ def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
         stage_sequence.index("runtime_fingerprint_final_verified")
     )
     assert stage_sequence.index("runtime_fingerprint_final_verified") < (
+        stage_sequence.index("external_handoff_final_verified")
+    )
+    assert stage_sequence.index("external_handoff_final_verified") < (
         stage_sequence.index("deployment_candidate_verified")
     )
+    active_slot = "first" if name == "approved-rehearsal-one" else "second"
+    for phase in ("preflight", "final"):
+        report = load_json(
+            run_root / "evidence" / f"external-handoff-{phase}.json"
+        )
+        assert report["handoff_sha256"] == file_hash(frozen_handoff)
+        event = stage_events[f"external_handoff_{phase}_verified"]
+        assert event["details"]["active_target_slot"] == active_slot
+        assert event["details"]["handoff_sha256"] == file_hash(frozen_handoff)
     assert events[-1]["stage"] == "completed"
     assert events[-1]["outcome"] == "terminal"
     assert events[-1]["details"]["cutover_authorized"] is False

@@ -38,6 +38,13 @@ function Remove-UniqueTestRoot {
         -Condition ((Split-Path -Leaf $resolved) -match $LeafPattern) `
         -Message 'Refusing to clean a test directory with an unexpected name.'
     if (Test-Path -LiteralPath $resolved) {
+        if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+            $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+            & icacls.exe $resolved /grant:r "${identity}:F" /T /C /Q | Out-Null
+            Assert-Contract `
+                -Condition ($LASTEXITCODE -eq 0) `
+                -Message 'Failed to restore test-only cleanup access.'
+        }
         Remove-Item -LiteralPath $resolved -Recurse -Force
     }
 }
@@ -87,11 +94,15 @@ $fixtureScript = Join-Path $temporaryRoot 'test_policy_proposal.py'
 $fixtureSource = @'
 from __future__ import annotations
 
+import ast
+import ctypes
+from ctypes import wintypes
 from hashlib import sha256
 import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -113,6 +124,16 @@ bootstrap = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = bootstrap
 spec.loader.exec_module(bootstrap)
 
+handoff_path = repository / "ops" / "migration" / "ProductionCopyHandoff.py"
+handoff_spec = importlib.util.spec_from_file_location(
+    "ffxivshare_policy_proposal_handoff_contract",
+    handoff_path,
+)
+assert handoff_spec is not None and handoff_spec.loader is not None
+handoff = importlib.util.module_from_spec(handoff_spec)
+sys.modules[handoff_spec.name] = handoff
+handoff_spec.loader.exec_module(handoff)
+
 assert sys.flags.isolated
 assert sys.flags.no_site
 assert sys.flags.no_user_site
@@ -120,18 +141,89 @@ assert sys.flags.dont_write_bytecode
 assert sys.flags.utf8_mode
 
 ENTRYPOINT = "ops/migration/Propose-ProductionCopyPolicy.py"
-REQUIRED_EVIDENCE = {
+REQUIRED_EVIDENCE = (
     "bootstrap",
     "execution_inventory",
     "migration_plan",
     "migration_review_plan",
     "runtime_fingerprint",
     "source_backup_verification",
+    "source_handoff_manifest",
     "source_media_manifest",
     "source_migration_state",
     "source_snapshot_inspection",
-}
+)
+HANDOFF_SCOPE_ROLES = (
+    "database_backup_set",
+    "source_media_root",
+    "source_media_manifest",
+    "target_media_root_1",
+    "target_media_root_2",
+)
 PENDING_NODE = ("shares", "0025_add_collection_owner_index")
+
+
+def assert_final_handoff_checkpoint_order() -> None:
+    tree = ast.parse((repository / ENTRYPOINT).read_text(encoding="utf-8"))
+    execute = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_execute_proposal"
+    )
+    final_live_calls = [
+        node
+        for node in ast.walk(execute)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_verify_live_handoff"
+        and any(
+            keyword.arg == "verify_content"
+            and isinstance(keyword.value, ast.Constant)
+            and keyword.value.value is True
+            for keyword in node.keywords
+        )
+    ]
+    final_event_calls = [
+        node
+        for node in ast.walk(execute)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "record"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "source_handoff_final_verified"
+    ]
+    assert final_live_calls
+    assert len(final_event_calls) == 1
+    final_live_call = max(final_live_calls, key=lambda node: node.lineno)
+    final_event_call = final_event_calls[0]
+    checkpoint_calls = [
+        node
+        for node in ast.walk(execute)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "_regular_file_checkpoint"
+        and node.args
+        and isinstance(node.args[0], ast.Name)
+        and node.args[0].id == "source_handoff_manifest"
+        and {
+            keyword.arg: keyword.value.id
+            for keyword in node.keywords
+            if keyword.arg in {"expected_sha256", "expected_identity"}
+            and isinstance(keyword.value, ast.Name)
+        }
+        == {
+            "expected_sha256": "handoff_sha256",
+            "expected_identity": "handoff_identity",
+        }
+    ]
+    assert any(
+        final_live_call.lineno < checkpoint.lineno < final_event_call.lineno
+        for checkpoint in checkpoint_calls
+    )
+
+
+assert_final_handoff_checkpoint_order()
 
 
 def load_json(path: Path) -> Any:
@@ -160,6 +252,58 @@ def protected_snapshot(path: Path) -> tuple[str, tuple[int, int, int, int, int]]
 def assert_no_sidecars(database: Path) -> None:
     for suffix in ("-wal", "-shm", "-journal"):
         assert not Path(f"{database}{suffix}").exists(), (database, suffix)
+
+
+if os.name == "nt":
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.restype = ctypes.c_void_p
+    advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype = wintypes.BOOL
+    advapi32.SetFileSecurityW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+    ]
+    advapi32.SetFileSecurityW.restype = wintypes.BOOL
+
+
+def set_dacl(path: Path, sddl: str) -> None:
+    assert os.name == "nt"
+    descriptor = ctypes.c_void_p()
+    size = wintypes.DWORD()
+    if not advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        sddl,
+        1,
+        ctypes.byref(descriptor),
+        ctypes.byref(size),
+    ):
+        raise OSError(ctypes.get_last_error(), "Cannot build test security descriptor")
+    try:
+        if not advapi32.SetFileSecurityW(str(path), 0x00000004, descriptor):
+            raise OSError(ctypes.get_last_error(), f"Cannot apply test DACL: {path}")
+    finally:
+        kernel32.LocalFree(descriptor)
+
+
+def iter_tree(path: Path) -> list[Path]:
+    rows = [path]
+    if path.is_dir():
+        rows.extend(
+            sorted(path.rglob("*"), key=lambda value: len(value.parts), reverse=True)
+        )
+    return rows
+
+
+def apply_tree_dacl(path: Path, sddl: str) -> None:
+    for item in iter_tree(path):
+        set_dacl(item, sddl)
 
 
 def run_checked(
@@ -194,6 +338,7 @@ def proposal_arguments(
     checksum: Path,
     metadata: Path,
     media_manifest: Path,
+    handoff_manifest: Path,
     *,
     policy_id: str,
     proposal_id: str,
@@ -207,6 +352,8 @@ def proposal_arguments(
         str(metadata),
         "--source-media-manifest",
         str(media_manifest),
+        "--source-handoff-manifest",
+        str(handoff_manifest),
         "--policy-id",
         policy_id,
         "--proposal-id",
@@ -254,6 +401,7 @@ def assert_exact_frozen_bundle(run_root: Path, arguments: tuple[str, ...]) -> di
     frozen_paths = {item["path"] for item in manifest["files"]}
     assert {
         "ops/migration/ProductionCopyBootstrap.py",
+        "ops/migration/ProductionCopyHandoff.py",
         "ops/migration/Propose-ProductionCopyPolicy.py",
         "ops/migration/Rehearse-ProductionCopy.py",
     }.issubset(frozen_paths)
@@ -287,11 +435,20 @@ def assert_completion(run_root: Path, expected_exit: int) -> dict[str, Any]:
 runs = test_root / "runs"
 runs.mkdir()
 missing = test_root / "missing-inputs" / "production.sqlite3"
+invalid_handoff = test_root / "missing-inputs" / "invalid-handoff.json"
+invalid_handoff.parent.mkdir()
+invalid_handoff.write_bytes(b"{}\n")
+oversized_handoff = test_root / "missing-inputs" / "oversized-handoff.json"
+with oversized_handoff.open("wb") as stream:
+    stream.seek(handoff.MAX_HANDOFF_BYTES)
+    stream.write(b"\0")
+assert oversized_handoff.stat().st_size == handoff.MAX_HANDOFF_BYTES + 1
 fast_arguments = proposal_arguments(
     missing,
     Path(f"{missing}.sha256"),
     Path(f"{missing}.metadata.json"),
     test_root / "missing-inputs" / "media-manifest.json",
+    invalid_handoff,
     policy_id="proposal-contract-fast-policy",
     proposal_id="proposal-contract-fast-proposal",
 )
@@ -342,9 +499,8 @@ fast_stderr = (fast_root / "logs" / "inner.stderr.log").read_text(
     encoding="utf-8"
 )
 assert not fast_stdout.strip()
-assert (
-    "Production-copy policy proposal refused: Source database " in fast_stderr
-)
+assert "source_handoff_manifest_invalid" in fast_stderr
+assert "Source database " not in fast_stderr
 for handshake_failure in (
     "Proposal inner requires a bootstrap record",
     "Proposal inner escaped its frozen bootstrap root",
@@ -357,6 +513,69 @@ for handshake_failure in (
 assert not (fast_root / "evidence" / "policy-proposal.json").exists()
 assert not (fast_root / "evidence" / "policy-proposal-body.json").exists()
 print("Fast production-copy policy-proposal contract passed.")
+
+# An oversized authority must be rejected from metadata alone. All DB/media
+# arguments intentionally remain absent so a regression into source reads is
+# also observable in the failure reason and the lack of proposal evidence.
+oversized_arguments = proposal_arguments(
+    missing,
+    Path(f"{missing}.sha256"),
+    Path(f"{missing}.metadata.json"),
+    test_root / "missing-inputs" / "media-manifest.json",
+    oversized_handoff,
+    policy_id="proposal-contract-oversized-policy",
+    proposal_id="proposal-contract-oversized-proposal",
+)
+oversized_root = runs / "oversized-handoff"
+oversized_secure, oversized_acl_calls = scoped_acl(oversized_root)
+oversized_outcome = bootstrap.run_bootstrap(
+    config_for(oversized_root, oversized_arguments),
+    secure_run_root=oversized_secure,
+)
+assert oversized_outcome.exit_code == 1
+assert oversized_acl_calls == [
+    oversized_root.resolve(),
+    (oversized_root / "approval").resolve(),
+]
+assert_exact_frozen_bundle(oversized_root, oversized_arguments)
+assert_completion(oversized_root, 1)
+oversized_stderr = (
+    oversized_root / "logs" / "inner.stderr.log"
+).read_text(encoding="utf-8")
+assert "source_handoff_manifest_too_large" in oversized_stderr
+assert "Source database " not in oversized_stderr
+assert "Source media " not in oversized_stderr
+assert not (oversized_root / "evidence" / "policy-proposal.json").exists()
+assert not (oversized_root / "evidence" / "policy-proposal-body.json").exists()
+print("Oversized handoff fail-fast proposal contract passed.")
+
+# argparse must keep the handoff authority mandatory, independently of the
+# trust-before-read case above where an invalid authority is supplied.
+handoff_flag = fast_arguments.index("--source-handoff-manifest")
+missing_handoff_arguments = (
+    fast_arguments[:handoff_flag] + fast_arguments[handoff_flag + 2 :]
+)
+missing_handoff_root = runs / "missing-handoff-parameter"
+missing_handoff_secure, missing_handoff_acl_calls = scoped_acl(missing_handoff_root)
+missing_handoff_outcome = bootstrap.run_bootstrap(
+    config_for(missing_handoff_root, missing_handoff_arguments),
+    secure_run_root=missing_handoff_secure,
+)
+assert missing_handoff_outcome.exit_code == 2
+assert missing_handoff_acl_calls == [
+    missing_handoff_root.resolve(),
+    (missing_handoff_root / "approval").resolve(),
+]
+assert_exact_frozen_bundle(missing_handoff_root, missing_handoff_arguments)
+assert_completion(missing_handoff_root, 2)
+missing_handoff_stderr = (
+    missing_handoff_root / "logs" / "inner.stderr.log"
+).read_text(encoding="utf-8")
+assert "--source-handoff-manifest" in missing_handoff_stderr
+assert "required" in missing_handoff_stderr
+assert not (missing_handoff_root / "evidence" / "policy-proposal.json").exists()
+assert not (missing_handoff_root / "evidence" / "policy-proposal-body.json").exists()
+print("Required source-handoff proposal parameter contract passed.")
 
 
 def django_environment(database: Path, media_root: Path, env_file: Path) -> dict[str, str]:
@@ -437,22 +656,90 @@ def verify_ledger(run_root: Path, proposal: dict[str, Any]) -> list[dict[str, An
     assert details["retained_on_success"] is True
     assert details["secure_disposal_required"] is True
     assert details["sensitive_retention_scope"] == "entire_run_root"
+
+    def single(stage: str) -> tuple[int, dict[str, Any]]:
+        matches = [
+            (index, event)
+            for index, event in enumerate(events)
+            if event["stage"] == stage
+        ]
+        assert len(matches) == 1, stage
+        return matches[0]
+
+    initial_index, initial = single("source_handoff_verified")
+    body_index, _body_event = single("policy_proposal_body_created")
+    final_index, final = single("source_handoff_final_verified")
+    source_index, _source_event = single("source_final_verified")
+    bundle_index, _bundle_event = single("execution_bundle_final_verified")
+    terminal_index = len(events) - 1
+    assert initial_index < body_index < final_index < source_index < bundle_index < terminal_index
+    handoff_reference = proposal["body"]["evidence"]["source_handoff_manifest"]
+    access_snapshot_sha256 = load_json(
+        assert_artifact_reference(run_root, handoff_reference)
+    )["access_baseline"]["snapshot_sha256"]
+    assert initial["outcome"] == "passed"
+    assert set(initial["details"]) == {
+        "artifact",
+        "access_snapshot_sha256",
+        "scope_roles",
+    }
+    assert initial["details"] == {
+        "artifact": handoff_reference,
+        "access_snapshot_sha256": access_snapshot_sha256,
+        "scope_roles": list(HANDOFF_SCOPE_ROLES),
+    }
+    assert final["outcome"] == "passed"
+    assert set(final["details"]) == {
+        "artifact",
+        "access_snapshot_sha256",
+        "scope_roles",
+        "content_verified",
+    }
+    assert final["details"] == {
+        "artifact": handoff_reference,
+        "access_snapshot_sha256": access_snapshot_sha256,
+        "scope_roles": list(HANDOFF_SCOPE_ROLES),
+        "content_verified": True,
+    }
     return events
 
 
 if include_slow:
+    if os.name != "nt":
+        raise AssertionError(
+            "Slow proposal contract requires Windows NTFS/DACL handoff verification."
+        )
     slow_fixture = test_root / "slow-fixture"
     source_directory = slow_fixture / "source"
     backup_directory = slow_fixture / "backup"
     offline_media = slow_fixture / "offline-media"
     manifest_directory = slow_fixture / "manifest"
+    target_one = slow_fixture / "target-one"
+    target_two = slow_fixture / "target-two"
+    handoff_directory = slow_fixture / "handoff"
     for directory in (
         source_directory,
         backup_directory,
         offline_media,
         manifest_directory,
+        handoff_directory,
     ):
         directory.mkdir(parents=True)
+    current_sid = handoff._Win32Api().current_user_sid
+    private_sddl = (
+        "D:P"
+        f"(A;OICI;FA;;;{current_sid})"
+        "(A;OICI;FA;;;S-1-5-18)"
+        "(A;OICI;FA;;;S-1-5-32-544)"
+    )
+    sealed_sddl = (
+        "D:P"
+        f"(A;;GRGX;;;{current_sid})"
+        "(A;;FA;;;S-1-5-18)"
+        "(A;;FA;;;S-1-5-32-544)"
+    )
+    set_dacl(slow_fixture, private_sddl)
+    set_dacl(handoff_directory, private_sddl)
     env_file = slow_fixture / "empty.env"
     env_file.write_bytes(b"")
     source_database = source_directory / "source.sqlite3"
@@ -528,12 +815,77 @@ if include_slow:
     assert media_manifest["file_count"] == 0
     assert media_manifest["total_size"] == 0
 
+    shutil.copytree(offline_media, target_one)
+    shutil.copytree(offline_media, target_two)
+    for scope in (
+        backup_directory,
+        offline_media,
+        source_media_manifest,
+        target_one,
+        target_two,
+    ):
+        apply_tree_dacl(scope, sealed_sddl)
+
+    source_handoff_manifest = handoff_directory / "source-handoff-manifest.json"
+    run_checked(
+        [
+            str(Path(sys.executable).resolve()),
+            "-I",
+            "-S",
+            "-B",
+            "-X",
+            "utf8",
+            str(handoff_path),
+            "create",
+            "--repository-root",
+            str(repository),
+            "--source-database",
+            str(source_backup),
+            "--source-checksum",
+            str(source_checksum),
+            "--source-metadata",
+            str(source_metadata),
+            "--source-media-root",
+            str(offline_media),
+            "--source-media-manifest",
+            str(source_media_manifest),
+            "--target-media-root-one",
+            str(target_one),
+            "--target-media-root-one-snapshot-id",
+            "proposal-contract-target-one",
+            "--target-media-root-two",
+            str(target_two),
+            "--target-media-root-two-snapshot-id",
+            "proposal-contract-target-two",
+            "--source-host",
+            "proposal-contract-production-host",
+            "--operator",
+            "fixture-operator",
+            "--expected-application-version",
+            "proposal-contract",
+            "--output",
+            str(source_handoff_manifest),
+            "--confirm-source-immutable",
+            "--confirm-target-media-offline",
+            "--confirm-database-media-consistent",
+            "--confirm-operator-identity-asserted",
+        ],
+        label="production-copy handoff capture",
+        cwd=repository,
+    )
+    captured_handoff = handoff.load_handoff(source_handoff_manifest)
+    assert captured_handoff["format_version"] == 1
+    assert [
+        scope["role"] for scope in captured_handoff["access_baseline"]["scopes"]
+    ] == list(handoff.SCOPE_ROLES)
+
     protected_paths = (
         source_database,
         source_backup,
         source_checksum,
         source_metadata,
         source_media_manifest,
+        source_handoff_manifest,
     )
     before = {path: protected_snapshot(path) for path in protected_paths}
     slow_arguments = proposal_arguments(
@@ -541,6 +893,7 @@ if include_slow:
         source_checksum,
         source_metadata,
         source_media_manifest,
+        source_handoff_manifest,
         policy_id="proposal-contract-slow-policy",
         proposal_id="proposal-contract-slow-proposal",
     )
@@ -569,7 +922,7 @@ if include_slow:
     body = load_json(body_path)
     proposal = load_json(proposal_path)
     assert proposal["format"] == "ffxivshare-source-upgrade-policy-proposal"
-    assert proposal["format_version"] == 1
+    assert proposal["format_version"] == 2
     assert proposal["state"] == "review_required"
     assert proposal["proposal_id"] == "proposal-contract-slow-proposal"
     assert proposal["run_id"] == slow_record["run_id"]
@@ -578,23 +931,28 @@ if include_slow:
     assert proposal["body_sha256"] == file_hash(body_path)
     assert_artifact_reference(slow_root, proposal["body_artifact"])
     assert body["format"] == "ffxivshare-source-upgrade-policy-proposal-body"
-    assert body["format_version"] == 1
+    assert body["format_version"] == 2
     assert body["proposal_id"] == "proposal-contract-slow-proposal"
     assert body["run_id"] == slow_record["run_id"]
     assert body["bootstrap_nonce"] == slow_record["bootstrap_nonce"]
     requirements = body["review_requirements"]
     assert requirements["lossless_review_status"] == "not_reviewed"
-    assert set(requirements["required_evidence"]) == REQUIRED_EVIDENCE
+    assert tuple(requirements["required_evidence"]) == REQUIRED_EVIDENCE
     assert PENDING_NODE in {
         tuple(node) for node in requirements["pending_migration_nodes"]
     }
     evidence = body["evidence"]
-    assert set(evidence) == REQUIRED_EVIDENCE
+    assert tuple(evidence) == REQUIRED_EVIDENCE
     evidence_paths = {
         key: assert_artifact_reference(slow_root, reference)
         for key, reference in evidence.items()
     }
     assert body["evidence_set_sha256"] == bootstrap._canonical_json_sha256(evidence)
+    frozen_handoff = load_json(evidence_paths["source_handoff_manifest"])
+    assert frozen_handoff == captured_handoff
+    assert evidence_paths["source_handoff_manifest"].read_bytes() == (
+        source_handoff_manifest.read_bytes()
+    )
     review_plan = load_json(evidence_paths["migration_review_plan"])
     pending_nodes = {
         tuple(item["node"]) for item in review_plan["pending_migrations"]

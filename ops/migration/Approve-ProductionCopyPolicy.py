@@ -5,7 +5,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from hashlib import sha256
+import importlib.util
 import json
+import ntpath
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -17,9 +19,9 @@ from typing import Any
 
 
 PROPOSAL_FORMAT = "ffxivshare-source-upgrade-policy-proposal"
-PROPOSAL_VERSION = 1
+PROPOSAL_VERSION = 2
 PROPOSAL_BODY_FORMAT = "ffxivshare-source-upgrade-policy-proposal-body"
-PROPOSAL_BODY_VERSION = 1
+PROPOSAL_BODY_VERSION = 2
 REVIEW_PLAN_FORMAT = "ffxivshare-migration-review-plan"
 REVIEW_PLAN_VERSION = 1
 POLICY_FORMAT = "ffxivshare-source-upgrade-policy"
@@ -56,6 +58,7 @@ REQUIRED_EVIDENCE = (
     "migration_review_plan",
     "runtime_fingerprint",
     "source_backup_verification",
+    "source_handoff_manifest",
     "source_media_manifest",
     "source_migration_state",
     "source_snapshot_inspection",
@@ -66,6 +69,7 @@ EXPECTED_EVIDENCE_PATHS = {
     "migration_review_plan": "evidence/proposal-migration-review-plan.json",
     "runtime_fingerprint": "evidence/proposal-runtime-fingerprint.json",
     "source_backup_verification": "evidence/proposal-source-backup-set.json",
+    "source_handoff_manifest": "artifacts/source-handoff-manifest.json",
     "source_media_manifest": "artifacts/source-media-manifest.json",
     "source_migration_state": "evidence/proposal-source-migration-state.json",
     "source_snapshot_inspection": "evidence/proposal-source-inspection.json",
@@ -74,6 +78,7 @@ MANDATORY_EXECUTION_FILES = {
     "manage.py",
     "requirements.txt",
     "ops/migration/ProductionCopyBootstrap.py",
+    "ops/migration/ProductionCopyHandoff.py",
     "ops/migration/Rehearse-ProductionCopy.py",
     "ops/migration/Approve-ProductionCopyPolicy.py",
     "ops/migration/Propose-ProductionCopyPolicy.py",
@@ -138,6 +143,20 @@ class ApprovalError(RuntimeError):
     pass
 
 
+def _load_handoff_module() -> Any:
+    path = Path(__file__).resolve().with_name("ProductionCopyHandoff.py")
+    spec = importlib.util.spec_from_file_location("ffxivshare_frozen_handoff", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Frozen handoff module cannot be loaded.")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+handoff_core = _load_handoff_module()
+
+
 @dataclass(frozen=True)
 class FileSnapshot:
     path: Path
@@ -181,6 +200,15 @@ class LedgerReplay:
     events: tuple[dict[str, Any], ...]
     event_count: int
     head_event_sha256: str
+
+
+HANDOFF_SCOPE_ROLES = (
+    "database_backup_set",
+    "source_media_root",
+    "source_media_manifest",
+    "target_media_root_1",
+    "target_media_root_2",
+)
 
 
 @dataclass
@@ -827,7 +855,11 @@ def _validate_ledger_bindings(
     proposal: dict[str, Any],
     body: dict[str, Any],
     body_reference: dict[str, Any],
+    handoff: dict[str, Any],
 ) -> None:
+    handoff_index, handoff_event = _find_single_event(
+        ledger, "source_handoff_verified"
+    )
     body_index, body_event = _find_single_event(ledger, "policy_proposal_body_created")
     body_details = body_event["details"]
     if (
@@ -850,32 +882,96 @@ def _validate_ledger_bindings(
     ):
         raise ApprovalError("Proposal-body ledger event does not bind the exact body.")
 
+    handoff_details = handoff_event["details"]
+    handoff_scope_roles = [
+        scope["role"] for scope in handoff["access_baseline"]["scopes"]
+    ]
+    if (
+        handoff_event["outcome"] != "passed"
+        or set(handoff_details)
+        != {"access_snapshot_sha256", "artifact", "scope_roles"}
+        or handoff_details["artifact"]
+        != body["evidence"]["source_handoff_manifest"]
+        or handoff_details["access_snapshot_sha256"]
+        != handoff["access_baseline"]["snapshot_sha256"]
+        or handoff_details["scope_roles"] != handoff_scope_roles
+        or tuple(handoff_scope_roles) != HANDOFF_SCOPE_ROLES
+    ):
+        raise ApprovalError("Proposal handoff ledger binding is invalid.")
+
+    final_handoff_index, final_handoff_event = _find_single_event(
+        ledger, "source_handoff_final_verified"
+    )
+    final_handoff_details = final_handoff_event["details"]
+    if (
+        final_handoff_event["outcome"] != "passed"
+        or set(final_handoff_details)
+        != {
+            "access_snapshot_sha256",
+            "artifact",
+            "content_verified",
+            "scope_roles",
+        }
+        or final_handoff_details["artifact"]
+        != body["evidence"]["source_handoff_manifest"]
+        or final_handoff_details["access_snapshot_sha256"]
+        != handoff["access_baseline"]["snapshot_sha256"]
+        or final_handoff_details["scope_roles"] != handoff_scope_roles
+        or final_handoff_details["content_verified"] is not True
+    ):
+        raise ApprovalError("Proposal final handoff ledger binding is invalid.")
+
     source_index, source_event = _find_single_event(ledger, "source_final_verified")
     bundle_index, bundle_event = _find_single_event(
         ledger, "execution_bundle_final_verified"
     )
     terminal_index = len(ledger.events) - 1
-    if not (body_index < source_index < bundle_index < terminal_index):
+    if not (
+        handoff_index
+        < body_index
+        < final_handoff_index
+        < source_index
+        < bundle_index
+        < terminal_index
+    ):
         raise ApprovalError(
-            "Source and execution-bundle final checks must follow the proposal body."
+            "Handoff, source, and execution-bundle final checks are out of order."
         )
     source_details = source_event["details"]
     source_backup_set = (
         source_details.get("backup_set") if isinstance(source_details, dict) else None
     )
-    source_database = (
-        source_backup_set.get("database")
-        if isinstance(source_backup_set, dict)
-        else None
-    )
     if (
         source_event["outcome"] != "passed"
-        or source_details.get("source_unchanged") is not True
-        or not isinstance(source_database, dict)
-        or source_database.get("sha256")
-        != body["policy_projection"]["source_database_sha256"]
+        or not isinstance(source_details, dict)
+        or set(source_details) != {"backup_set", "source_unchanged"}
+        or source_details["source_unchanged"] is not True
+        or not isinstance(source_backup_set, dict)
+        or set(source_backup_set) != {"database", "checksum", "metadata"}
     ):
         raise ApprovalError("Proposal source-final verification is invalid.")
+    for role in ("database", "checksum", "metadata"):
+        artifact = source_backup_set[role]
+        expected_artifact = handoff["database_backup_set"][role]
+        if (
+            not isinstance(artifact, dict)
+            or set(artifact) != {"sha256", "size"}
+            or not isinstance(artifact["size"], int)
+            or isinstance(artifact["size"], bool)
+            or artifact["size"] < 0
+            or not isinstance(artifact["sha256"], str)
+            or SHA256_PATTERN.fullmatch(artifact["sha256"]) is None
+            or artifact["size"] != expected_artifact["size"]
+            or artifact["sha256"] != expected_artifact["sha256"]
+        ):
+            raise ApprovalError(
+                "Proposal source-final backup set does not match the handoff."
+            )
+    if (
+        source_backup_set["database"]["sha256"]
+        != body["policy_projection"]["source_database_sha256"]
+    ):
+        raise ApprovalError("Proposal source-final database digest is inconsistent.")
     bundle_details = bundle_event["details"]
     if (
         bundle_event["outcome"] != "passed"
@@ -1094,13 +1190,48 @@ def _validate_review_plan(value: Any) -> tuple[dict[str, Any], list[list[str]]]:
     return value, pending_nodes
 
 
+def _validate_frozen_handoff(snapshot: FileSnapshot) -> dict[str, Any]:
+    value = _load_json(snapshot, label="source handoff manifest", canonical=True)
+    try:
+        handoff = handoff_core.validate_handoff(value)
+    except handoff_core.HandoffError as exc:
+        raise ApprovalError("Source handoff manifest is invalid.") from exc
+    scopes = handoff["access_baseline"]["scopes"]
+    scope_roles = tuple(scope["role"] for scope in scopes)
+    targets = handoff["rehearsal_targets"]
+    target_paths = [
+        ntpath.normcase(ntpath.normpath(target["path"])) for target in targets
+    ]
+    try:
+        targets_overlap = (
+            ntpath.commonpath((target_paths[0], target_paths[1])) == target_paths[0]
+            or ntpath.commonpath((target_paths[0], target_paths[1])) == target_paths[1]
+        )
+    except ValueError:
+        targets_overlap = False
+    if (
+        scope_roles != HANDOFF_SCOPE_ROLES
+        or [target["slot"] for target in targets] != ["first", "second"]
+        or len(set(target_paths)) != 2
+        or targets_overlap
+    ):
+        raise ApprovalError("Source handoff scope and rehearsal targets are invalid.")
+    return handoff
+
+
 def _validate_evidence(
     *,
     tracker: SnapshotTracker,
     run_root: Path,
     body: dict[str, Any],
     tool_snapshot: FileSnapshot,
-) -> tuple[FileSnapshot, Path, tuple[str, ...], list[list[str]]]:
+) -> tuple[
+    FileSnapshot,
+    Path,
+    tuple[str, ...],
+    list[list[str]],
+    dict[str, Any],
+]:
     evidence = body["evidence"]
     snapshots: dict[str, FileSnapshot] = {}
     for name in REQUIRED_EVIDENCE:
@@ -1192,6 +1323,8 @@ def _validate_evidence(
         or bundle["manifest"] != evidence["execution_inventory"]
     ):
         raise ApprovalError("Proposal bootstrap authority is invalid.")
+
+    handoff = _validate_frozen_handoff(snapshots["source_handoff_manifest"])
 
     runtime = _load_json(
         snapshots["runtime_fingerprint"], label="runtime fingerprint", canonical=False
@@ -1313,6 +1446,7 @@ def _validate_evidence(
         canonical=False,
     )
     backup_artifact = backup.get("artifact") if isinstance(backup, dict) else None
+    handoff_database = handoff["database_backup_set"]["database"]
     if (
         not isinstance(backup, dict)
         or backup.get("format") != "ffxivshare-sqlite-backup-set-verification"
@@ -1322,6 +1456,10 @@ def _validate_evidence(
         or backup.get("inspection_required") is not True
         or not isinstance(backup_artifact, dict)
         or backup_artifact.get("sha256") != projection["source_database_sha256"]
+        or backup_artifact.get("sha256") != handoff_database["sha256"]
+        or backup_artifact.get("size") != handoff_database["size"]
+        or backup_artifact.get("producer_generated_at")
+        != handoff["source"]["captured_at"]
     ):
         raise ApprovalError("Source backup verification evidence is inconsistent.")
 
@@ -1342,6 +1480,7 @@ def _validate_evidence(
         or database.get("sha256") != projection["source_database_sha256"]
         or database.get("sha256_before") != projection["source_database_sha256"]
         or database.get("sha256_after") != projection["source_database_sha256"]
+        or database.get("size_bytes") != handoff_database["size"]
         or database.get("source_unchanged") is not True
         or not isinstance(checks, dict)
         or checks.get("query_only") is not True
@@ -1370,9 +1509,12 @@ def _validate_evidence(
         canonical=False,
     )
     source_snapshot = media.get("source_snapshot") if isinstance(media, dict) else None
+    handoff_media = handoff["source_media"]["manifest"]
     if (
         snapshots["source_media_manifest"].sha256
         != projection["source_media_manifest_sha256"]
+        or snapshots["source_media_manifest"].sha256 != handoff_media["sha256"]
+        or snapshots["source_media_manifest"].size != handoff_media["size"]
         or not isinstance(media, dict)
         or media.get("format") != "ffxivshare-media-manifest"
         or media.get("format_version") != 2
@@ -1383,9 +1525,20 @@ def _validate_evidence(
         or set(source_snapshot) != {"id", "offline_confirmed"}
         or source_snapshot.get("offline_confirmed") is not True
         or source_snapshot.get("id") != projection["source_media_snapshot_id"]
+        or source_snapshot.get("id") != handoff["source_media"]["snapshot_id"]
+        or source_snapshot.get("id") != handoff_media["snapshot_id"]
+        or media.get("generated_at") != handoff_media["generated_at"]
+        or media.get("file_count") != handoff_media["file_count"]
+        or media.get("total_size") != handoff_media["total_size"]
     ):
         raise ApprovalError("Source media-manifest evidence is inconsistent.")
-    return snapshots["bootstrap"], code_root, execution_files, pending_nodes
+    return (
+        snapshots["bootstrap"],
+        code_root,
+        execution_files,
+        pending_nodes,
+        handoff,
+    )
 
 
 def _validate_completion(
@@ -1825,7 +1978,13 @@ def _validate_binding(
         maximum_size=MAX_JSON_BYTES,
         label="Loaded approval tool",
     )
-    _bootstrap_snapshot, code_root, execution_files, pending_nodes = _validate_evidence(
+    (
+        _bootstrap_snapshot,
+        code_root,
+        execution_files,
+        pending_nodes,
+        handoff,
+    ) = _validate_evidence(
         tracker=tracker,
         run_root=run_root,
         body=body,
@@ -1851,6 +2010,7 @@ def _validate_binding(
         proposal=proposal,
         body=body,
         body_reference=proposal["body_artifact"],
+        handoff=handoff,
     )
 
     completion_snapshot = tracker.read(

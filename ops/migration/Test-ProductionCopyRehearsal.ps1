@@ -82,6 +82,14 @@ import subprocess
 import sys
 
 
+assert sys.flags.isolated
+assert sys.flags.no_user_site
+assert sys.flags.ignore_environment
+assert sys.flags.dont_write_bytecode
+assert sys.flags.utf8_mode
+assert sys.flags.optimize == 0
+
+
 repository_root = Path(sys.argv[1]).resolve()
 orchestrator_path = Path(sys.argv[2]).resolve()
 test_root = Path(sys.argv[3]).resolve()
@@ -127,6 +135,33 @@ def write_json(path: Path, payload: object) -> None:
 
 def file_hash(path: Path) -> str:
     return sha256(path.read_bytes()).hexdigest()
+
+
+class OpenForbiddenPath:
+    def __init__(self, path: Path):
+        self.path = path
+
+    def __fspath__(self) -> str:
+        return os.fspath(self.path)
+
+    def open(self, *_args, **_kwargs):
+        raise AssertionError("Oversized checkpoint opened the artifact")
+
+
+oversized_checkpoint = test_root / "oversized-checkpoint.bin"
+with oversized_checkpoint.open("wb") as stream:
+    stream.seek(1024)
+    stream.write(b"\0")
+try:
+    module._regular_file_checkpoint(
+        OpenForbiddenPath(oversized_checkpoint),
+        issue_prefix="oversized_checkpoint",
+        maximum_size=1024,
+    )
+except module.RehearsalBlocked as exc:
+    assert exc.code == "oversized_checkpoint_too_large"
+else:
+    raise AssertionError("Oversized checkpoint was not rejected before open")
 
 
 def argument_after(argv: list[str], name: str) -> Path:
@@ -676,12 +711,104 @@ bootstrap_policy = bootstrap_evidence / "approved-policy.json"
 bootstrap_policy.write_bytes(bootstrap_config.source_upgrade_policy.read_bytes())
 bootstrap_proposal = bootstrap_evidence / "approved-proposal.json"
 bootstrap_review = bootstrap_evidence / "approved-review.json"
-write_json(bootstrap_proposal, {"fixture": "approved-proposal"})
 write_json(bootstrap_review, {"fixture": "approved-review"})
 bootstrap_record = bootstrap_evidence / "bootstrap.json"
 write_json(bootstrap_record, {"fixture": "bootstrap"})
 proposal_run_root = bootstrap_config.run_root.parent / "proposal-run"
 proposal_run_root.mkdir()
+proposal_artifacts = proposal_run_root / "artifacts"
+proposal_artifacts.mkdir()
+secondary_target = bootstrap_config.run_root.parent / "bootstrap-second-target"
+secondary_target.mkdir()
+source_media_root = bootstrap_config.run_root.parent / "bootstrap-source-media"
+source_media_root.mkdir()
+handoff_access = {
+    "snapshot_sha256": "9" * 64,
+    "scopes": [
+        {"role": role}
+        for role in (
+            "database_backup_set",
+            "source_media_root",
+            "source_media_manifest",
+            "target_media_root_1",
+            "target_media_root_2",
+        )
+    ],
+}
+handoff_payload = {
+    "database_backup_set": {
+        "database": {
+            "path": str(bootstrap_config.source_database),
+            "size": bootstrap_config.source_database.stat().st_size,
+            "sha256": file_hash(bootstrap_config.source_database),
+        },
+        "checksum": {
+            "path": str(bootstrap_config.source_checksum),
+            "size": bootstrap_config.source_checksum.stat().st_size,
+            "sha256": file_hash(bootstrap_config.source_checksum),
+        },
+        "metadata": {
+            "path": str(bootstrap_config.source_metadata),
+            "size": bootstrap_config.source_metadata.stat().st_size,
+            "sha256": file_hash(bootstrap_config.source_metadata),
+        },
+    },
+    "source_media": {
+        "root": str(source_media_root),
+        "manifest": {"path": str(bootstrap_config.source_media_manifest)},
+    },
+    "rehearsal_targets": [
+        {
+            "slot": "first",
+            "path": str(bootstrap_config.target_media_root),
+            "snapshot_id": bootstrap_config.target_media_snapshot_id,
+        },
+        {
+            "slot": "second",
+            "path": str(secondary_target),
+            "snapshot_id": "target-fixture-second",
+        },
+    ],
+    "access_baseline": handoff_access,
+    "limitations": {
+        "tamper_proof": False,
+        "continuous_acl_stability_proven": False,
+        "offline_process_state": "operator_asserted",
+        "trusted_operator_can_override_acl": True,
+    },
+}
+module._assert_external_handoff_artifact_checkpoint(
+    handoff_payload,
+    "checksum",
+    bootstrap_config.source_checksum.stat().st_size,
+    file_hash(bootstrap_config.source_checksum),
+)
+try:
+    module._assert_external_handoff_artifact_checkpoint(
+        handoff_payload,
+        "checksum",
+        bootstrap_config.source_checksum.stat().st_size,
+        "0" * 64,
+    )
+except module.RehearsalBlocked as exc:
+    assert exc.code == "external_handoff_source_checksum_mismatch"
+else:
+    raise AssertionError("Handoff sidecar digest mismatch was accepted.")
+handoff_path = proposal_artifacts / "source-handoff-manifest.json"
+write_json(handoff_path, handoff_payload)
+handoff_reference = {
+    "path": "artifacts/source-handoff-manifest.json",
+    "size": handoff_path.stat().st_size,
+    "sha256": file_hash(handoff_path),
+}
+handoff_verification_trace = []
+write_json(
+    bootstrap_proposal,
+    {"body": {"evidence": {"source_handoff_manifest": handoff_reference}}},
+)
+bootstrap_policy_payload = load_result(bootstrap_policy)
+bootstrap_policy_payload["proposal_sha256"] = file_hash(bootstrap_proposal)
+write_json(bootstrap_policy, bootstrap_policy_payload)
 bootstrap_config = replace(
     bootstrap_config,
     repository_root=bootstrap_config.run_root / "code",
@@ -700,14 +827,95 @@ bootstrap_context = module.BootstrapInnerContext(
     policy_path=bootstrap_policy,
     proposal_path=bootstrap_proposal,
     review_path=bootstrap_review,
+    repository_root=repository_root,
 )
+
+
+class FixtureHandoffVerifier:
+    def __init__(self):
+        self.live_verification_count = 0
+
+    def load_handoff(self, path: Path):
+        assert path == handoff_path
+        return handoff_payload
+
+    def verify_live_handoff(
+        self,
+        value,
+        original_repository_root,
+        disallowed_roots=(),
+        verify_content=True,
+    ):
+        assert value == handoff_payload
+        assert original_repository_root == repository_root
+        assert bootstrap_config.run_root in disallowed_roots
+        assert proposal_run_root in disallowed_roots
+        assert handoff_path in disallowed_roots
+        assert verify_content is False
+        phase = (
+            "preflight"
+            if self.live_verification_count == 0
+            else "final"
+        )
+        self.live_verification_count += 1
+        assert self.live_verification_count <= 2
+        handoff_verification_trace.append(f"{phase}_live_verified")
+        return handoff_access
+
+    @staticmethod
+    def compare_access_baselines(expected, actual):
+        assert expected == actual
+
+
+fixture_handoff_verifier = FixtureHandoffVerifier()
+
+
+def load_fixture_handoff_verifier(rehearsal):
+    rehearsal.external_handoff_verifier = fixture_handoff_verifier
+    return fixture_handoff_verifier
+
+
 loaded_orchestrator = module.__file__
+loaded_handoff_loader = module.Rehearsal._load_external_handoff_verifier
+loaded_checkpoint = module._regular_file_checkpoint
+loaded_record_artifact = module.Rehearsal._record_artifact
+
+
+def trace_handoff_checkpoint(path, *args, **kwargs):
+    result = loaded_checkpoint(path, *args, **kwargs)
+    if (
+        Path(path) == bootstrap_proposal
+        and kwargs.get("expected_identity") is None
+    ):
+        assert kwargs.get("maximum_size") == 32 * 1024 * 1024
+        handoff_verification_trace.append("approved_proposal_bounded_checkpoint")
+    if Path(path) == handoff_path:
+        if kwargs.get("expected_identity") is None:
+            assert kwargs.get("maximum_size") == handoff_reference["size"]
+            handoff_verification_trace.append("handoff_bounded_checkpoint")
+        elif kwargs.get("expected_sha256") == handoff_reference["sha256"]:
+            handoff_verification_trace.append("bound_checkpoint")
+    return result
+
+
+def trace_handoff_artifact(self, stage, path, **details):
+    if stage in {
+        "external_handoff_preflight_verified",
+        "external_handoff_final_verified",
+    }:
+        handoff_verification_trace.append(stage)
+    return loaded_record_artifact(self, stage, path, **details)
+
+
 module.__file__ = str(
     bootstrap_config.repository_root
     / "ops"
     / "migration"
     / "Rehearse-ProductionCopy.py"
 )
+module.Rehearsal._load_external_handoff_verifier = load_fixture_handoff_verifier
+module._regular_file_checkpoint = trace_handoff_checkpoint
+module.Rehearsal._record_artifact = trace_handoff_artifact
 try:
     bootstrap_status, bootstrap_result_path = module.run_rehearsal(
         bootstrap_config,
@@ -716,7 +924,25 @@ try:
     )
 finally:
     module.__file__ = loaded_orchestrator
+    module.Rehearsal._load_external_handoff_verifier = loaded_handoff_loader
+    module._regular_file_checkpoint = loaded_checkpoint
+    module.Rehearsal._record_artifact = loaded_record_artifact
 assert bootstrap_status == "completed", load_result(bootstrap_result_path)
+assert handoff_verification_trace.count("approved_proposal_bounded_checkpoint") == 1
+assert handoff_verification_trace.count("handoff_bounded_checkpoint") == 1
+assert handoff_verification_trace.index(
+    "approved_proposal_bounded_checkpoint"
+) < handoff_verification_trace.index("handoff_bounded_checkpoint")
+assert handoff_verification_trace.index(
+    "handoff_bounded_checkpoint"
+) < handoff_verification_trace.index("preflight_live_verified")
+for phase in ("preflight", "final"):
+    live_index = handoff_verification_trace.index(f"{phase}_live_verified")
+    artifact_index = handoff_verification_trace.index(
+        f"external_handoff_{phase}_verified"
+    )
+    assert handoff_verification_trace[live_index + 1] == "bound_checkpoint"
+    assert live_index < artifact_index
 bootstrap_events = [
     json.loads(line)
     for line in (bootstrap_config.run_root / "evidence" / "events.jsonl")
@@ -744,11 +970,37 @@ assert bootstrap_final_snapshot_events[0]["details"][
     "backup_set_unchanged"
 ] is True
 bootstrap_stage_order = [event["stage"] for event in bootstrap_events]
+preflight_handoff_events = [
+    event
+    for event in bootstrap_events
+    if event["stage"] == "external_handoff_preflight_verified"
+]
+final_handoff_events = [
+    event
+    for event in bootstrap_events
+    if event["stage"] == "external_handoff_final_verified"
+]
+assert len(preflight_handoff_events) == 1
+assert len(final_handoff_events) == 1
+assert preflight_handoff_events[0]["details"]["active_target_slot"] == "first"
+assert final_handoff_events[0]["details"]["active_target_slot"] == "first"
+assert preflight_handoff_events[0]["details"]["handoff_sha256"] == file_hash(
+    handoff_path
+)
+assert final_handoff_events[0]["details"]["handoff_sha256"] == file_hash(
+    handoff_path
+)
+assert bootstrap_stage_order.index(
+    "approved_policy_evidence_verified"
+) < bootstrap_stage_order.index("external_handoff_preflight_verified")
 assert bootstrap_stage_order.index(
     "target_snapshot_set_final_verified"
 ) < bootstrap_stage_order.index("runtime_fingerprint_final_verified")
 assert bootstrap_stage_order.index(
     "runtime_fingerprint_final_verified"
+) < bootstrap_stage_order.index("external_handoff_final_verified")
+assert bootstrap_stage_order.index(
+    "external_handoff_final_verified"
 ) < bootstrap_stage_order.index("deployment_candidate_verified")
 
 # Exercise the embedded migration-state probe against a real temporary Django
@@ -965,6 +1217,8 @@ synthetic_execution = synthetic_parent / "execution"
 synthetic_prefix = synthetic_parent / "prefix"
 synthetic_base = synthetic_parent / "base"
 synthetic_site = synthetic_prefix / "Lib" / "site-packages"
+synthetic_base_lib = synthetic_base / "Lib"
+synthetic_base_site = synthetic_base_lib / "site-packages"
 synthetic_package = synthetic_prefix / "django"
 synthetic_dormant = synthetic_prefix / "frontend"
 for directory in (
@@ -973,6 +1227,7 @@ for directory in (
     synthetic_package,
     synthetic_dormant,
     synthetic_base,
+    synthetic_base_site,
 ):
     directory.mkdir(parents=True, exist_ok=True)
 (synthetic_execution / "requirements.txt").write_text("", encoding="utf-8")
@@ -981,6 +1236,10 @@ synthetic_pyvenv = synthetic_prefix / "pyvenv.cfg"
 synthetic_pyvenv.write_bytes(b"home = before\n")
 (synthetic_base / "python.exe").write_bytes(b"synthetic-base-python\n")
 (synthetic_base / "_sqlite3.pyd").write_bytes(b"synthetic-sqlite\n")
+synthetic_stdlib_file = synthetic_base_lib / "stdlib_probe.py"
+synthetic_stdlib_file.write_bytes(b"VALUE = 'stable'\n")
+synthetic_site_package = synthetic_site / "venv_probe.py"
+synthetic_site_package.write_bytes(b"VALUE = 'stable'\n")
 synthetic_package_file = synthetic_package / "__init__.py"
 synthetic_package_file.write_bytes(b"VALUE = 'stable'\n")
 synthetic_resource_file = synthetic_package / "settings.json"
@@ -1009,9 +1268,10 @@ import sysconfig
 import _sqlite3
 
 orchestrator, destination, prefix, base = map(Path, sys.argv[1:5])
+activate_base_site = len(sys.argv) == 6 and sys.argv[5] == "--activate-base-site"
 tamper_after_fsync = (
     Path(sys.argv[5]).resolve(strict=True)
-    if len(sys.argv) == 6
+    if len(sys.argv) == 6 and not activate_base_site
     else None
 )
 spec = importlib.util.spec_from_file_location("synthetic_rehearsal", orchestrator)
@@ -1026,11 +1286,24 @@ sys.prefix = str(prefix)
 sys.base_prefix = str(base)
 sys.executable = str(prefix / "python.exe")
 sys._base_executable = str(base / "python.exe")
-sys.path[:] = [str(Path.cwd().resolve()), str(prefix), str(base)]
+sys.path[:] = [
+    str(Path.cwd().resolve()),
+    str(base / "Lib"),
+    str(base),
+    str(prefix),
+    str(site_root),
+]
+if activate_base_site:
+    sys.path.insert(0, str(base / "Lib" / "site-packages"))
 site.ENABLE_USER_SITE = False
 site.getusersitepackages = lambda: str(prefix / "user-site")
 site.getsitepackages = lambda: [str(site_root)]
-sysconfig.get_path = lambda name: str(site_root)
+def synthetic_get_path(name, *, scheme=None, vars=None, expand=True):
+    if vars is not None and name in {"purelib", "platlib"}:
+        return str(base / "Lib" / "site-packages")
+    return str(site_root)
+
+sysconfig.get_path = synthetic_get_path
 importlib.metadata.distributions = lambda: []
 importlib.metadata.packages_distributions = lambda: {}
 _sqlite3.__file__ = str(base / "_sqlite3.pyd")
@@ -1078,7 +1351,13 @@ prefix = Path(prefix).resolve(strict=True)
 base = Path(base).resolve(strict=True)
 sys.prefix = str(prefix)
 sys.base_prefix = str(base)
-sys.path[:] = [str(Path.cwd().resolve()), str(prefix), str(base)]
+sys.path[:] = [
+    str(Path.cwd().resolve()),
+    str(base / "Lib"),
+    str(base),
+    str(prefix),
+    str(prefix / "Lib" / "site-packages"),
+]
 sys.argv = [
     "runtime-checkpoint",
     source,
@@ -1147,6 +1426,16 @@ assert synthetic_package_file.read_bytes() == b"VALUE = 'drift!'\n", (
 )
 synthetic_package_file.write_bytes(b"VALUE = 'stable'\n")
 synthetic_before = run_synthetic_full(synthetic_parent / "before.json")
+base_runtime_closure = synthetic_before["projection"]["python"][
+    "base_runtime_closure"
+]
+assert base_runtime_closure["excluded_inactive_site_package_roots"] == [
+    "$BASE_PREFIX/Lib/site-packages"
+]
+assert not any(
+    item["path"].startswith("$BASE_PREFIX/Lib/site-packages/")
+    for item in synthetic_before["checkpoint"]["identity_inventory"]
+)
 prefix_scope = next(
     scope
     for scope in synthetic_before["checkpoint"]["closure_scopes"]
@@ -1167,6 +1456,148 @@ dormant_scope = next(
 )
 assert dormant_scope["mode"] == "recursive_import_entries"
 assert "$PREFIX/frontend/asset.json" not in dormant_scope["files"]
+inactive_base_package = synthetic_base_site / "external_probe"
+inactive_base_package.mkdir()
+inactive_base_package_file = inactive_base_package / "__init__.py"
+inactive_base_package_file.write_bytes(b"VALUE = 'external'\n")
+synthetic_quick = subprocess.run(
+    [
+        sys.executable,
+        "-E",
+        "-s",
+        "-B",
+        "-X",
+        "utf8",
+        str(synthetic_quick_wrapper),
+        str(orchestrator_path),
+        str(synthetic_parent / "before.json"),
+        synthetic_before["fingerprint_sha256"],
+        file_hash(synthetic_parent / "before.json"),
+        str(synthetic_parent / "quick-inactive-base-site.json"),
+        str(synthetic_prefix),
+        str(synthetic_base),
+    ],
+    cwd=synthetic_execution,
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=False,
+)
+assert synthetic_quick.returncode == 0, synthetic_quick.stderr.decode(
+    "utf-8", errors="replace"
+)
+synthetic_inactive_after = run_synthetic_full(
+    synthetic_parent / "after-inactive-base-site.json"
+)
+assert synthetic_before["fingerprint_sha256"] == synthetic_inactive_after[
+    "fingerprint_sha256"
+]
+assert synthetic_before["checkpoint"] == synthetic_inactive_after["checkpoint"]
+assert not any(
+    item["path"].startswith("$BASE_PREFIX/Lib/site-packages/")
+    for item in synthetic_inactive_after["checkpoint"]["identity_inventory"]
+)
+inactive_base_package_file.write_bytes(b"VALUE = 'changed!'\n")
+synthetic_inactive_changed = run_synthetic_full(
+    synthetic_parent / "after-inactive-base-site-change.json"
+)
+assert synthetic_before["fingerprint_sha256"] == synthetic_inactive_changed[
+    "fingerprint_sha256"
+]
+assert synthetic_before["checkpoint"] == synthetic_inactive_changed["checkpoint"]
+
+active_base_site_output = synthetic_parent / "active-base-site.json"
+active_base_site = subprocess.run(
+    [
+        sys.executable,
+        "-E",
+        "-s",
+        "-B",
+        "-X",
+        "utf8",
+        str(synthetic_wrapper),
+        str(orchestrator_path),
+        str(active_base_site_output),
+        str(synthetic_prefix),
+        str(synthetic_base),
+        "--activate-base-site",
+    ],
+    cwd=synthetic_execution,
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=False,
+)
+assert active_base_site.returncode != 0
+assert not active_base_site_output.exists()
+assert b"base Python site-packages directory is active" in active_base_site.stderr
+
+synthetic_stdlib_file.write_bytes(b"VALUE = 'drift!'\n")
+synthetic_quick = subprocess.run(
+    [
+        sys.executable,
+        "-E",
+        "-s",
+        "-B",
+        "-X",
+        "utf8",
+        str(synthetic_quick_wrapper),
+        str(orchestrator_path),
+        str(synthetic_parent / "before.json"),
+        synthetic_before["fingerprint_sha256"],
+        file_hash(synthetic_parent / "before.json"),
+        str(synthetic_parent / "quick-base-stdlib-drift.json"),
+        str(synthetic_prefix),
+        str(synthetic_base),
+    ],
+    cwd=synthetic_execution,
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=False,
+)
+assert synthetic_quick.returncode != 0
+synthetic_stdlib_after = run_synthetic_full(
+    synthetic_parent / "after-base-stdlib-drift.json"
+)
+assert synthetic_before["fingerprint_sha256"] != synthetic_stdlib_after[
+    "fingerprint_sha256"
+]
+synthetic_stdlib_file.write_bytes(b"VALUE = 'stable'\n")
+
+synthetic_site_package.write_bytes(b"VALUE = 'drift!'\n")
+synthetic_quick = subprocess.run(
+    [
+        sys.executable,
+        "-E",
+        "-s",
+        "-B",
+        "-X",
+        "utf8",
+        str(synthetic_quick_wrapper),
+        str(orchestrator_path),
+        str(synthetic_parent / "before.json"),
+        synthetic_before["fingerprint_sha256"],
+        file_hash(synthetic_parent / "before.json"),
+        str(synthetic_parent / "quick-venv-site-drift.json"),
+        str(synthetic_prefix),
+        str(synthetic_base),
+    ],
+    cwd=synthetic_execution,
+    stdin=subprocess.DEVNULL,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    check=False,
+)
+assert synthetic_quick.returncode != 0
+synthetic_site_after = run_synthetic_full(
+    synthetic_parent / "after-venv-site-drift.json"
+)
+assert synthetic_before["fingerprint_sha256"] != synthetic_site_after[
+    "fingerprint_sha256"
+]
+synthetic_site_package.write_bytes(b"VALUE = 'stable'\n")
+
 late_resource = synthetic_package / "late.json"
 late_resource.write_text('{"late":true}\n', encoding="utf-8", newline="\n")
 synthetic_quick = subprocess.run(
@@ -1404,7 +1835,9 @@ print("Production-copy rehearsal contract tests passed.")
 
 try {
     Set-Content -LiteralPath $fixtureScript -Value $fixtureSource -Encoding UTF8
-    & $PythonExecutable -B $fixtureScript $RepositoryRoot $orchestrator $temporaryRoot
+    & $PythonExecutable `
+        -I -B -X utf8 `
+        $fixtureScript $RepositoryRoot $orchestrator $temporaryRoot
     $exitCode = $LASTEXITCODE
     $global:LASTEXITCODE = 0
     Assert-Contract `

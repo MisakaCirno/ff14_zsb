@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from datetime import UTC, datetime
 from hashlib import sha256
 import importlib.util
@@ -13,9 +14,9 @@ from typing import Any
 
 
 PROPOSAL_FORMAT = "ffxivshare-source-upgrade-policy-proposal"
-PROPOSAL_VERSION = 1
+PROPOSAL_VERSION = 2
 PROPOSAL_BODY_FORMAT = "ffxivshare-source-upgrade-policy-proposal-body"
-PROPOSAL_BODY_VERSION = 1
+PROPOSAL_BODY_VERSION = 2
 REVIEW_PLAN_FORMAT = "ffxivshare-migration-review-plan"
 REVIEW_PLAN_VERSION = 1
 POLICY_FORMAT = "ffxivshare-source-upgrade-policy"
@@ -28,9 +29,17 @@ REQUIRED_EVIDENCE = (
     "migration_review_plan",
     "runtime_fingerprint",
     "source_backup_verification",
+    "source_handoff_manifest",
     "source_media_manifest",
     "source_migration_state",
     "source_snapshot_inspection",
+)
+HANDOFF_SCOPE_ROLES = (
+    "database_backup_set",
+    "source_media_root",
+    "source_media_manifest",
+    "target_media_root_1",
+    "target_media_root_2",
 )
 
 
@@ -95,6 +104,20 @@ def _load_rehearsal_module() -> Any:
 core = _load_rehearsal_module()
 
 
+def _load_handoff_module() -> Any:
+    path = Path(__file__).resolve().with_name("ProductionCopyHandoff.py")
+    spec = importlib.util.spec_from_file_location("ffxivshare_frozen_handoff", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Frozen handoff module cannot be loaded.")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+handoff_core = _load_handoff_module()
+
+
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
@@ -110,6 +133,7 @@ def _parse_arguments() -> argparse.Namespace:
     parser.add_argument("--source-checksum", required=True)
     parser.add_argument("--source-metadata", required=True)
     parser.add_argument("--source-media-manifest", required=True)
+    parser.add_argument("--source-handoff-manifest", required=True)
     parser.add_argument("--policy-id", required=True)
     parser.add_argument("--proposal-id", required=True)
     parser.add_argument("--confirm-source-immutable", action="store_true")
@@ -200,6 +224,7 @@ def _inner_context() -> dict[str, Any]:
         or configuration["inner_entrypoint"] != INNER_ENTRYPOINT
         or configuration["inner_arguments"] != sys.argv[1:]
         or not isinstance(configuration["run_root"], str)
+        or not isinstance(configuration["repository_root"], str)
         or core._canonical_key(Path(configuration["run_root"]))
         != core._canonical_key(run_root)
         or not isinstance(bundle, dict)
@@ -247,11 +272,16 @@ def _inner_context() -> dict[str, Any]:
     expected_files = tuple(item["path"] for item in files)
     if (
         list(expected_files) != sorted(set(expected_files))
+        or "ops/migration/ProductionCopyHandoff.py" not in expected_files
         or core._canonical_json_sha256(files) != bundle["frozen_sha256"]
         or core._execution_snapshot_sha256(code_root, expected_files)
         != bundle["frozen_sha256"]
     ):
         raise core.ConfigurationError("Proposal frozen execution bundle changed.")
+    repository_root = core._absolute_path(
+        configuration["repository_root"],
+        label="Bootstrap repository root",
+    )
     return {
         "run_root": run_root,
         "record_path": record_path,
@@ -261,6 +291,7 @@ def _inner_context() -> dict[str, Any]:
         "bundle_sha256": bundle["frozen_sha256"],
         "bundle_files": expected_files,
         "manifest_path": manifest_path,
+        "repository_root": repository_root,
         "workspace_access_control": record.get("workspace_access_control"),
     }
 
@@ -349,59 +380,141 @@ def _validate_review_plan(path: Path) -> dict[str, Any]:
     return value
 
 
-def _proposal_config(arguments: argparse.Namespace, context: dict[str, Any]) -> Any:
+def _lexical_path_key(path: str | Path) -> str:
+    return os.path.normcase(os.path.normpath(os.fspath(path)))
+
+
+def _lexical_paths_overlap(first: str | Path, second: str | Path) -> bool:
+    first_key = _lexical_path_key(first)
+    second_key = _lexical_path_key(second)
+    try:
+        common = os.path.commonpath((first_key, second_key))
+    except ValueError:
+        return False
+    return common in {first_key, second_key}
+
+
+def _handoff_paths_match_config(handoff: dict[str, Any], config: Any) -> bool:
+    database_backup_set = handoff["database_backup_set"]
+    expected_database_paths = {
+        "database": config.source_database,
+        "checksum": config.source_checksum,
+        "metadata": config.source_metadata,
+    }
+    if any(
+        _lexical_path_key(database_backup_set[role]["path"])
+        != _lexical_path_key(path)
+        for role, path in expected_database_paths.items()
+    ):
+        return False
+    return (
+        _lexical_path_key(handoff["source_media"]["manifest"]["path"])
+        == _lexical_path_key(config.source_media_manifest)
+    )
+
+
+def _verify_live_handoff(
+    handoff: dict[str, Any],
+    config: Any,
+    source_handoff_manifest: Path,
+    original_repository_root: Path,
+    *,
+    verify_content: bool,
+) -> dict[str, Any]:
+    try:
+        access_baseline = handoff_core.verify_live_handoff(
+            handoff,
+            original_repository_root,
+            disallowed_roots=(
+                config.repository_root,
+                config.run_root,
+                source_handoff_manifest,
+            ),
+            verify_content=verify_content,
+        )
+    except handoff_core.HandoffError as exc:
+        raise core.RehearsalBlocked("source_handoff_live_verification_failed") from exc
+    scope_roles = tuple(scope["role"] for scope in access_baseline["scopes"])
+    if scope_roles != HANDOFF_SCOPE_ROLES:
+        raise core.RehearsalBlocked("source_handoff_scope_roles_invalid")
+    return access_baseline
+
+
+def _proposal_config(
+    arguments: argparse.Namespace,
+    context: dict[str, Any],
+) -> tuple[Any, Path]:
     if not arguments.confirm_source_immutable:
         raise core.ConfigurationError("--confirm-source-immutable is required.")
     if core.POLICY_ID_PATTERN.fullmatch(arguments.policy_id or "") is None:
         raise core.ConfigurationError("Policy id is invalid.")
     if core.POLICY_ID_PATTERN.fullmatch(arguments.proposal_id or "") is None:
         raise core.ConfigurationError("Proposal id is invalid.")
-    source_database = core._existing_path(
-        arguments.source_database, label="Source database", directory=False
+    source_database = core._absolute_path(
+        arguments.source_database, label="Source database"
     )
-    source_checksum = core._existing_path(
-        arguments.source_checksum, label="Source checksum", directory=False
+    source_checksum = core._absolute_path(
+        arguments.source_checksum, label="Source checksum"
     )
-    source_metadata = core._existing_path(
-        arguments.source_metadata, label="Source metadata", directory=False
+    source_metadata = core._absolute_path(
+        arguments.source_metadata, label="Source metadata"
     )
-    source_media_manifest = core._existing_path(
+    source_media_manifest = core._absolute_path(
         arguments.source_media_manifest,
         label="Source media manifest",
+    )
+    source_handoff_manifest = core._existing_path(
+        arguments.source_handoff_manifest,
+        label="Source handoff manifest",
         directory=False,
     )
-    if source_checksum != source_database.with_name(source_database.name + ".sha256"):
+    source_input_paths = (
+        source_database,
+        source_checksum,
+        source_metadata,
+        source_media_manifest,
+        source_handoff_manifest,
+    )
+    if len({_lexical_path_key(path) for path in source_input_paths}) != len(
+        source_input_paths
+    ):
+        raise core.ConfigurationError("Source handoff inputs must be distinct files.")
+    if _lexical_path_key(source_checksum) != _lexical_path_key(
+        source_database.with_name(source_database.name + ".sha256")
+    ):
         raise core.ConfigurationError("Source checksum name is invalid.")
-    if source_metadata != source_database.with_name(
-        source_database.name + ".metadata.json"
+    if _lexical_path_key(source_metadata) != _lexical_path_key(
+        source_database.with_name(source_database.name + ".metadata.json")
     ):
         raise core.ConfigurationError("Source metadata name is invalid.")
-    for suffix in ("-wal", "-shm", "-journal"):
-        if os.path.lexists(Path(f"{source_database}{suffix}")):
-            raise core.ConfigurationError("Source database has a live SQLite sidecar.")
     run_root = context["run_root"]
-    for directory in (
-        source_database.parent,
-        source_media_manifest.parent,
-    ):
-        if core._is_within(run_root, directory) or core._is_within(
-            directory,
+    if any(
+        _lexical_paths_overlap(source_handoff_manifest, forbidden)
+        for forbidden in (
+            context["repository_root"],
             run_root,
-        ):
-            raise core.ConfigurationError("RunRoot overlaps an immutable input directory.")
-    return core.RehearsalConfig(
-        repository_root=run_root / "code",
-        python_executable=Path(sys.executable).resolve(),
-        source_database=source_database,
-        source_checksum=source_checksum,
-        source_metadata=source_metadata,
-        source_upgrade_policy=context["record_path"],
-        source_media_manifest=source_media_manifest,
-        target_media_root=run_root / "target",
-        target_media_snapshot_id="proposal-not-applicable",
-        run_root=run_root,
-        confirm_source_immutable=True,
-        confirm_target_media_offline=True,
+            run_root / "code",
+        )
+    ):
+        raise core.ConfigurationError(
+            "Source handoff manifest overlaps a trusted code or RunRoot scope."
+        )
+    return (
+        core.RehearsalConfig(
+            repository_root=run_root / "code",
+            python_executable=Path(sys.executable).resolve(),
+            source_database=source_database,
+            source_checksum=source_checksum,
+            source_metadata=source_metadata,
+            source_upgrade_policy=context["record_path"],
+            source_media_manifest=source_media_manifest,
+            target_media_root=run_root / "target",
+            target_media_snapshot_id="proposal-not-applicable",
+            run_root=run_root,
+            confirm_source_immutable=True,
+            confirm_target_media_offline=True,
+        ),
+        source_handoff_manifest,
     )
 
 
@@ -409,7 +522,7 @@ def _execute_proposal(
     arguments: argparse.Namespace,
     context: dict[str, Any],
 ) -> tuple[dict[str, Any], Any]:
-    config = _proposal_config(arguments, context)
+    config, source_handoff_manifest = _proposal_config(arguments, context)
     rehearsal = core.Rehearsal(
         config,
         core.SubprocessRunner(),
@@ -417,7 +530,6 @@ def _execute_proposal(
     )
     rehearsal.execution_bundle_expected = context["bundle_sha256"]
     rehearsal.execution_bundle_files = context["bundle_files"]
-    base_env = core._base_environment(config, config.run_root)
     rehearsal.ledger.record(
         "proposal_started",
         "passed",
@@ -428,6 +540,71 @@ def _execute_proposal(
             "live_production_service_access_requested": False,
             "network_isolation_enforced": False,
             "network_access_observation": "not_measured",
+        },
+    )
+
+    handoff_size, handoff_sha256, handoff_identity = core._regular_file_checkpoint(
+        source_handoff_manifest,
+        issue_prefix="source_handoff_manifest",
+        maximum_size=handoff_core.MAX_HANDOFF_BYTES,
+    )
+    try:
+        handoff = handoff_core.load_handoff(source_handoff_manifest)
+    except handoff_core.HandoffError as exc:
+        raise core.RehearsalBlocked("source_handoff_manifest_invalid") from exc
+    if not _handoff_paths_match_config(handoff, config):
+        raise core.RehearsalBlocked("source_handoff_manifest_paths_mismatch")
+    handoff_backup_set = handoff["database_backup_set"]
+    config = replace(
+        config,
+        source_database=Path(handoff_backup_set["database"]["path"]),
+        source_checksum=Path(handoff_backup_set["checksum"]["path"]),
+        source_metadata=Path(handoff_backup_set["metadata"]["path"]),
+        source_media_manifest=Path(handoff["source_media"]["manifest"]["path"]),
+    )
+    rehearsal.config = config
+    base_env = core._base_environment(config, config.run_root)
+    rehearsal.production_copy_read_performed = True
+    access_baseline = _verify_live_handoff(
+        handoff,
+        config,
+        source_handoff_manifest,
+        context["repository_root"],
+        verify_content=True,
+    )
+    for suffix in ("-wal", "-shm", "-journal"):
+        if os.path.lexists(Path(f"{config.source_database}{suffix}")):
+            raise core.RehearsalBlocked("source_database_has_live_sqlite_sidecar")
+    handoff_copy = rehearsal.artifacts / "source-handoff-manifest.json"
+    copied_handoff_size, copied_handoff_sha256 = core._copy_stable(
+        source_handoff_manifest,
+        handoff_copy,
+    )
+    if (
+        copied_handoff_size != handoff_size
+        or copied_handoff_sha256 != handoff_sha256
+    ):
+        raise core.RehearsalBlocked("source_handoff_manifest_copy_mismatch")
+    core._regular_file_checkpoint(
+        source_handoff_manifest,
+        issue_prefix="source_handoff_manifest",
+        expected_sha256=handoff_sha256,
+        expected_identity=handoff_identity,
+    )
+    try:
+        frozen_handoff = handoff_core.load_handoff(handoff_copy)
+    except handoff_core.HandoffError as exc:
+        raise core.RehearsalBlocked("frozen_source_handoff_manifest_invalid") from exc
+    if frozen_handoff != handoff:
+        raise core.RehearsalBlocked("source_handoff_manifest_copy_semantics_mismatch")
+    handoff_reference = core._artifact_reference(handoff_copy, config.run_root)
+    rehearsal.ledger.record(
+        "source_handoff_verified",
+        "passed",
+        {
+            "artifact": handoff_reference,
+            "access_snapshot_sha256": access_baseline["snapshot_sha256"],
+            "scope_roles": list(HANDOFF_SCOPE_ROLES),
         },
     )
 
@@ -457,8 +634,19 @@ def _execute_proposal(
     )
 
     media_copy = rehearsal.artifacts / "source-media-manifest.json"
-    core._copy_stable(config.source_media_manifest, media_copy)
+    media_size, copied_media_sha256 = core._copy_stable(
+        config.source_media_manifest,
+        media_copy,
+    )
     media_sha256, media_snapshot_id = core._source_media_manifest_identity(media_copy)
+    handoff_media = handoff["source_media"]["manifest"]
+    if (
+        media_size != handoff_media["size"]
+        or copied_media_sha256 != handoff_media["sha256"]
+        or media_sha256 != handoff_media["sha256"]
+        or media_snapshot_id != handoff_media["snapshot_id"]
+    ):
+        raise core.RehearsalBlocked("source_handoff_media_manifest_mismatch")
 
     rehearsal.source_expected_sha256 = core._hash_stable(config.source_database)[1]
     rehearsal.production_copy_read_performed = True
@@ -467,6 +655,11 @@ def _execute_proposal(
         expected_sha256=rehearsal.source_expected_sha256,
         expected_identity=None,
     )
+    if (
+        source_size != handoff_backup_set["database"]["size"]
+        or source_sha256 != handoff_backup_set["database"]["sha256"]
+    ):
+        raise core.RehearsalBlocked("source_handoff_database_mismatch")
     source_directory = config.run_root / "work" / "source-input"
     source_directory.mkdir()
     private_database = source_directory / config.source_database.name
@@ -486,6 +679,11 @@ def _execute_proposal(
             source, issue_prefix=f"source_{label}"
         )
         sidecar_checkpoints[label] = (size, digest, identity)
+        if (
+            size != handoff_backup_set[label]["size"]
+            or digest != handoff_backup_set[label]["sha256"]
+        ):
+            raise core.RehearsalBlocked(f"source_handoff_{label}_mismatch")
         copied_sidecar_size, copied_sidecar_sha = core._copy_stable(source, destination)
         if copied_sidecar_size != size or copied_sidecar_sha != digest:
             raise core.RehearsalBlocked(f"proposal_private_{label}_copy_mismatch")
@@ -639,6 +837,7 @@ def _execute_proposal(
         "source_backup_verification": core._artifact_reference(
             backup_report_path, config.run_root
         ),
+        "source_handoff_manifest": handoff_reference,
         "source_media_manifest": core._artifact_reference(media_copy, config.run_root),
         "source_migration_state": core._artifact_reference(state_path, config.run_root),
         "source_snapshot_inspection": core._artifact_reference(
@@ -698,6 +897,43 @@ def _execute_proposal(
     )
     if original_media_sha != media_sha256 or original_media_id != media_snapshot_id:
         raise core.RehearsalBlocked("source_media_manifest_changed_during_proposal")
+    core._regular_file_checkpoint(
+        source_handoff_manifest,
+        issue_prefix="source_handoff_manifest",
+        expected_sha256=handoff_sha256,
+        expected_identity=handoff_identity,
+    )
+    try:
+        final_handoff = handoff_core.load_handoff(source_handoff_manifest)
+    except handoff_core.HandoffError as exc:
+        raise core.RehearsalBlocked("source_handoff_manifest_changed") from exc
+    if final_handoff != handoff:
+        raise core.RehearsalBlocked("source_handoff_manifest_changed")
+    final_access_baseline = _verify_live_handoff(
+        final_handoff,
+        config,
+        source_handoff_manifest,
+        context["repository_root"],
+        verify_content=True,
+    )
+    if final_access_baseline != access_baseline:
+        raise core.RehearsalBlocked("source_handoff_access_baseline_changed")
+    core._regular_file_checkpoint(
+        source_handoff_manifest,
+        issue_prefix="source_handoff_manifest",
+        expected_sha256=handoff_sha256,
+        expected_identity=handoff_identity,
+    )
+    rehearsal.ledger.record(
+        "source_handoff_final_verified",
+        "passed",
+        {
+            "artifact": handoff_reference,
+            "access_snapshot_sha256": final_access_baseline["snapshot_sha256"],
+            "scope_roles": list(HANDOFF_SCOPE_ROLES),
+            "content_verified": True,
+        },
+    )
     rehearsal._record_source_final()
     rehearsal.ledger.record(
         "review_required",
