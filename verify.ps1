@@ -13,6 +13,9 @@ $ErrorActionPreference = 'Stop'
 if ($SkipTests -and $IncludeProductionCopyE2E) {
     throw 'IncludeProductionCopyE2E cannot be combined with SkipTests.'
 }
+if ($IncludeProductionCopyE2E -and $env:OS -ne 'Windows_NT') {
+    throw 'IncludeProductionCopyE2E requires Windows NTFS and DACL APIs.'
+}
 
 function Invoke-CheckedStep {
     param(
@@ -39,6 +42,17 @@ try {
         else {
             $PythonExecutable = 'python'
         }
+    }
+    if (Test-Path -LiteralPath $PythonExecutable -PathType Leaf) {
+        $PythonExecutable = (Resolve-Path -LiteralPath $PythonExecutable).Path
+    }
+    else {
+        $resolvedPython = Get-Command `
+            -Name $PythonExecutable `
+            -CommandType Application `
+            -ErrorAction Stop |
+            Select-Object -First 1
+        $PythonExecutable = $resolvedPython.Source
     }
 
     if ([string]::IsNullOrWhiteSpace($NpmExecutable)) {
@@ -91,6 +105,12 @@ try {
 
             Invoke-CheckedStep 'Site-data export comparison contracts' {
                 & (Join-Path $PSScriptRoot 'ops\migration\Test-SiteDataExportComparison.ps1') `
+                    -PythonExecutable $PythonExecutable
+            }
+
+            Invoke-CheckedStep 'Production-copy handoff contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyHandoff.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
                     -PythonExecutable $PythonExecutable
             }
 
