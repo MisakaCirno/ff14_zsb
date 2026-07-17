@@ -404,6 +404,7 @@ def assert_exact_frozen_bundle(run_root: Path, arguments: tuple[str, ...]) -> di
         "ops/migration/ProductionCopyHandoff.py",
         "ops/migration/Propose-ProductionCopyPolicy.py",
         "ops/migration/Rehearse-ProductionCopy.py",
+        "ops/migration/Verify-ProductionCopyRehearsalPair.py",
     }.issubset(frozen_paths)
     for item in manifest["files"]:
         source = repository / Path(item["path"])

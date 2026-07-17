@@ -86,6 +86,7 @@ MANDATORY_EXECUTION_FILES = {
     "ops/migration/Inspect-SQLiteSnapshot.py",
     "ops/migration/Compare-SiteDataExports.py",
     "ops/migration/MediaManifest.py",
+    "ops/migration/Verify-ProductionCopyRehearsalPair.py",
 }
 PROJECTION_KEYS = {
     "format",

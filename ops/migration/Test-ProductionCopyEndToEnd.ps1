@@ -456,6 +456,7 @@ manifest_directory = inputs / "manifest"
 tmp_directory = test_root / "tmp"
 runs = test_root / "runs"
 targets = test_root / "targets"
+pair_verification_directory = test_root / "pair-verification"
 for directory in (
     source_directory,
     backup_directory,
@@ -464,8 +465,10 @@ for directory in (
     tmp_directory,
     runs,
     targets,
+    pair_verification_directory,
 ):
     directory.mkdir(parents=True)
+assert bootstrap._secure_run_root(pair_verification_directory) == PRIVATE_DACL_STATUS
 
 env_file = inputs / "runtime-empty.env"
 env_file.write_bytes(b"")
@@ -1314,6 +1317,113 @@ second_summary = run_approved_rehearsal(
     "production-copy-e2e-target-media-two",
 )
 assert first_summary == second_summary
+
+first_run_root = runs / "approved-rehearsal-one"
+second_run_root = runs / "approved-rehearsal-two"
+pair_verifier = (
+    first_run_root
+    / "code"
+    / "ops"
+    / "migration"
+    / "Verify-ProductionCopyRehearsalPair.py"
+)
+pair_verification = pair_verification_directory / "pair-verification.json"
+run_command(
+    [
+        str(Path(sys.executable).resolve()),
+        "-I",
+        "-S",
+        "-B",
+        "-X",
+        "utf8",
+        str(pair_verifier),
+        "--first-run-root",
+        str(first_run_root),
+        "--second-run-root",
+        str(second_run_root),
+        "--proposal-run-root",
+        str(proposal_root),
+        "--policy",
+        str(policy_path),
+        "--proposal",
+        str(proposal_path),
+        "--review",
+        str(review_path),
+        "--expected-policy-sha256",
+        file_hash(policy_path),
+        "--expected-proposal-sha256",
+        proposal_sha256,
+        "--expected-review-sha256",
+        review_sha256,
+        "--output",
+        str(pair_verification),
+    ],
+    label="frozen two-rehearsal pair verification",
+    cwd=first_run_root / "code",
+    env=approval_environment,
+)
+pair_report = load_json(pair_verification)
+assert pair_report["format"] == (
+    "ffxivshare-production-copy-rehearsal-pair-verification"
+)
+assert pair_report["format_version"] == 1
+assert pair_report["status"] == "verified"
+assert set(pair_report["runs"]) == {"first", "second"}
+pair_authority = pair_report["authority"]
+assert pair_authority["policy_sha256"] == file_hash(policy_path)
+assert pair_authority["proposal_sha256"] == proposal_sha256
+assert pair_authority["review_sha256"] == review_sha256
+assert pair_authority["policy_id"] == policy["policy_id"]
+assert pair_authority["proposal_id"] == policy["proposal_id"]
+assert pair_authority["review_id"] == policy["review_id"]
+assert pair_report["runs"]["first"]["target_slot"] == "first"
+assert pair_report["runs"]["second"]["target_slot"] == "second"
+assert (
+    pair_report["runs"]["first"]["bootstrap_nonce"]
+    != pair_report["runs"]["second"]["bootstrap_nonce"]
+)
+assert (
+    pair_report["runs"]["first"]["target_media_root"]
+    != pair_report["runs"]["second"]["target_media_root"]
+)
+assert (
+    pair_report["runs"]["first"]["semantic_projection_sha256"]
+    == pair_report["runs"]["second"]["semantic_projection_sha256"]
+    == pair_report["comparison"]["semantic_projection_sha256"]
+)
+first_business = pair_report["runs"]["first"]["business_summary"]
+second_business = pair_report["runs"]["second"]["business_summary"]
+assert first_business == second_business
+matched_projections = pair_report["comparison"]["matched_projections"]
+for name in (
+    "entity_inventory_sha256",
+    "media_inventory_sha256",
+    "applied_migrations_sha256",
+    "target_backup_semantics_sha256",
+):
+    assert matched_projections[name] == first_business[name]
+assert pair_report["comparison"]["matched"] is True
+assert pair_report["comparison"]["issues"] == []
+assert pair_report["comparison"]["unexplained_differences"] == []
+assert set(pair_report["comparison"]["allowed_difference_values"]) == set(
+    pair_report["comparison"]["allowed_differences"]
+)
+assert pair_report["verification"] == "self_consistent_local_chain"
+assert pair_report["tamper_proof"] is False
+assert pair_report["contains_production_user_data"] is True
+assert pair_report["retained_on_success"] is True
+assert pair_report["secure_disposal_required"] is True
+assert pair_report["sensitive_retention_scope"] == (
+    "pair_report_and_referenced_run_roots"
+)
+live_handoff = pair_report["live_handoff_final_verification"]
+assert live_handoff["content_reverified"] is True
+assert live_handoff["access_baseline_matches_approved_handoff"] is True
+assert (
+    live_handoff["access_baseline_sha256"]
+    == pair_authority["live_handoff_access_baseline_sha256"]
+)
+assert pair_report["cutover_authorized"] is False
 assert {path: protected_snapshot(path) for path in protected_paths} == protected_before
 assert tree_snapshot(source_media_root) == source_media_tree_before
 assert {

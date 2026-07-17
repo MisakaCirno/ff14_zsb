@@ -138,6 +138,12 @@ try {
                     -PythonExecutable $PythonExecutable
             }
 
+            Invoke-CheckedStep 'Production-copy rehearsal pair verification contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyRehearsalPairVerifier.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
+                    -PythonExecutable $PythonExecutable
+            }
+
             if ($IncludeProductionCopyE2E) {
                 Invoke-CheckedStep 'Production-copy real offline end-to-end contracts' {
                     & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyEndToEnd.ps1') `

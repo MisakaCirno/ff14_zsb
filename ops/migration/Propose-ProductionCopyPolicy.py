@@ -273,6 +273,7 @@ def _inner_context() -> dict[str, Any]:
     if (
         list(expected_files) != sorted(set(expected_files))
         or "ops/migration/ProductionCopyHandoff.py" not in expected_files
+        or "ops/migration/Verify-ProductionCopyRehearsalPair.py" not in expected_files
         or core._canonical_json_sha256(files) != bundle["frozen_sha256"]
         or core._execution_snapshot_sha256(code_root, expected_files)
         != bundle["frozen_sha256"]

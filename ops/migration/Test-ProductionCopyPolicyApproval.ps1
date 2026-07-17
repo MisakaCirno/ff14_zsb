@@ -167,6 +167,7 @@ MANDATORY = (
     "ops/migration/Inspect-SQLiteSnapshot.py",
     "ops/migration/Compare-SiteDataExports.py",
     "ops/migration/MediaManifest.py",
+    "ops/migration/Verify-ProductionCopyRehearsalPair.py",
     "ffxivshare/__init__.py",
     "shares/__init__.py",
 )
