@@ -2,10 +2,28 @@
 
 from django.conf import settings
 from django.db import migrations
-from django.utils import timezone
 
 
 PROFILE_BACKFILL_BATCH_SIZE = 1_000
+
+
+def _create_profile_batch(UserProfile, database, pending):
+    # auto_now/auto_now_add fields are populated with the insertion wall clock
+    # even when values are supplied to bulk_create.  Restore the persisted,
+    # deterministic user timestamp immediately after insertion.
+    timestamps = [profile.created_at for profile in pending]
+    UserProfile.objects.using(database).bulk_create(
+        pending,
+        batch_size=PROFILE_BACKFILL_BATCH_SIZE,
+    )
+    for profile, timestamp in zip(pending, timestamps):
+        profile.created_at = timestamp
+        profile.updated_at = timestamp
+    UserProfile.objects.using(database).bulk_update(
+        pending,
+        ['created_at', 'updated_at'],
+        batch_size=PROFILE_BACKFILL_BATCH_SIZE,
+    )
 
 
 def backfill_missing_user_profiles(apps, schema_editor):
@@ -14,32 +32,29 @@ def backfill_missing_user_profiles(apps, schema_editor):
     UserProfile = apps.get_model('shares', 'UserProfile')
     database = schema_editor.connection.alias
     profile_user_ids = UserProfile.objects.using(database).values('user_id')
-    missing_user_ids = User.objects.using(database).exclude(
+    missing_users = User.objects.using(database).exclude(
         pk__in=profile_user_ids,
-    ).order_by('pk').values_list('pk', flat=True)
+    ).order_by('pk').values_list('pk', 'date_joined')
 
     pending = []
-    for user_id in missing_user_ids.iterator(chunk_size=PROFILE_BACKFILL_BATCH_SIZE):
-        timestamp = timezone.now()
+    for user_id, date_joined in missing_users.iterator(
+        chunk_size=PROFILE_BACKFILL_BATCH_SIZE,
+    ):
+        # Rehearsals of the same immutable source must produce byte-independent,
+        # semantically identical rows.  The user's persisted join time is the
+        # closest stable historical timestamp for a profile that never existed;
+        # using the migration wall clock would make every run disagree.
         pending.append(UserProfile(
             user_id=user_id,
-            created_at=timestamp,
-            updated_at=timestamp,
+            created_at=date_joined,
+            updated_at=date_joined,
         ))
         if len(pending) >= PROFILE_BACKFILL_BATCH_SIZE:
-            UserProfile.objects.using(database).bulk_create(
-                pending,
-                batch_size=PROFILE_BACKFILL_BATCH_SIZE,
-                ignore_conflicts=True,
-            )
+            _create_profile_batch(UserProfile, database, pending)
             pending.clear()
 
     if pending:
-        UserProfile.objects.using(database).bulk_create(
-            pending,
-            batch_size=PROFILE_BACKFILL_BATCH_SIZE,
-            ignore_conflicts=True,
-        )
+        _create_profile_batch(UserProfile, database, pending)
 
     remaining_missing = User.objects.using(database).exclude(
         pk__in=UserProfile.objects.using(database).values('user_id'),

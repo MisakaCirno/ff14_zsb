@@ -31,9 +31,13 @@ class UserProfileIntegrityMigrationTests(TransactionTestCase):
     def _create_fixture(self, apps):
         User = apps.get_model('auth', 'User')
         UserProfile = apps.get_model('shares', 'UserProfile')
+        joined_at = timezone.now() - timedelta(days=365)
         User.objects.bulk_create(
             [
-                User(username=f'profile-migration-{index:04d}')
+                User(
+                    username=f'profile-migration-{index:04d}',
+                    date_joined=joined_at + timedelta(seconds=index),
+                )
                 for index in range(self.user_count)
             ],
             batch_size=1_000,
@@ -86,8 +90,26 @@ class UserProfileIntegrityMigrationTests(TransactionTestCase):
         self.assertFalse(backfilled.exclude(home_feed_mode='infinite').exists())
         self.assertFalse(backfilled.filter(created_at__isnull=True).exists())
         self.assertFalse(backfilled.filter(updated_at__isnull=True).exists())
+        backfilled_timestamps = list(
+            backfilled.order_by('user_id').values_list(
+                'user_id',
+                'created_at',
+                'updated_at',
+            )
+        )
+        expected_timestamps = [
+            (user_id, date_joined, date_joined)
+            for user_id, date_joined in User.objects.exclude(
+                pk=self.fixture['existing_user_id'],
+            ).order_by('pk').values_list('pk', 'date_joined')
+        ]
+        self.assertEqual(backfilled_timestamps, expected_timestamps)
 
-        late_user = User.objects.create(username='profile-migration-late-user')
+        late_joined_at = timezone.now() - timedelta(days=2)
+        late_user = User.objects.create(
+            username='profile-migration-late-user',
+            date_joined=late_joined_at,
+        )
         migration = import_module('shares.migrations.0023_userprofile_integrity')
 
         class SchemaEditorStub:
@@ -99,6 +121,9 @@ class UserProfileIntegrityMigrationTests(TransactionTestCase):
             UserProfile.objects.filter(user_id=late_user.pk).count(),
             1,
         )
+        late_profile = UserProfile.objects.get(user_id=late_user.pk)
+        self.assertEqual(late_profile.created_at, late_joined_at)
+        self.assertEqual(late_profile.updated_at, late_joined_at)
 
         executor = MigrationExecutor(connection)
         executor.migrate([self.migrate_from])
