@@ -71,7 +71,7 @@
                     </summary>
                     <div class="browse-filter-panel__surface">
             <div class="browse-toolbar__controls">
-                <form method="get" action="{{ request.path }}" class="browse-toolbar__switches" aria-label="内容可见性筛选">
+                <form method="get" action="{{ request.path }}" class="browse-toolbar__switches" aria-label="敏感内容显示方式">
                     {% if search_query %}
                     <input type="hidden" name="q" value="{{ search_query }}">
                     {% endif %}
@@ -83,16 +83,28 @@
                     {% endif %}
                     <input type="hidden" name="feed" value="{{ feed_mode }}">
 
-                    <div class="form-check form-switch browse-toolbar__switch">
-                        <input class="form-check-input" type="checkbox" id="hideSpoiler" name="hide_spoiler"
-                            {% if hide_spoiler %}checked{% endif %} data-submit-on-change>
-                        <label class="form-check-label" for="hideSpoiler">隐藏剧透</label>
-                    </div>
-                    <div class="form-check form-switch browse-toolbar__switch">
-                        <input class="form-check-input" type="checkbox" id="hideNsfw" name="hide_nsfw"
-                            {% if hide_nsfw %}checked{% endif %} data-submit-on-change>
-                        <label class="form-check-label" for="hideNsfw">隐藏令人不适</label>
-                    </div>
+                    <fieldset class="browse-content-policy">
+                        <legend><i class="bi bi-eye-slash" aria-hidden="true"></i> 剧透</legend>
+                        <div class="browse-content-policy__options" role="radiogroup" aria-label="剧透内容显示方式">
+                            <input class="btn-check" type="radio" name="spoiler" id="spoiler-hide" value="hide" {% if spoiler_preference == 'hide' %}checked{% endif %} data-submit-on-change>
+                            <label class="btn btn-outline-secondary" for="spoiler-hide">隐藏</label>
+                            <input class="btn-check" type="radio" name="spoiler" id="spoiler-mask" value="mask" {% if spoiler_preference == 'mask' %}checked{% endif %} data-submit-on-change>
+                            <label class="btn btn-outline-secondary" for="spoiler-mask">遮挡</label>
+                            <input class="btn-check" type="radio" name="spoiler" id="spoiler-show" value="show" {% if spoiler_preference == 'show' %}checked{% endif %} data-submit-on-change>
+                            <label class="btn btn-outline-secondary" for="spoiler-show">显示</label>
+                        </div>
+                    </fieldset>
+                    <fieldset class="browse-content-policy">
+                        <legend><i class="bi bi-exclamation-diamond" aria-hidden="true"></i> 令人不适</legend>
+                        <div class="browse-content-policy__options" role="radiogroup" aria-label="令人不适内容显示方式">
+                            <input class="btn-check" type="radio" name="nsfw" id="nsfw-hide" value="hide" {% if nsfw_preference == 'hide' %}checked{% endif %} data-submit-on-change>
+                            <label class="btn btn-outline-secondary" for="nsfw-hide">隐藏</label>
+                            <input class="btn-check" type="radio" name="nsfw" id="nsfw-mask" value="mask" {% if nsfw_preference == 'mask' %}checked{% endif %} data-submit-on-change>
+                            <label class="btn btn-outline-secondary" for="nsfw-mask">遮挡</label>
+                            <input class="btn-check" type="radio" name="nsfw" id="nsfw-show" value="show" {% if nsfw_preference == 'show' %}checked{% endif %} data-submit-on-change>
+                            <label class="btn btn-outline-secondary" for="nsfw-show">显示</label>
+                        </div>
+                    </fieldset>
                 </form>
 
                 <div class="dropdown browse-toolbar__sort">

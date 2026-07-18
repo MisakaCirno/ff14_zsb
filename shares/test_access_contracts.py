@@ -142,6 +142,67 @@ class ShareAccessContractTests(TestCase):
         self.assertEqual(response.context['current_category'], Share.Category.COMBAT)
         self.assertTrue(response.context['hide_spoiler'])
         self.assertTrue(response.context['hide_nsfw'])
+        self.assertEqual(response.context['spoiler_preference'], 'hide')
+        self.assertEqual(response.context['nsfw_preference'], 'hide')
+
+    def test_content_preferences_support_hide_mask_and_show(self):
+        visible = self.create_share(title='preference visible')
+        spoiler = self.create_share(title='preference spoiler', is_spoiler=True)
+        nsfw = self.create_share(title='preference nsfw', is_nsfw=True)
+        both = self.create_share(
+            title='preference both',
+            is_spoiler=True,
+            is_nsfw=True,
+        )
+
+        hidden = self.client.get(reverse('index'), {
+            'spoiler': 'hide',
+            'nsfw': 'mask',
+        })
+        shown = self.client.get(reverse('index'), {
+            'spoiler': 'show',
+            'nsfw': 'show',
+        })
+        invalid = self.client.get(reverse('index'), {
+            'spoiler': 'invalid',
+            'nsfw': 'invalid',
+        })
+
+        self.assertEqual(
+            set(hidden.context['shares'].object_list),
+            {visible, nsfw},
+        )
+        self.assertEqual(
+            set(shown.context['shares'].object_list),
+            {visible, spoiler, nsfw, both},
+        )
+        self.assertEqual(hidden.context['spoiler_preference'], 'hide')
+        self.assertEqual(hidden.context['nsfw_preference'], 'mask')
+        self.assertEqual(invalid.context['spoiler_preference'], 'mask')
+        self.assertEqual(invalid.context['nsfw_preference'], 'mask')
+        self.assertContains(shown, 'id="spoiler-show" value="show" checked')
+        self.assertContains(shown, 'id="nsfw-show" value="show" checked')
+
+    def test_partial_cards_keep_show_preferences(self):
+        self.create_share(
+            title='partial preference flagged',
+            is_spoiler=True,
+            is_nsfw=True,
+        )
+
+        response = self.client.get(
+            reverse('index'),
+            {
+                'spoiler': 'show',
+                'nsfw': 'show',
+                'partial': 'shares',
+            },
+        )
+        html = response.json()['html']
+
+        self.assertIn('partial preference flagged', html)
+        self.assertNotIn('blur-content', html)
+        self.assertNotIn('share-preview__warning', html)
 
     def test_text_search_applies_shared_sorting(self):
         quiet = self.create_share(title='sort-keyword quiet', views=1)

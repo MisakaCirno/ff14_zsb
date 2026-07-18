@@ -684,7 +684,9 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         copy_source = self.read_frontend('features/share-copy.ts')
 
         self.assertIn("card_variant='browse' viewer=user", list_source)
-        self.assertIn('login_return_url=share_cards_return_url only', list_source)
+        self.assertIn('spoiler_preference=spoiler_preference', list_source)
+        self.assertIn('nsfw_preference=nsfw_preference', list_source)
+        self.assertIn('login_return_url=share_cards_return_url', list_source)
         self.assertIn("card_variant='profile' viewer=user only", profile_source)
         self.assertIn("card_variant='management' only", my_content_source)
         self.assertIn("card_variant='browse' viewer=user only", my_content_source)
@@ -1571,7 +1573,12 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
 
         call_sites = (
-            ('shares/includes/share_card.html', "share=share preview_variant='standard'"),
+            (
+                'shares/includes/share_card.html',
+                "share=share preview_variant='standard' "
+                'spoiler_preference=spoiler_preference '
+                'nsfw_preference=nsfw_preference',
+            ),
             ('shares/includes/share_card.html', "share=share preview_variant='management'"),
             ('shares/includes/collection_item_card.html', "share=item.share preview_variant='standard'"),
             (
@@ -1682,6 +1689,30 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('举报下架限制', restricted_review)
         self.assertNotIn('待审核', restricted_review)
 
+        explicitly_visible = render_to_string(
+            'shares/includes/share_preview.html',
+            {
+                'share': share,
+                'preview_variant': 'standard',
+                'spoiler_preference': 'show',
+                'nsfw_preference': 'show',
+            },
+        )
+        spoiler_only_masked = render_to_string(
+            'shares/includes/share_preview.html',
+            {
+                'share': share,
+                'preview_variant': 'standard',
+                'spoiler_preference': 'mask',
+                'nsfw_preference': 'show',
+            },
+        )
+        self.assertNotIn('blur-content', explicitly_visible)
+        self.assertNotIn('share-preview__warning', explicitly_visible)
+        self.assertIn('blur-content', spoiler_only_masked)
+        self.assertIn('可能包含剧透', spoiler_only_masked)
+        self.assertNotIn('可能令人不适', spoiler_only_masked)
+
     def test_empty_state_component_is_escaped_and_reused(self):
         content = render_to_string(
             'shares/includes/empty_state.html',
@@ -1785,7 +1816,15 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
         self.assertIn('aria-labelledby="browse-toolbar-title"', source)
         self.assertIn('aria-labelledby="browse-results-title"', source)
-        self.assertIn('aria-label="内容可见性筛选"', source)
+        self.assertIn('aria-label="敏感内容显示方式"', source)
+        self.assertIn('aria-label="剧透内容显示方式"', source)
+        self.assertIn('aria-label="令人不适内容显示方式"', source)
+        for field in ('spoiler', 'nsfw'):
+            for value in ('hide', 'mask', 'show'):
+                self.assertIn(
+                    f'name="{field}" id="{field}-{value}" value="{value}"',
+                    source,
+                )
         self.assertIn('aria-label="浏览模式"', source)
         self.assertIn('aria-pressed="{% if feed_mode ==', source)
         self.assertIn("@import './browse-page.css';", main_styles)

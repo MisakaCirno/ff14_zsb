@@ -41,7 +41,12 @@ def share_detail(request, share_id):
     if not can_view_share(request.user, share):
         messages.error(request, '该分享不存在或您没有权限访问')
         return redirect('index')
-    detail = build_share_detail_view_model(share, request.user)
+    detail = build_share_detail_view_model(
+        share,
+        request.user,
+        show_spoiler=request.GET.get('spoiler') == 'show',
+        show_nsfw=request.GET.get('nsfw') == 'show',
+    )
     canonical_share_path = share.get_absolute_url()
     context = {
         'share': share,

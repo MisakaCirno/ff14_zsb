@@ -40,6 +40,17 @@ _BROWSE_ORDERINGS = {
     'favorites': ('-favorites_count', '-created_at', '-pk'),
     'copies': ('-copies', '-created_at', '-pk'),
 }
+_CONTENT_DISPLAY_MODES = {'hide', 'mask', 'show'}
+_DEFAULT_CONTENT_DISPLAY_MODE = 'mask'
+
+
+def _content_display_mode(request, parameter, legacy_parameter):
+    mode = request.GET.get(parameter)
+    if mode in _CONTENT_DISPLAY_MODES:
+        return mode
+    if request.GET.get(legacy_parameter) == 'on':
+        return 'hide'
+    return _DEFAULT_CONTENT_DISPLAY_MODE
 
 
 def _prepare_browse_shares(request, queryset):
@@ -49,11 +60,19 @@ def _prepare_browse_shares(request, queryset):
     if category:
         queryset = queryset.filter(category=category)
 
-    hide_spoiler = request.GET.get('hide_spoiler') == 'on'
-    hide_nsfw = request.GET.get('hide_nsfw') == 'on'
-    if hide_spoiler:
+    spoiler_preference = _content_display_mode(
+        request,
+        'spoiler',
+        'hide_spoiler',
+    )
+    nsfw_preference = _content_display_mode(
+        request,
+        'nsfw',
+        'hide_nsfw',
+    )
+    if spoiler_preference == 'hide':
         queryset = queryset.filter(is_spoiler=False)
-    if hide_nsfw:
+    if nsfw_preference == 'hide':
         queryset = queryset.filter(is_nsfw=False)
 
     sort_by = request.GET.get('sort', 'latest')
@@ -65,8 +84,12 @@ def _prepare_browse_shares(request, queryset):
     return queryset, {
         'current_category': category,
         'sort_by': sort_by,
-        'hide_spoiler': hide_spoiler,
-        'hide_nsfw': hide_nsfw,
+        'spoiler_preference': spoiler_preference,
+        'nsfw_preference': nsfw_preference,
+        # Retain the old context flags while external links migrate to the
+        # explicit three-state query parameters.
+        'hide_spoiler': spoiler_preference == 'hide',
+        'hide_nsfw': nsfw_preference == 'hide',
     }
 
 
@@ -106,7 +129,7 @@ def index(request):
     )
     shares = Paginator(queryset, 12).get_page(request.GET.get('page'))
     if is_htmx_request(request) or request.GET.get('partial') == 'shares':
-        return render_share_cards_response(request, shares)
+        return render_share_cards_response(request, shares, browse_options)
     feed_mode = get_home_feed_mode(request)
     return render(request, 'shares/index.html', {
         'shares': shares,
@@ -159,7 +182,7 @@ def search(request):
     queryset, browse_options = _prepare_browse_shares(request, queryset)
     shares = Paginator(queryset, 12).get_page(request.GET.get('page'))
     if is_htmx_request(request) or request.GET.get('partial') == 'shares':
-        return render_share_cards_response(request, shares)
+        return render_share_cards_response(request, shares, browse_options)
     return render(request, 'shares/index.html', {
         'shares': shares,
         'search_query': query,

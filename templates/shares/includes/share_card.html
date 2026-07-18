@@ -1,17 +1,17 @@
 {% load ui_components %}
 <div class="col">
     <article class="card h-100 share-card card-hover browse-card browse-card--{{ card_variant }}" aria-labelledby="share-card-title-{{ share.share_id }}" data-share-card data-share-id="{{ share.share_id }}" data-share-card-variant="{{ card_variant }}"{% if card_variant == 'management' %} data-managed-share{% endif %}>
-        <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link" aria-label="查看《{{ share.title }}》详情"{% if card_variant == 'browse' %} data-share-detail-trigger{% endif %}>
+        <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link" aria-label="查看《{{ share.title }}》详情"{% if card_variant == 'browse' %} data-share-detail-trigger data-spoiler-preference="{{ spoiler_preference|default:'mask' }}" data-nsfw-preference="{{ nsfw_preference|default:'mask' }}"{% endif %}>
             {% if card_variant == 'management' %}
             {% include 'shares/includes/share_preview.html' with share=share preview_variant='management' only %}
             {% else %}
-            {% include 'shares/includes/share_preview.html' with share=share preview_variant='standard' only %}
+            {% include 'shares/includes/share_preview.html' with share=share preview_variant='standard' spoiler_preference=spoiler_preference nsfw_preference=nsfw_preference only %}
             {% endif %}
         </a>
 
         <div class="card-body browse-card__body">
             <h3 class="card-title h5 browse-card__title" id="share-card-title-{{ share.share_id }}" title="{{ share.title }}">
-                <a href="{% url 'share_detail' share.share_id %}" class="browse-card__title-link"{% if card_variant == 'browse' %} data-share-detail-trigger{% endif %}>{{ share.title }}</a>
+                <a href="{% url 'share_detail' share.share_id %}" class="browse-card__title-link"{% if card_variant == 'browse' %} data-share-detail-trigger data-spoiler-preference="{{ spoiler_preference|default:'mask' }}" data-nsfw-preference="{{ nsfw_preference|default:'mask' }}"{% endif %}>{{ share.title }}</a>
             </h3>
             <div class="browse-card__meta">
                 {% if card_variant == 'browse' %}

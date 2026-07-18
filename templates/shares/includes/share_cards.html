@@ -1,5 +1,5 @@
 {% for share in shares %}
-{% include 'shares/includes/share_card.html' with interaction_return_url=share_cards_return_url csrf_token=csrf_token share=share card_variant='browse' viewer=user login_return_url=share_cards_return_url only %}
+{% include 'shares/includes/share_card.html' with interaction_return_url=share_cards_return_url csrf_token=csrf_token share=share card_variant='browse' viewer=user login_return_url=share_cards_return_url spoiler_preference=spoiler_preference nsfw_preference=nsfw_preference only %}
 {% empty %}
 <div class="col-12">
     {% if user.is_authenticated %}

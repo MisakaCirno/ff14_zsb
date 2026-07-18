@@ -1,8 +1,17 @@
 import { initializeShareDetails } from './share-detail'
 
 interface ShareDetailHistoryState {
+  nsfwPreference?: ContentPreference
   shareDetailOverlay: true
   shareUrl: string
+  spoilerPreference?: ContentPreference
+}
+
+type ContentPreference = 'hide' | 'mask' | 'show'
+
+interface ContentPreferences {
+  nsfwPreference: ContentPreference
+  spoilerPreference: ContentPreference
 }
 
 const dialogSelector = '[data-share-detail-dialog]'
@@ -71,9 +80,28 @@ function closeDialog(restoreHistory: boolean): void {
   }
 }
 
-function overlayRequestUrl(shareUrl: string): string {
+function contentPreference(value: string | undefined): ContentPreference | null {
+  return value === 'hide' || value === 'mask' || value === 'show' ? value : null
+}
+
+function linkContentPreferences(link: HTMLAnchorElement): ContentPreferences | null {
+  const spoilerPreference = contentPreference(link.dataset.spoilerPreference)
+  const nsfwPreference = contentPreference(link.dataset.nsfwPreference)
+  return spoilerPreference && nsfwPreference
+    ? { nsfwPreference, spoilerPreference }
+    : null
+}
+
+function overlayRequestUrl(
+  shareUrl: string,
+  preferences: ContentPreferences | null,
+): string {
   const url = new URL(shareUrl, window.location.href)
   url.searchParams.set('presentation', 'overlay')
+  if (preferences) {
+    url.searchParams.set('spoiler', preferences.spoilerPreference)
+    url.searchParams.set('nsfw', preferences.nsfwPreference)
+  }
   return url.toString()
 }
 
@@ -107,7 +135,11 @@ function showDialog(dialog: HTMLDialogElement): boolean {
   return true
 }
 
-async function openOverlay(shareUrl: string, pushHistory: boolean): Promise<void> {
+async function openOverlay(
+  shareUrl: string,
+  pushHistory: boolean,
+  preferences: ContentPreferences | null = null,
+): Promise<void> {
   const elements = dialogElements()
   if (!elements || !showDialog(elements.dialog)) {
     navigateToFullDetail(shareUrl)
@@ -120,7 +152,7 @@ async function openOverlay(shareUrl: string, pushHistory: boolean): Promise<void
   elements.content.innerHTML = loadingMarkup
 
   try {
-    const response = await fetch(overlayRequestUrl(shareUrl), {
+    const response = await fetch(overlayRequestUrl(shareUrl, preferences), {
       credentials: 'same-origin',
       headers: {
         Accept: 'text/html',
@@ -142,6 +174,7 @@ async function openOverlay(shareUrl: string, pushHistory: boolean): Promise<void
     const canonicalUrl = new URL(shareUrl, window.location.href).toString()
     if (pushHistory) {
       window.history.pushState({
+        ...(preferences ?? {}),
         shareDetailOverlay: true,
         shareUrl: canonicalUrl,
       } satisfies ShareDetailHistoryState, '', canonicalUrl)
@@ -230,12 +263,20 @@ function handleDocumentClick(event: MouseEvent): void {
   }
   event.preventDefault()
   returnFocusTarget = link
-  void openOverlay(link.href, true)
+  void openOverlay(link.href, true, linkContentPreferences(link))
 }
 
 function handleHistoryChange(event: PopStateEvent): void {
   if (isOverlayHistoryState(event.state)) {
-    void openOverlay(event.state.shareUrl, false)
+    const spoilerPreference = contentPreference(event.state.spoilerPreference)
+    const nsfwPreference = contentPreference(event.state.nsfwPreference)
+    void openOverlay(
+      event.state.shareUrl,
+      false,
+      spoilerPreference && nsfwPreference
+        ? { nsfwPreference, spoilerPreference }
+        : null,
+    )
     return
   }
   syncOverlayReactions()

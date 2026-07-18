@@ -261,8 +261,15 @@ def _share_detail_notice(share, *, can_see_rejected_state):
     return None
 
 
-def _share_detail_content_warning(share):
-    if share.is_nsfw and share.is_spoiler:
+def _share_detail_content_warning(
+    share,
+    *,
+    show_spoiler=False,
+    show_nsfw=False,
+):
+    has_nsfw_warning = share.is_nsfw and not show_nsfw
+    has_spoiler_warning = share.is_spoiler and not show_spoiler
+    if has_nsfw_warning and has_spoiler_warning:
         return ShareDetailContentWarningViewModel(
             key='nsfw-spoiler',
             title='内容已隐藏',
@@ -270,7 +277,7 @@ def _share_detail_content_warning(share):
             tone='danger',
             icon='bi bi-exclamation-diamond-fill',
         )
-    if share.is_nsfw:
+    if has_nsfw_warning:
         return ShareDetailContentWarningViewModel(
             key='nsfw',
             title='内容已隐藏',
@@ -278,7 +285,7 @@ def _share_detail_content_warning(share):
             tone='danger',
             icon='bi bi-exclamation-diamond-fill',
         )
-    if share.is_spoiler:
+    if has_spoiler_warning:
         return ShareDetailContentWarningViewModel(
             key='spoiler',
             title='内容已隐藏',
@@ -289,7 +296,13 @@ def _share_detail_content_warning(share):
     return None
 
 
-def build_share_detail_view_model(share, user):
+def build_share_detail_view_model(
+    share,
+    user,
+    *,
+    show_spoiler=False,
+    show_nsfw=False,
+):
     """Build the permission-aware, query-free presentation state for one share."""
     owner = is_owner(user, share)
     moderator = is_moderator(user)
@@ -305,7 +318,11 @@ def build_share_detail_view_model(share, user):
             share,
             can_see_rejected_state=can_see_rejected_state,
         ),
-        content_warning=_share_detail_content_warning(share),
+        content_warning=_share_detail_content_warning(
+            share,
+            show_spoiler=show_spoiler,
+            show_nsfw=show_nsfw,
+        ),
         actions=ShareDetailActionsViewModel(
             can_edit=owner,
             can_delete=owner or moderator,
@@ -410,7 +427,7 @@ def redirect_response(request, to, *args, **kwargs):
     return response
 
 
-def render_share_cards_response(request, shares):
+def render_share_cards_response(request, shares, browse_options=None):
     context = {
         'shares': shares,
         'share_cards_return_url': build_share_cards_return_url(
@@ -419,6 +436,8 @@ def render_share_cards_response(request, shares):
         ),
         'share_cards_next_query': build_share_cards_next_query(request, shares),
     }
+    if browse_options:
+        context.update(browse_options)
     is_continuation = (
         is_htmx_request(request)
         and request.GET.get('continuation') == '1'

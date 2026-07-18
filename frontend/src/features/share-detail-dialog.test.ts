@@ -105,6 +105,37 @@ describe('share detail dialog', () => {
     })
   })
 
+  it('forwards the card content preferences without polluting the canonical URL', async () => {
+    const { dialog, link } = renderShell()
+    link.dataset.spoilerPreference = 'show'
+    link.dataset.nsfwPreference = 'mask'
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      redirected: false,
+      text: vi.fn().mockResolvedValue(overlayMarkup),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    initializeShareDetailDialog()
+
+    link.click()
+
+    await vi.waitFor(() => {
+      expect(dialog.querySelector('[data-share-detail-overlay]')).not.toBeNull()
+    })
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/s/share-a?presentation=overlay&spoiler=show&nsfw=mask',
+      expect.any(Object),
+    )
+    expect(window.location.pathname).toBe('/s/share-a')
+    expect(window.location.search).toBe('')
+    expect(window.history.state).toEqual({
+      nsfwPreference: 'mask',
+      shareDetailOverlay: true,
+      shareUrl: 'http://localhost:3000/s/share-a',
+      spoilerPreference: 'show',
+    })
+  })
+
   it('syncs changed reactions to the card and closes through browser history', async () => {
     const { cardButton, dialog, link } = renderShell()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({

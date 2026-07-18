@@ -207,6 +207,32 @@ class ShareDetailUiTests(TestCase):
         self.share.refresh_from_db()
         self.assertEqual(self.share.views, 12)
 
+    def test_overlay_respects_explicit_content_display_preferences(self):
+        shown = self.client.get(
+            self.detail_url(),
+            {
+                'presentation': 'overlay',
+                'spoiler': 'show',
+                'nsfw': 'show',
+            },
+            HTTP_HX_REQUEST='true',
+        )
+        nsfw_masked = self.client.get(
+            self.detail_url(),
+            {
+                'presentation': 'overlay',
+                'spoiler': 'show',
+                'nsfw': 'mask',
+            },
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertContains(shown, 'data-content-revealed="true"')
+        self.assertNotContains(shown, 'data-content-overlay')
+        self.assertContains(nsfw_masked, 'data-content-warning="nsfw"')
+        self.assertContains(nsfw_masked, '此分享可能包含令人不适的内容。')
+        self.assertNotContains(nsfw_masked, '令人不适和剧透')
+
     def test_overlay_requires_htmx_and_keeps_full_page_fallback(self):
         response = self.client.get(
             self.detail_url(),

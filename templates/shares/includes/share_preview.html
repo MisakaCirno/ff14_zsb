@@ -3,16 +3,16 @@
     <div class="ratio ratio-4x3">
         <img
             src="{{ share.strategy_code|board_preview_url }}"
-            class="share-preview__image{% if share.is_spoiler or share.is_nsfw %} blur-content{% endif %}"
+            class="share-preview__image{% if share.is_spoiler and spoiler_preference != 'show' or share.is_nsfw and nsfw_preference != 'show' %} blur-content{% endif %}"
             loading="lazy"
             alt="{{ share.title }} 的战术板预览"
             data-preview-image>
     </div>
 
-    {% if share.is_spoiler or share.is_nsfw %}
+    {% if share.is_spoiler and spoiler_preference != 'show' or share.is_nsfw and nsfw_preference != 'show' %}
     <div class="spoiler-overlay share-preview__warning{% if preview_variant == 'review' %} share-preview__warning--static{% endif %}">
         <div class="text-center">
-            {% if share.is_nsfw %}
+            {% if share.is_nsfw and nsfw_preference != 'show' %}
             <i class="bi bi-exclamation-diamond-fill fs-1 text-danger mb-2"></i>
             <h5 class="fw-bold">可能令人不适</h5>
             {% else %}
