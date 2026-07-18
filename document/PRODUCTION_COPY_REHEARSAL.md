@@ -6,7 +6,7 @@
 
 ## 安全边界
 
-- 输入数据库必须由 `backup_database` 生成，并连同同名 `.sha256`、`.metadata.json` 一起复制到离线介质；不得把活动 `db.sqlite3`、硬链接、带 `-wal`、`-shm` 或 `-journal` 的文件当作副本。
+- 输入数据库必须由 `backup_database` 或同一受审备份核心的哈希封存旁路入口生成，并连同同名 `.sha256`、`.metadata.json` 一起复制到离线介质；不得把活动 `db.sqlite3`、硬链接、带 `-wal`、`-shm` 或 `-journal` 的文件当作副本。旧部署缺少管理命令时只能把 `shares\services\database_backup.py` 单文件放在生产仓库之外，以 `-I -S` 模式运行；其 SHA-256 必须与受审端提供的可信 expected 值在执行前后都精确一致并归档，不得只记录生产机收到文件后的自报摘要，也不得为取样更新生产工作区。
 - 源数据库三件套、源媒体清单、源媒体目录和两个演练媒体副本在整个流程中保持封存。数据库三件套必须独占一个只含三个文件的目录；源媒体清单必须是位于另一目录的独立文件；五个外部范围彼此、与仓库及任何 RunRoot 都不得重叠。工具只把稳定复制后的数据库放进 RunRoot，再对私有副本执行检查和迁移。
 - Proposal RunRoot、两个 Rehearsal RunRoot 必须是三个全新的本机 NTFS 目录。Bootstrap 会审查从直接父目录到卷根的完整祖先链：owner 必须可信，不可信主体不能拥有删除、修改 DACL/owner 或在直接父目录创建/继承可写子项的权限。优先使用当前用户的本机 LocalAppData 私有目录；禁止使用 UNC、映射盘、重解析点、共享临时目录、仓库目录、输入目录或媒体目录。
 - RunRoot 创建后由 Bootstrap 收紧 ACL；`approval` 目录还会单独收紧。ACL 校验失败时不得通过放宽脚本或换到共享目录绕过。
@@ -61,7 +61,7 @@ if (Test-Path -LiteralPath $PairVerificationParent) {
 $PairVerification = Join-Path $PairVerificationParent 'production-20260717-pair.json'
 ```
 
-先在旧应用环境使用 SQLite Backup API 的 `backup_database` 创建在线数据库备份三件套；不要直接复制活动数据库。记录来源主机、UTC 时点、应用版本、数据库摘要和操作员，并取得与该时点一致的离线媒体或存储快照。若跨数据库与媒体的一致性必须短暂冻结写入，应使用另行批准并记录的 R19 取样窗口；它不等于 R20 的最终停写或切换窗口。然后逐字节复制数据库三件套与媒体快照到演练机。媒体清单必须针对离线媒体源生成：
+先在旧应用环境使用 SQLite Backup API 的 `backup_database` 创建在线数据库备份三件套；旧部署没有该命令时，按 `DATA_MIGRATION_CONTRACT.md` 使用生产仓库外、SHA-256 已归档的单文件旁路入口。两种入口生成完全相同的三件套契约；不要直接复制活动数据库，也不要更新旧部署来取得命令。记录来源主机、UTC 时点、应用版本、数据库摘要、备份工具版本/摘要和操作员，并取得与该时点一致的离线媒体或存储快照。若跨数据库与媒体的一致性必须短暂冻结写入，应使用另行批准并记录的 R19 取样窗口；它不等于 R20 的最终停写或切换窗口。然后逐字节复制数据库三件套与媒体快照到演练机。媒体清单必须针对离线媒体源生成：
 
 ```powershell
 & $Python -E -s -B -X utf8 `

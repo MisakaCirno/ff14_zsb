@@ -1,19 +1,43 @@
+"""Create verified SQLite backup sets for Django and isolated legacy hosts.
+
+When this file is executed directly with ``python -I -S``, it uses only the
+standard library and does not import project settings, models, or migrations.
+"""
+
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import argparse
+from datetime import datetime, timezone
 from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import sqlite3
+import sys
 from typing import Iterable
 from uuid import uuid4
-
-from django.db import connections
 
 
 BACKUP_METHOD = 'sqlite_backup_api'
 BACKUP_METADATA_SCHEMA_VERSION = 1
+PLACEHOLDER_APPLICATION_VERSIONS = frozenset({
+    'unknown',
+    'unset',
+    'none',
+    'null',
+    'n/a',
+    'na',
+    'replace-me',
+    'replace_with_deployed_release_id',
+    'replace-with-deployed-release-id',
+    'immutable-production-release-id',
+    'head',
+    'main',
+    'master',
+    'latest',
+    'dev',
+    'development',
+})
 
 
 class DatabaseBackupError(RuntimeError):
@@ -43,6 +67,15 @@ def _sqlite_main_database_path(source: sqlite3.Connection) -> Path | None:
             'The active SQLite main database path has an unexpected type.'
         )
     return Path(raw_path).expanduser().resolve()
+
+
+def _sqlite_artifact_paths(database_path: Path) -> tuple[Path, ...]:
+    return (
+        database_path,
+        database_path.with_name(f'{database_path.name}-wal'),
+        database_path.with_name(f'{database_path.name}-shm'),
+        database_path.with_name(f'{database_path.name}-journal'),
+    )
 
 
 def _write_staged_text(path: Path, content: str) -> Path:
@@ -78,23 +111,39 @@ def _restore_output_set(
     return errors
 
 
+def _new_output_set_error() -> str:
+    return (
+        'One or more backup outputs already exist. Preserve the entire output '
+        'directory because it may contain partial or concurrent evidence, then '
+        'choose a completely new output path.'
+    )
+
+
+def _publish_new_output_set(output_set: tuple[tuple[Path, Path], ...]) -> None:
+    for staged, destination in output_set:
+        try:
+            os.link(staged, destination)
+        except FileExistsError as exc:
+            raise DatabaseBackupError(_new_output_set_error()) from exc
+
+    for staged, _destination in output_set:
+        staged.unlink()
+
+
 def _publish_output_set(
     outputs: Iterable[tuple[Path, Path]],
     *,
     overwrite: bool,
 ) -> None:
     output_set = tuple(outputs)
+    if not overwrite:
+        _publish_new_output_set(output_set)
+        return
+
     displaced: list[tuple[Path, Path]] = []
     published: list[tuple[Path, Path]] = []
     succeeded = False
     try:
-        for _staged, destination in output_set:
-            if destination.exists() and not overwrite:
-                raise DatabaseBackupError(
-                    'A backup output appeared while the backup was being created. '
-                    'Use --overwrite explicitly after reviewing it.'
-                )
-
         for _staged, destination in output_set:
             if not destination.exists():
                 continue
@@ -123,13 +172,18 @@ def _publish_output_set(
                 rollback.unlink(missing_ok=True)
 
 
-def _metadata_payload(*, digest: str, size: int) -> dict[str, object]:
+def _metadata_payload(
+    *,
+    digest: str,
+    size: int,
+    application_version: str,
+) -> dict[str, object]:
     return {
         'schema_version': BACKUP_METADATA_SCHEMA_VERSION,
-        'generated_at': datetime.now(UTC).isoformat().replace('+00:00', 'Z'),
+        'generated_at': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
         'backup_method': BACKUP_METHOD,
         'database_vendor': 'sqlite',
-        'application_version': os.environ.get('APP_VERSION', 'unknown'),
+        'application_version': application_version,
         'sha256': digest,
         'size': size,
         'integrity_check': 'ok',
@@ -137,40 +191,25 @@ def _metadata_payload(*, digest: str, size: int) -> dict[str, object]:
     }
 
 
-def backup_sqlite_database(
+def _backup_sqlite_connection(
+    source: sqlite3.Connection,
     output_file: str | Path,
     *,
     overwrite: bool = False,
-    database_alias: str = 'default',
+    application_version: str,
 ) -> dict[str, object]:
-    database = connections[database_alias]
-    if database.vendor != 'sqlite':
-        raise DatabaseBackupError(
-            'This command only supports SQLite. Use pg_dump for PostgreSQL.'
-        )
-
     output = Path(output_file).expanduser().resolve()
     checksum_path = output.with_name(f'{output.name}.sha256')
     metadata_path = output.with_name(f'{output.name}.metadata.json')
     output_paths = (output, checksum_path, metadata_path)
     if any(path.exists() for path in output_paths) and not overwrite:
-        raise DatabaseBackupError(
-            'One or more backup outputs already exist. '
-            'Use --overwrite explicitly after reviewing all three files.'
-        )
+        raise DatabaseBackupError(_new_output_set_error())
 
-    database.ensure_connection()
-    source = database.connection
-    if source is None or not hasattr(source, 'backup'):
+    if not hasattr(source, 'backup'):
         raise DatabaseBackupError('The active SQLite connection cannot create backups.')
     source_path = _sqlite_main_database_path(source)
     if source_path is not None:
-        protected_source_paths = {
-            source_path,
-            source_path.with_name(f'{source_path.name}-wal'),
-            source_path.with_name(f'{source_path.name}-shm'),
-            source_path.with_name(f'{source_path.name}-journal'),
-        }
+        protected_source_paths = set(_sqlite_artifact_paths(source_path))
         if any(path in protected_source_paths for path in output_paths):
             raise DatabaseBackupError(
                 'Backup outputs must differ from the live SQLite database and '
@@ -202,7 +241,11 @@ def backup_sqlite_database(
 
         digest = _file_sha256(temporary)
         size = temporary.stat().st_size
-        metadata = _metadata_payload(digest=digest, size=size)
+        metadata = _metadata_payload(
+            digest=digest,
+            size=size,
+            application_version=application_version,
+        )
         staged_checksum = _write_staged_text(
             checksum_path,
             f'{digest}  {output.name}\n',
@@ -232,11 +275,153 @@ def backup_sqlite_database(
             'size': size,
         }
     finally:
+        cleanup_errors: list[str] = []
         if destination is not None:
-            destination.close()
-        if temporary.exists():
-            temporary.unlink()
-        if staged_checksum is not None and staged_checksum.exists():
-            staged_checksum.unlink()
-        if staged_metadata is not None and staged_metadata.exists():
-            staged_metadata.unlink()
+            try:
+                destination.close()
+            except sqlite3.Error:
+                cleanup_errors.append(temporary.name)
+        cleanup_paths = list(_sqlite_artifact_paths(temporary))
+        if staged_checksum is not None:
+            cleanup_paths.append(staged_checksum)
+        if staged_metadata is not None:
+            cleanup_paths.append(staged_metadata)
+        for cleanup_path in cleanup_paths:
+            try:
+                cleanup_path.unlink(missing_ok=True)
+            except OSError:
+                cleanup_errors.append(cleanup_path.name)
+        if cleanup_errors:
+            names = ', '.join(sorted(set(cleanup_errors)))
+            raise DatabaseBackupError(
+                f'Backup cleanup left sensitive temporary files: {names}.'
+            )
+
+
+def backup_sqlite_database(
+    output_file: str | Path,
+    *,
+    overwrite: bool = False,
+    database_alias: str = 'default',
+) -> dict[str, object]:
+    from django.db import connections
+
+    database = connections[database_alias]
+    if database.vendor != 'sqlite':
+        raise DatabaseBackupError(
+            'This command only supports SQLite. Use pg_dump for PostgreSQL.'
+        )
+
+    database.ensure_connection()
+    source = database.connection
+    if source is None:
+        raise DatabaseBackupError('The active SQLite connection cannot create backups.')
+    return _backup_sqlite_connection(
+        source,
+        output_file,
+        overwrite=overwrite,
+        application_version=os.environ.get('APP_VERSION', 'unknown'),
+    )
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def backup_sqlite_path(
+    source_database: str | Path,
+    output_file: str | Path,
+    *,
+    application_version: str,
+) -> dict[str, object]:
+    source_input = Path(source_database).expanduser()
+    output_input = Path(output_file).expanduser()
+    if not source_input.is_absolute() or not output_input.is_absolute():
+        raise DatabaseBackupError(
+            'Source database and output file must use absolute paths.'
+        )
+    if os.name == 'nt' and (
+        source_input.anchor.startswith('\\\\')
+        or output_input.anchor.startswith('\\\\')
+    ):
+        raise DatabaseBackupError(
+            'Source database and output file must use local, non-UNC paths.'
+        )
+    if source_input.is_symlink():
+        raise DatabaseBackupError(
+            'Source database must be the original file, not a symbolic link.'
+        )
+
+    source_path = source_input.resolve()
+    output_path = output_input.resolve()
+    if not source_path.is_file():
+        raise DatabaseBackupError('Source database is not an existing regular file.')
+    if source_path.stat().st_nlink != 1:
+        raise DatabaseBackupError(
+            'Source database must be the original single-link file; hard-link '
+            'aliases can omit live SQLite journal data.'
+        )
+    if _is_relative_to(output_path, source_path.parent):
+        raise DatabaseBackupError(
+            'The sidecar backup output must be outside the live database directory.'
+        )
+
+    release = application_version.strip()
+    if (
+        not release
+        or len(release) > 255
+        or release.casefold() in PLACEHOLDER_APPLICATION_VERSIONS
+        or any(ord(character) < 32 or ord(character) == 127 for character in release)
+    ):
+        raise DatabaseBackupError(
+            'A real immutable application version is required for the backup metadata.'
+        )
+
+    source = sqlite3.connect(
+        f'{source_path.as_uri()}?mode=ro',
+        uri=True,
+        timeout=30.0,
+    )
+    try:
+        source.execute('PRAGMA query_only = ON')
+        return _backup_sqlite_connection(
+            source,
+            output_path,
+            application_version=release,
+        )
+    finally:
+        source.close()
+
+
+def _main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            'Create a read-only SQLite Backup API snapshot without loading '
+            'Django settings, models, or migrations.'
+        ),
+    )
+    parser.add_argument('source_database')
+    parser.add_argument('output_file')
+    parser.add_argument('--application-version', required=True)
+    options = parser.parse_args(argv)
+
+    try:
+        result = backup_sqlite_path(
+            options.source_database,
+            options.output_file,
+            application_version=options.application_version,
+        )
+    except (DatabaseBackupError, OSError, sqlite3.Error) as exc:
+        print(f'Backup failed: {exc}', file=sys.stderr)
+        return 1
+
+    print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(_main())

@@ -1,1 +1,2 @@
 shares/testdata/data_portability_v*/** text eol=lf
+shares/services/database_backup.py text eol=lf

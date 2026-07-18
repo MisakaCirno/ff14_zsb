@@ -1,20 +1,403 @@
 from contextlib import closing
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import sqlite3
+import subprocess
+import sys
 from tempfile import TemporaryDirectory
 from unittest import skipUnless
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.db import connection
-from django.test import TransactionTestCase
+from django.test import SimpleTestCase, TransactionTestCase
 
 from .models import Share
-from .services.database_backup import DatabaseBackupError, backup_sqlite_database
+from .services.database_backup import (
+    DatabaseBackupError,
+    backup_sqlite_database,
+    backup_sqlite_path,
+)
+
+
+class StandaloneSQLiteBackupTests(SimpleTestCase):
+    application_version = '244c32734e9fab5af05bf544a654615eeab31404'
+
+    @staticmethod
+    def _create_source(path):
+        path.parent.mkdir(parents=True)
+        with closing(sqlite3.connect(path)) as source:
+            source.execute('PRAGMA foreign_keys = ON')
+            source.execute(
+                'CREATE TABLE sample (id INTEGER PRIMARY KEY, value TEXT NOT NULL)'
+            )
+            source.execute('INSERT INTO sample (value) VALUES (?)', ('preserved',))
+            source.commit()
+
+    def test_path_backup_is_read_only_and_publishes_contract_sidecars(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active-site' / 'db.sqlite3'
+            output = root / 'r19-input' / 'Database' / 'production.sqlite3'
+            self._create_source(source)
+            source_digest = sha256(source.read_bytes()).hexdigest()
+
+            result = backup_sqlite_path(
+                source,
+                output,
+                application_version=self.application_version,
+            )
+
+            self.assertEqual(sha256(source.read_bytes()).hexdigest(), source_digest)
+            self.assertEqual(Path(result['path']), output.resolve())
+            metadata = json.loads(
+                Path(result['metadata_path']).read_text(encoding='utf-8')
+            )
+            self.assertEqual(
+                metadata['application_version'],
+                self.application_version,
+            )
+            with closing(sqlite3.connect(output)) as snapshot:
+                self.assertEqual(
+                    snapshot.execute('SELECT value FROM sample').fetchone(),
+                    ('preserved',),
+                )
+
+    def test_file_runs_as_isolated_stdlib_only_sidecar_tool(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active site # 百分比%' / 'db # 数据库%.sqlite3'
+            output = root / 'r19 输入 # 100%' / 'Database' / 'production.sqlite3'
+            self._create_source(source)
+            script = (
+                Path(__file__).resolve().parent
+                / 'services'
+                / 'database_backup.py'
+            )
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    '-I',
+                    '-S',
+                    '-B',
+                    '-X',
+                    'utf8',
+                    str(script),
+                    str(source),
+                    str(output),
+                    '--application-version',
+                    self.application_version,
+                ],
+                capture_output=True,
+                check=False,
+                encoding='utf-8',
+                text=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            result = json.loads(completed.stdout)
+            self.assertEqual(Path(result['path']), output.resolve())
+            self.assertTrue(output.is_file())
+            self.assertTrue(Path(result['checksum_path']).is_file())
+            self.assertTrue(Path(result['metadata_path']).is_file())
+
+    def test_path_backup_rejects_live_tree_outputs_and_placeholder_release(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active-site' / 'db.sqlite3'
+            self._create_source(source)
+
+            with self.assertRaisesRegex(
+                DatabaseBackupError,
+                'outside the live database directory',
+            ):
+                backup_sqlite_path(
+                    source,
+                    source.parent / 'backup.sqlite3',
+                    application_version=self.application_version,
+                )
+
+            for placeholder in (
+                'unknown',
+                'immutable-production-release-id',
+                'HEAD',
+                'release\nbad',
+            ):
+                with self.subTest(placeholder=placeholder):
+                    with self.assertRaisesRegex(
+                        DatabaseBackupError,
+                        'real immutable application version',
+                    ):
+                        backup_sqlite_path(
+                            source,
+                            root / 'r19-input' / 'production.sqlite3',
+                            application_version=placeholder,
+                        )
+
+    def test_path_backup_includes_committed_wal_rows_without_touching_source(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active WAL # 数据%' / 'db.sqlite3'
+            output = root / 'r19 WAL 输入' / 'Database' / 'production.sqlite3'
+            source.parent.mkdir(parents=True)
+
+            with closing(sqlite3.connect(source)) as writer:
+                self.assertEqual(
+                    writer.execute('PRAGMA journal_mode = WAL').fetchone()[0],
+                    'wal',
+                )
+                writer.execute('PRAGMA wal_autocheckpoint = 0')
+                writer.execute(
+                    'CREATE TABLE sample '
+                    '(id INTEGER PRIMARY KEY, value TEXT NOT NULL)'
+                )
+                writer.commit()
+                writer.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+                writer.execute(
+                    'INSERT INTO sample (value) VALUES (?)',
+                    ('committed-only-in-wal',),
+                )
+                writer.commit()
+
+                source_wal = source.with_name(f'{source.name}-wal')
+                self.assertTrue(source_wal.is_file())
+                database_digest = sha256(source.read_bytes()).hexdigest()
+                wal_digest = sha256(source_wal.read_bytes()).hexdigest()
+
+                backup_sqlite_path(
+                    source,
+                    output,
+                    application_version=self.application_version,
+                )
+
+                self.assertEqual(sha256(source.read_bytes()).hexdigest(), database_digest)
+                self.assertEqual(sha256(source_wal.read_bytes()).hexdigest(), wal_digest)
+                with closing(sqlite3.connect(output)) as snapshot:
+                    self.assertEqual(
+                        snapshot.execute('SELECT value FROM sample').fetchall(),
+                        [('committed-only-in-wal',)],
+                    )
+                    self.assertEqual(
+                        snapshot.execute('PRAGMA integrity_check').fetchone(),
+                        ('ok',),
+                    )
+
+                writer.execute(
+                    'INSERT INTO sample (value) VALUES (?)',
+                    ('writer-still-usable',),
+                )
+                writer.commit()
+
+            self.assertFalse(output.with_name(f'{output.name}-wal').exists())
+            self.assertFalse(output.with_name(f'{output.name}-shm').exists())
+            self.assertFalse(output.with_name(f'{output.name}-journal').exists())
+
+    def test_path_backup_rejects_hard_link_source_alias(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active-site' / 'db.sqlite3'
+            alias = root / 'aliases' / 'db.sqlite3'
+            output = root / 'r19-input' / 'Database' / 'production.sqlite3'
+            self._create_source(source)
+            alias.parent.mkdir()
+            os.link(source, alias)
+            source_digest = sha256(source.read_bytes()).hexdigest()
+
+            with self.assertRaisesRegex(DatabaseBackupError, 'hard-link aliases'):
+                backup_sqlite_path(
+                    alias,
+                    output,
+                    application_version=self.application_version,
+                )
+
+            self.assertEqual(sha256(source.read_bytes()).hexdigest(), source_digest)
+            self.assertFalse(output.exists())
+
+    @skipUnless(os.name == 'nt', 'Windows UNC path contract')
+    def test_path_backup_rejects_unc_source_before_network_access(self):
+        with TemporaryDirectory() as temporary:
+            output = (
+                Path(temporary).resolve()
+                / 'r19-input'
+                / 'Database'
+                / 'production.sqlite3'
+            )
+
+            with self.assertRaisesRegex(DatabaseBackupError, 'non-UNC paths'):
+                backup_sqlite_path(
+                    r'\\untrusted-server\share\db.sqlite3',
+                    output,
+                    application_version=self.application_version,
+                )
+
+    def test_path_backup_rejects_symbolic_link_source(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active-site' / 'db.sqlite3'
+            alias = root / 'aliases' / 'db.sqlite3'
+            output = root / 'r19-input' / 'Database' / 'production.sqlite3'
+            self._create_source(source)
+            alias.parent.mkdir()
+            try:
+                alias.symlink_to(source)
+            except OSError as exc:
+                self.skipTest(f'Symbolic links unavailable: {exc}')
+
+            with self.assertRaisesRegex(DatabaseBackupError, 'symbolic link'):
+                backup_sqlite_path(
+                    alias,
+                    output,
+                    application_version=self.application_version,
+                )
+
+            self.assertFalse(output.exists())
+
+    def test_no_overwrite_race_preserves_external_sentinel(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active-site' / 'db.sqlite3'
+            output = root / 'r19-input' / 'Database' / 'production.sqlite3'
+            self._create_source(source)
+            sentinel = b'RACE-SENTINEL-MUST-SURVIVE'
+            real_link = os.link
+            injected = False
+
+            def inject_sentinel_before_first_publish(staged, destination):
+                nonlocal injected
+                if not injected and Path(destination) == output.resolve():
+                    Path(destination).write_bytes(sentinel)
+                    injected = True
+                return real_link(staged, destination)
+
+            with patch(
+                'shares.services.database_backup.os.link',
+                side_effect=inject_sentinel_before_first_publish,
+            ):
+                with self.assertRaisesRegex(
+                    DatabaseBackupError,
+                    'choose a completely new output path',
+                ):
+                    backup_sqlite_path(
+                        source,
+                        output,
+                        application_version=self.application_version,
+                    )
+
+            self.assertTrue(injected)
+            self.assertEqual(output.read_bytes(), sentinel)
+            self.assertFalse(output.with_name(f'{output.name}.sha256').exists())
+            self.assertFalse(output.with_name(f'{output.name}.metadata.json').exists())
+
+    def test_partial_new_publication_never_deletes_final_names(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active-site' / 'db.sqlite3'
+            output = root / 'r19-input' / 'Database' / 'production.sqlite3'
+            checksum_path = output.with_name(f'{output.name}.sha256')
+            metadata_path = output.with_name(f'{output.name}.metadata.json')
+            self._create_source(source)
+            sentinel = b'EXTERNAL-CHECKSUM-SENTINEL'
+            real_link = os.link
+            injected = False
+
+            def inject_checksum_conflict(staged, destination):
+                nonlocal injected
+                if not injected and Path(destination) == checksum_path.resolve():
+                    Path(destination).write_bytes(sentinel)
+                    injected = True
+                return real_link(staged, destination)
+
+            with patch(
+                'shares.services.database_backup.os.link',
+                side_effect=inject_checksum_conflict,
+            ):
+                with self.assertRaisesRegex(
+                    DatabaseBackupError,
+                    'choose a completely new output path',
+                ):
+                    backup_sqlite_path(
+                        source,
+                        output,
+                        application_version=self.application_version,
+                    )
+
+            self.assertTrue(injected)
+            self.assertTrue(output.exists())
+            with closing(sqlite3.connect(output)) as partial_snapshot:
+                self.assertEqual(
+                    partial_snapshot.execute('PRAGMA integrity_check').fetchone(),
+                    ('ok',),
+                )
+            self.assertEqual(checksum_path.read_bytes(), sentinel)
+            self.assertFalse(metadata_path.exists())
+
+    def test_concurrent_new_backups_publish_exactly_one_complete_set(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active-site' / 'db.sqlite3'
+            output = root / 'r19-input' / 'Database' / 'production.sqlite3'
+            self._create_source(source)
+
+            def run_backup():
+                try:
+                    return backup_sqlite_path(
+                        source,
+                        output,
+                        application_version=self.application_version,
+                    )
+                except DatabaseBackupError as exc:
+                    return exc
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(lambda _index: run_backup(), range(2)))
+
+            successes = [item for item in results if isinstance(item, dict)]
+            failures = [item for item in results if isinstance(item, DatabaseBackupError)]
+            self.assertEqual(len(successes), 1, results)
+            self.assertEqual(len(failures), 1, results)
+            checksum_path = output.with_name(f'{output.name}.sha256')
+            metadata_path = output.with_name(f'{output.name}.metadata.json')
+            digest = sha256(output.read_bytes()).hexdigest()
+            self.assertEqual(
+                checksum_path.read_text(encoding='utf-8'),
+                f'{digest}  {output.name}\n',
+            )
+            metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
+            self.assertEqual(metadata['sha256'], digest)
+
+    def test_failed_publication_cleans_temporary_sqlite_sidecars(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'active-site' / 'db.sqlite3'
+            output = root / 'r19-input' / 'Database' / 'production.sqlite3'
+            self._create_source(source)
+
+            def create_sensitive_sidecars_then_fail(outputs, **_options):
+                temporary_database = tuple(outputs)[0][0]
+                for suffix in ('-wal', '-shm', '-journal'):
+                    temporary_database.with_name(
+                        f'{temporary_database.name}{suffix}'
+                    ).write_bytes(b'sensitive-temporary-content')
+                raise OSError('injected publication failure')
+
+            with patch(
+                'shares.services.database_backup._publish_output_set',
+                side_effect=create_sensitive_sidecars_then_fail,
+            ):
+                with self.assertRaisesRegex(OSError, 'injected publication failure'):
+                    backup_sqlite_path(
+                        source,
+                        output,
+                        application_version=self.application_version,
+                    )
+
+            self.assertFalse(list(output.parent.glob('.*.tmp-*')))
+            self.assertFalse(output.exists())
 
 
 @skipUnless(connection.vendor == 'sqlite', 'SQLite-specific backup contract')
@@ -137,7 +520,7 @@ class SQLiteBackupTests(TransactionTestCase):
                     return None
 
             with patch(
-                'shares.services.database_backup.connections',
+                'django.db.connections',
                 {'default': DatabaseConnection()},
             ):
                 for suffix in ('', '-wal', '-shm', '-journal'):

@@ -173,7 +173,29 @@ python ops\migration\Compare-SiteDataExports.py `
 python manage.py backup_database D:\FFXIVShareBackups\site-2026-07-11.sqlite3
 ```
 
-- 命令会对备份执行 `PRAGMA integrity_check` 和 `foreign_key_check`，并原子生成数据库、同名 `.sha256` 与 `.metadata.json` 证据集；已有任一输出时默认拒绝覆盖。
+- 如果已部署的旧版本尚无 `backup_database` 命令，不得为取样而在生产工作区执行 `pull`、切换版本或复制新模块进去。可以把当前受审版本的 `shares\services\database_backup.py` 单独复制到生产仓库之外，先核对并在工单记录该工具文件的 SHA-256，再用它的纯标准库旁路入口只读打开活动库：
+
+```powershell
+$Python = 'C:\path\to\production\venv\Scripts\python.exe'
+$LegacyBackupTool = 'C:\FFXIVShare-R19-Tools\database_backup.py'
+$LiveDatabase = 'C:\path\to\production\db.sqlite3'
+$Output = 'E:\FFXIVShare-R19\Database\production.sqlite3'
+$ReleaseApplicationVersion = 'immutable-production-release-id'
+$ExpectedToolSha256 = 'trusted-sha256-from-the-reviewed-commit'
+
+$ToolSha256Before = (Get-FileHash -LiteralPath $LegacyBackupTool -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($ToolSha256Before -ne $ExpectedToolSha256) { throw 'Backup tool SHA-256 mismatch.' }
+& $Python -I -S -B -X utf8 $LegacyBackupTool `
+  $LiveDatabase $Output `
+  --application-version $ReleaseApplicationVersion
+if ($LASTEXITCODE -ne 0) { throw "Sidecar backup failed: $LASTEXITCODE" }
+$ToolSha256After = (Get-FileHash -LiteralPath $LegacyBackupTool -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($ToolSha256After -ne $ExpectedToolSha256) { throw 'Backup tool changed while executing.' }
+```
+
+- `$ExpectedToolSha256` 必须从受审提交所在的可信开发机或受控制品系统另行取得，不能使用生产机收到文件后自报的摘要代替；执行前后都精确比较，并把工具放在本次取样专用的受控 ACL 目录。示例中的 release ID 和 expected SHA 都是故意会失败的占位符，执行前必须分别替换为被备份的真实不可变版本和受审工具摘要。
+- 旁路入口不导入 Django settings、model 或 migration，不会执行部署和 schema 变更；源路径以 SQLite `mode=ro` 打开，且必须是 settings 报告的原始单链接活动库，不能使用硬链接或符号链接别名。输出必须是活动数据库目录之外、支持原子硬链接 create-new 发布的本机 NTFS 绝对新路径，不能使用 UNC、映射盘、重解析目录或其它文件系统，且不提供覆盖开关；不满足时只允许安全失败，不得绕过检查。`application_version` 必须填写被备份的线上不可变版本；旁路工具自身的代码版本和文件 SHA-256 另行归档。需要数据库与媒体同窗一致时，仍须在批准的短暂停写窗口执行备份和最终媒体复制。
+- 两种入口都会对备份执行 `PRAGMA integrity_check` 和 `foreign_key_check`，通过临时文件生成数据库、同名 `.sha256` 与 `.metadata.json`，并在正常成功路径发布完整证据集；已有任一输出时默认拒绝覆盖。三个文件不构成跨文件系统事务，断电或进程被强杀仍可能留下不完整目录；必须保留现场、改用全新输出目录重跑，并以下游三件套验证器通过作为完整性的唯一判据，绝不能手工补齐或复用部分输出。
 - 把三件套移到离线介质后，先在独立证据目录验证文件名、精确校验和、元数据契约、SQLite 文件头及读取期间稳定性：
 
 ```powershell
