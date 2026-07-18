@@ -17,6 +17,8 @@
 
 R19 的生产副本验证必须按 `PRODUCTION_COPY_REHEARSAL.md` 执行：先为数据库三件套、源媒体及两个独立媒体副本生成结构化 handoff 并封存五个互不重叠的外部范围，再生成不应用 migration 的只读 Proposal，由人工逐项审阅并绑定 Review/Policy，最后使用两个全新 RunRoot 完成两次独立离线演练。任一非零或中断运行都不能续跑；工具不会产生切换授权，具有该字段的结果必须保持 `cutover_authorized=false`。
 
+每轮演练都必须分别检查原始源库、migration 后的升级源库和最终目标备份，并生成 create-new 的 `database-structure-preservation.json`。双轮 verifier 必须重新读取三份 inspection、独立复算结构与序列投影，再绑定单轮报告、ledger、deployment candidate 和跨轮摘要；结构报告和双轮报告都不能产生切换授权。
+
 ## 迁移方式
 
 本批优先采用旁路新库迁移：
@@ -79,6 +81,7 @@ R19 的生产副本验证必须按 `PRODUCTION_COPY_REHEARSAL.md` 执行：先�
 
 - v3 使用规范化 JSONL、固定 UTC 六位微秒时间、显式自然键协议和冻结的语义结构指纹；同名字段改型、关系目标变化或编码协议变化必须发布新的数据集版本。
 - v3 保存 Django Admin 操作日志、完整 ContentType/Permission 目录、源 migration 投影和自增序列高水位。
+- v3 的直接可移植实体序列范围固定为 `auth_group`、`auth_user`、`shares_userprofile`、`shares_share`、`shares_collection`、`shares_collectionitem`、`shares_report`、`shares_sharelog`、`shares_announcement`、`shares_sitemessage`、`django_admin_log`；框架元数据、会话和内嵌桥接表代理 ID 不冒充可移植身份。
 - v3 对数据库物理表进行完整分类；未知非空表和悬空的内嵌多对多记录一律阻止导出、导入或“已导入”判定。
 - `django_session` 不导出会话载荷。清单只记录总数、未过期数和最晚过期时间，切换时强制所有用户重新登录；目标会话表必须为空。
 - v2 显式保存 `Share` 的活动限制状态、原因、时间和操作人。
@@ -123,7 +126,7 @@ python ops\migration\Compare-SiteDataExports.py `
 
 - 比较器不连接数据库，也不信任 manifest 中的摘要声明；它重新读取并校验固定 v3 目录、canonical JSONL 字节、实际 SHA、记录数量、模型和主键序列。
 - 业务实体和依赖引用必须一致；目标 ContentType、Permission 和 migration 只允许是可解释的前向超集。
-- 目标自增序列只能等于或高于源高水位，目标会话证据必须为空；导出时间、应用版本和数据库引擎只作为来源证据记录，不用于掩盖业务差异。
+- 升级源库必须保留全部原始源库序列下限；最终目标只检查上述 11 张直接可移植实体表，其有效下限为原始源库与升级源库高水位的较大值。保持相等是合法结果，禁止向下重置或复用已删除 ID；被排除的已观察序列必须记录原始源、升级源、目标三方值和具体原因。目标会话证据必须为空；导出时间、应用版本和数据库引擎只作为来源证据记录，不用于掩盖业务差异。
 - 输出必须位于两个不可变数据集之外且默认拒绝覆盖；任何额外文件、链接、未知结构、摘要变化或不规范 JSON 都会生成失败证据并返回非零状态。
 - 比较证据固定包含 `cutover_authorized=false`，不能替代限制预检、目标数据库备份校验或 R20 发布授权。
 
@@ -142,11 +145,24 @@ python ops\migration\Compare-SiteDataExports.py `
 - 对“举报下架后又出现审核通过”的记录，管理员必须明确“确认维持”或“解除限制”；不能为了通过预检而被迫开放内容。
 - 每次人工处理后重新运行严格预检，只有 `blocking_errors` 和 `manual_review` 都为空才允许切换。
 
+### SQLite 物理结构与序列保真
+
+- `sqlite_schema` 清点保存所有用户定义 table/index/trigger/view 的原始 SQL。SQLite 内部对象按 SQLite ASCII 大小写折叠规则识别并排除，`sqlite_sequence` 单独完整清点；ASCII 折叠后重名的表、列、schema 对象或序列表项一律拒绝。
+- `table_structures` 规范化记录列、外键和唯一约束，并对 canonical JSON 计算 SHA-256。所有整数契约字段严格拒绝布尔值；普通列 `cid` 只作为物理顺序诊断，类型、`notnull`、默认值、主键序号、hidden、外键和唯一约束语义仍是阻断门禁。
+- 唯一约束比较保留列顺序、名称、降序、collation 和 partial，并区分普通列、rowid 与表达式；不能用索引内部序号变化掩盖真实约束变化。
+- 原始源结构只允许冻结代码中按精确 source/destination SQL SHA-256 对、对象身份和列属性值绑定的例外。每个声明例外都必须在升级源库和最终目标中分别消费；未消费例外、额外对象、未知 SQL、列属性、外键或唯一约束变化一律失败。
+- 升级源库与最终目标的 `sqlite_schema` 和 `table_structures` 必须精确相等；升级源库保留全部原始序列下限，最终目标按上述 v3 范围检查 `max(original source, upgraded source)`。被排除的内嵌桥接、框架元数据、会话及其它序列必须逐项附原因。
+- Pair verifier 不信任单轮的通过声明，会独立复算结构投影，并把 `database_structure_preservation_sha256` 同时绑定进 authority 和跨轮语义比较。
+
 ## 强制校验
 
 迁移前后至少比较：
 
 - 每类实体行数
+- 用户定义 schema 对象没有未知缺失、变化或新增，所有声明结构例外均已完整消费
+- 源列与主键属性、外键和唯一约束语义得到保留，升级源库与最终目标结构完全一致
+- 原始源库、升级源库和最终目标的序列下限满足上述范围与有效下限规则
+- `database-structure-preservation.json` 为 `preserved=true`、`issues=[]`，且双轮 verifier 独立复算结果一致
 - 用户主键、用户名和密码哈希摘要
 - Share 主键、`share_id`、作者、可见性、审核状态、活动限制和时间字段摘要
 - 点赞、收藏、合集成员和外键关系数量
@@ -218,7 +234,7 @@ python ops\migration\Inspect-SQLiteSnapshot.py `
   --output D:\FFXIVShareEvidence\sqlite-snapshot-inspection.json
 ```
 
-- 三件套验证器不通过 Django 或 SQLite 打开数据库，只证明本次读取到的三份文件彼此自洽，并确认该数据库具备进入独立快照检查的前置条件。元数据中的 `integrity_check=ok` 和 `foreign_key_check=ok` 仍只是备份生产者声明，不能替代随后由 `Inspect-SQLiteSnapshot.py` 执行的只读 `PRAGMA integrity_check`、`foreign_key_check`、表、migration 和序列清点。
+- 三件套验证器不通过 Django 或 SQLite 打开数据库，只证明本次读取到的三份文件彼此自洽，并确认该数据库具备进入独立快照检查的前置条件。元数据中的 `integrity_check=ok` 和 `foreign_key_check=ok` 仍只是备份生产者声明，不能替代随后由 `Inspect-SQLiteSnapshot.py` 执行的只读 `PRAGMA integrity_check`、`foreign_key_check` 以及规范化 `sqlite_schema`、`table_structures`、`django_migrations`、`sqlite_sequence` 清点；Approval 和 Pair verifier 还会独立验证这些结构，不能只依据 Inspector 自报摘要。
 - 三件套和待检查数据库必须是单链接普通文件；不要用 NTFS/Unix 硬链接给活动数据库创建“副本”，否则另一文件名旁的 WAL 或回滚日志可能绕过同名 sidecar 检查。跨目录交接应复制备份字节并重新核对 SHA-256。
 - 两份证据都使用新文件发布；备份集报告固定包含 `cutover_authorized=false` 和 `inspection_required=true`。无论哪一份报告都不证明线上来源、停写时点或允许正式切换。输入数据库旁出现 `-wal`、`-shm` 或 `-journal` 时必须拒绝并重新取得一致备份。
 - 备份应复制到另一物理存储，并定期在隔离环境中执行恢复、迁移、数据校验和关键流程冒烟。

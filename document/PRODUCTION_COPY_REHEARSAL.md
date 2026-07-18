@@ -180,6 +180,8 @@ if ($LASTEXITCODE -ne 0) { throw "Proposal failed: $LASTEXITCODE" }
 - `evidence\events.jsonl`，终态为 `review_required`；
 - `artifacts\source-handoff-manifest.json`，其 size/SHA-256 与外部 handoff 完全一致并进入 Proposal v2 的十项 evidence；
 - body 引用的备份集验证、SQLite 独立检查、migration 状态、migration review plan、运行时指纹和媒体清单证据。ledger 必须依次包含唯一的 `source_handoff_verified`、`policy_proposal_body_created`、`source_handoff_final_verified`、`source_final_verified`、`execution_bundle_final_verified` 和 terminal；终检会重新读取数据库三件套、源媒体、两个目标媒体副本及五范围访问快照。两者都不由 completion 的 bundle manifest 字段证明。
+- `evidence\source-inspection.json` 除 migration 外还冻结规范化 `sqlite_schema`、`table_structures` 和完整 `sqlite_sequence` 清点；`table_structures` 包含列、外键与唯一约束，并具有可复算 SHA-256；
+- Approval 会从 Proposal 冻结的 inspection artifact 独立校验上述清点的精确形状、摘要、表集合和 SQLite ASCII 标识符规则，不能只信任 Inspector 的通过声明。`table_structures` 通过 inspection artifact 进入审批证据，不是 Policy 顶层字段。
 
 记录提案摘要：
 
@@ -208,6 +210,8 @@ $ProposalTerminal = Get-Content -LiteralPath $ProposalLedger |
 - `source_leaf_nodes`、`target_leaf_nodes` 和 pending migration 节点符合预期；
 - migration 的 Python/SQL 操作不会删除、截断、覆盖、合并或静默重写用户数据；
 - 对字段缩窄、类型变化、唯一约束和数据迁移有逐记录保留证明；任何无法证明无损的操作都停止审批；
+- 允许变化的五张表 `shares_collectionitem`、`shares_report`、`shares_share`、`shares_sharelog`、`shares_userprofile` 必须分别匹配冻结代码中的精确 source/destination SQL SHA-256 对；只允许一个精确旧唯一索引移除、20 个精确对象新增，以及 `shares_report.reporter_id`、`shares_sharelog.user_id` 两个精确 `notnull 1→0` 变化；
+- 所有声明例外必须在升级源库和最终目标中分别被完整消费；任何未消费例外、额外对象、未知 SQL 或其它列属性变化都阻断。即使哈希门禁通过，审阅人仍须逐项记录五张表 SQL 转换为何无损；
 - `migration_plan_sha256`、`migration_runtime_sha256`、`runtime_fingerprint_sha256`、`execution_bundle_sha256` 均来自本次 Proposal；
 - handoff 中的来源主机、UTC、操作员、release application version、数据库三件套、源媒体、两个目标副本和五范围逐节点 DACL/owner 清单符合本次受控工单；
 - 源数据库、三件套、媒体和 ACL 在 Proposal 完成后仍与 handoff 一致，`source_handoff_final_verified.content_verified=true`；
@@ -262,6 +266,8 @@ Review 和 Policy 都使用 create-new 发布；目标已存在时工具会拒�
 ## 4. 执行两次独立离线演练
 
 每次演练必须使用同一个已批准 Policy、Proposal、Review、源数据库三件套和源媒体清单，但使用全新的 Rehearsal RunRoot 与 handoff 中对应 slot 的独立媒体副本。Rehearsal 不接受新的 handoff CLI 参数，而是只从已批准 Proposal RunRoot 的 `artifacts\source-handoff-manifest.json` 读取被冻结且由 Policy 间接绑定的副本；这避免在审批后替换交接权威。提案后精确 execution bundle 闭包或已指纹化的 Python 运行时闭包有任何改变时，Policy 会失效，应回到第 1 步；bundle 外的普通文档变化不影响 Policy。
+
+每轮会依次验证原始 `evidence\source-inspection.json`，在 migration 后生成 `evidence\upgraded-source-inspection.json`，再从最终目标备份生成 `evidence\target-backup-inspection.json`，最后以 create-new 语义发布 `evidence\database-structure-preservation.json`。只有结构报告同时满足 `preserved=true`、`issues=[]`，ledger 才会记录通过的 `database_structure_preserved` 并继续生成 deployment candidate。
 
 ```powershell
 $InvokeRehearsal = "$Repo\ops\migration\Invoke-ProductionCopyRehearsal.ps1"
@@ -353,12 +359,15 @@ if (
 - `evidence\site-data-comparison.json` 和 `evidence\final-target-site-data-comparison.json` 证明源导出、目标导出和最终备份恢复后的再次导出逐实体等价；
 - `evidence\restriction-preflight.json` 和 `evidence\final-target-restriction-preflight.json` 都具有完整计数、状态分布与 manual-review 结构，没有 blocking error 或待人工处理项，且去除生成时间后的语义投影完全一致；
 - preflight 中的 `ready_for_cutover=true` 只表示“内容限制数据”这一项检查已就绪，不是整体切换授权，绝不覆盖 result 与 deployment-candidate 的 `cutover_authorized=false`；正式停写、最终备份、冒烟和授权仍属于 R20；
-- `evidence\target-backup-set.json`、`evidence\target-backup-inspection.json` 和 `evidence\target-backup-set-final.json` 证明目标数据库备份三件套通过初次、独立 SQLite 检查和最终复核；双轮 verifier 还会重新绑定 database/checksum/metadata，要求四个 backup checks 全为 true，并把规范化 `sqlite_schema`（table/index/trigger/view）纳入跨轮语义比较；
+- `evidence\target-backup-set.json`、`evidence\target-backup-inspection.json` 和 `evidence\target-backup-set-final.json` 证明目标数据库备份三件套通过初次、独立 SQLite 检查和最终复核；双轮 verifier 还会重新绑定 database/checksum/metadata，并要求四个 backup checks 全为 true；
+- `evidence\source-inspection.json`、`evidence\upgraded-source-inspection.json`、`evidence\target-backup-inspection.json` 和 `evidence\database-structure-preservation.json` 必须被 ledger 与 deployment candidate 精确绑定，且结构报告为 `preserved=true`、`issues=[]`、`cross_destination_schema_equal=true`。门禁检查 `sqlite_schema` 的对象身份和精确 SQL、列的类型/`notnull`/默认值/主键序号/hidden、已有外键语义和唯一约束语义；普通列 `cid` 变化只作诊断，不豁免其它属性。唯一约束保留列顺序、名称、降序、collation、partial，并区分普通列、rowid 与表达式；升级源库与最终目标的 `sqlite_schema` 和 `table_structures` 必须精确相等；
+- 升级源库必须保留全部原始 `sqlite_sequence` 下限。最终目标对 11 张 v3 直接可移植实体表使用 `max(original source, upgraded source)` 作为有效下限：`auth_group`、`auth_user`、`shares_userprofile`、`shares_share`、`shares_collection`、`shares_collectionitem`、`shares_report`、`shares_sharelog`、`shares_announcement`、`shares_sitemessage`、`django_admin_log`。高水位保持相等完全合法，不要求 migration 插入记录后必然增加；
+- 最终目标报告必须逐项记录未进入上述范围的已观察序列及原因：内嵌桥接表代理 ID 在导入时重建，`auth_permission`、`django_content_type`、`django_migrations` 属于框架元数据重建，`django_session` 有意清空以强制重新登录，其它表明确标记为不属于 v3 直接可移植实体序列范围；
 - 目标媒体在数据库验证完成后被重新扫描，`artifacts\target-media-manifest-final.json` 与 `evidence\media-comparison-final.json` 仍证明它与源媒体清单一致；
 - `evidence\runtime-fingerprint-initial.json` 在任何审批或业务子进程前建立全量内容指纹，`evidence\runtime-fingerprint-final.json` 在最后一个业务子进程结束后再次执行全量内容哈希，随后仍须通过 source final、external handoff final 和 deployment candidate 门禁；pre/post migrate 等中间门禁只做绑定原始报告 SHA 的 metadata identity+closure checkpoint，必须明确记录 `content_rehashed=false`。指纹覆盖解释器、基础标准库、实际 `sys.path` 导入闭包和 venv 自身 `site-packages`；同一信任根下相互包含的全递归根会归一为不重叠物理根，closure 条目必须全局唯一，closure 文件必须属于 identity inventory，未落入 closure 的少量独立 runtime 文件仍会逐组件单独复验。quick checkpoint 会在一次不重叠遍历中同时核对闭包和文件身份；full producer 在输出 `fsync` 后也会终检闭包目录身份及全部已哈希文件，晚到条目会失败关闭并清理本次输出。两者均不使用跨运行内容缓存，也不减少 initial/final 的全量内容哈希。基础 Python 中未进入 `sys.path` 的全局 `purelib/platlib` 内容会作为 `excluded_inactive_site_package_roots` 明示排除，若该根或其子路径实际进入 `sys.path` 则直接阻断。它用于发现普通漂移，不证明抵抗同一受信任操作员刻意等长改写并恢复时间戳；
 - `evidence\events.jsonl` 连续、终态为 `completed`，且 `deployment_candidate_verified` 早于终态；该事件仍包含 `cutover_authorized=false`；
 - 两次运行的关键业务计数、实体摘要、源/目标导出比较结果和最终备份摘要一致。RunId、时间戳和独立目标备份文件摘要以外的差异都必须解释。
-- 双轮报告的 `status=verified`、`comparison.matched=true`、`comparison.issues=[]`、`comparison.unexplained_differences=[]`、`cutover_authorized=false`；`authority` 必须绑定本次 Proposal/Review/Policy，`runs.first` 和 `runs.second` 必须分别绑定两轮 completion、result、ledger 及 ledger head。verifier 会在两轮结束后再次复核 live handoff 的内容与访问基线；`comparison.allowed_differences` 中每一项都必须在 `allowed_difference_values` 逐值归档，不能用于豁免业务语义或审批权威漂移。报告本身明确标记含生产证据、成功后保留并要求安全销毁。
+- 双轮报告的 `status=verified`、`comparison.matched=true`、`comparison.issues=[]`、`comparison.unexplained_differences=[]`、`cutover_authorized=false`；`authority` 必须绑定本次 Proposal/Review/Policy，`runs.first` 和 `runs.second` 必须分别绑定两轮 completion、result、ledger 及 ledger head。verifier 会重新读取三份 inspection、独立复算结构投影并验证结构报告、ledger 和 deployment candidate，而不信任单轮的通过声明；`comparison.matched_projections.database_structure_preservation_sha256` 必须与 `authority.database_structure_preservation_sha256` 一致并进入跨轮语义比较。verifier 还会在两轮结束后再次复核 live handoff 的内容与访问基线；`comparison.allowed_differences` 中每一项都必须在 `allowed_difference_values` 逐值归档，不能用于豁免业务语义或审批权威漂移。报告本身明确标记含生产证据、成功后保留并要求安全销毁。
 
 任何一项不满足都表示 R19 未通过。不要删除失败证据，也不要进入 R20。
 
@@ -369,7 +378,11 @@ foreach ($RunRoot in @($RehearsalRunRoot1, $RehearsalRunRoot2)) {
   Get-FileHash -Algorithm SHA256 -LiteralPath `
     "$RunRoot\evidence\completion.json", `
     "$RunRoot\evidence\result.json", `
-    "$RunRoot\evidence\events.jsonl"
+    "$RunRoot\evidence\events.jsonl", `
+    "$RunRoot\evidence\source-inspection.json", `
+    "$RunRoot\evidence\upgraded-source-inspection.json", `
+    "$RunRoot\evidence\target-backup-inspection.json", `
+    "$RunRoot\evidence\database-structure-preservation.json"
   $Terminal = Get-Content -LiteralPath "$RunRoot\evidence\events.jsonl" |
     Select-Object -Last 1 |
     ConvertFrom-Json
@@ -404,6 +417,8 @@ Get-FileHash -Algorithm SHA256 -LiteralPath $PairVerification
 ```
 
 带 `-IncludeSlow` 的 Proposal 测试会创建真实 SQLite 备份并执行完整只读提案。`Test-ProductionCopyEndToEnd.ps1 -IncludeSlow` 执行完整 Proposal→Review→Approval→两次 Rehearsal 离线测试；它耗时较长，只使用自己创建的唯一测试根，不应指向任何活动生产输入目录。
+
+E2E 源库从空库严格前向构建到 `shares/0018`，并断言 `django_migrations` ID 连续且 `sqlite_sequence` 等于最大 ID，防止重新引入“先迁到最新再回滚”的伪源库。测试还对五张会重建的表及一张不重建的控制表注入显著高于 `MAX(id)` 的序列高水位，贯穿源备份、Proposal、升级源、目标、最终备份和 Pair 验证。当前性能基线及三类语义摘要以 `REFACTORING_PLAN.md` 的 R19 状态为唯一事实源。
 
 成功时端到端脚本还会输出单行 `PRODUCTION_COPY_E2E_TIMING_JSON=...`，分别记录 Proposal、Review/Approval、两轮 rehearsal、双轮 verifier 和总耗时。该数据明确标记为 `diagnostic_only=true`，只用于发现性能回归，不参与任何证据或通过判定。
 
