@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models.functions import Substr
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.vary import vary_on_headers
 
 from shares.forms import CreateShareForm, EditShareForm
 from shares.models import Collection, Share
@@ -10,6 +11,7 @@ from shares.policies import can_view_share, is_moderator, viewable_share_queryse
 from shares.presentation import (
     build_my_reaction_return_url,
     build_share_detail_view_model,
+    is_htmx_request,
 )
 from shares.rate_limits import consume_rate_limit, request_identity
 from shares.selectors import (
@@ -30,6 +32,7 @@ _MY_CONTENT_TABS = {'my_shares', 'collections', 'likes', 'favorites'}
 _DETAIL_LOG_PREVIEW_SIZE = 25
 
 
+@vary_on_headers('HX-Request', 'Cookie')
 def share_detail(request, share_id):
     try:
         share = share_detail_queryset(request.user).get(share_id=share_id)
@@ -39,6 +42,21 @@ def share_detail(request, share_id):
         messages.error(request, '该分享不存在或您没有权限访问')
         return redirect('index')
     detail = build_share_detail_view_model(share, request.user)
+    canonical_share_path = share.get_absolute_url()
+    context = {
+        'share': share,
+        'detail': detail,
+        'canonical_share_path': canonical_share_path,
+        'canonical_share_url': request.build_absolute_uri(canonical_share_path),
+        'is_liked': detail.is_liked,
+        'is_favorited': detail.is_favorited,
+    }
+    if (
+        is_htmx_request(request)
+        and request.GET.get('presentation') == 'overlay'
+    ):
+        return render(request, 'shares/includes/share_detail_overlay.html', context)
+
     related_collections = related_collection_summaries(
         share,
         request.user,
@@ -59,19 +77,13 @@ def share_detail(request, share_id):
     has_user_collections = False
     if detail.actions.can_add_to_collection:
         has_user_collections = Collection.objects.filter(author=request.user).exists()
-    canonical_share_path = share.get_absolute_url()
-    return render(request, 'shares/detail.html', {
-        'share': share,
-        'detail': detail,
-        'canonical_share_path': canonical_share_path,
-        'canonical_share_url': request.build_absolute_uri(canonical_share_path),
+    context.update({
         'related_collections': related_collections,
         'has_user_collections': has_user_collections,
         'share_logs': share_logs,
         'share_logs_truncated': share_logs_truncated,
-        'is_liked': detail.is_liked,
-        'is_favorited': detail.is_favorited,
     })
+    return render(request, 'shares/detail.html', context)
 
 
 def create_share(request):

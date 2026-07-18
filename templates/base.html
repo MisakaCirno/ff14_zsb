@@ -303,6 +303,15 @@
         {% endif %}
     </nav>
 
+    <dialog class="app-share-dialog" data-share-detail-dialog aria-label="分享详情">
+        <div class="app-share-dialog__content" data-share-detail-dialog-content>
+            <div class="app-share-dialog__loading" role="status">
+                <span class="spinner-border" aria-hidden="true"></span>
+                <span>正在载入详情…</span>
+            </div>
+        </div>
+    </dialog>
+
     {% include 'shares/includes/manual_copy_modal.html' %}
 
     <script src="{% static 'js/bootstrap.bundle.min.js' %}"></script>

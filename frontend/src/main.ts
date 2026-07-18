@@ -11,6 +11,7 @@ import { initializeModerationResolution } from './features/moderation-resolution
 import { initializePreviewImages } from './features/preview-images'
 import { initializeShareActions } from './features/share-actions'
 import { initializeShareDetails } from './features/share-detail'
+import { initializeShareDetailDialog } from './features/share-detail-dialog'
 import { initializeShareEditors } from './features/share-editor'
 import { initializeShareImages } from './features/share-image'
 import { initializeShareInteractions } from './features/share-interactions'
@@ -53,6 +54,7 @@ initializeManualCopy()
 initializeModerationResolution()
 initializeShareEditors()
 initializeShareDetails()
+initializeShareDetailDialog()
 initializeShareImages()
 initializeShareInteractions()
 Alpine.start()

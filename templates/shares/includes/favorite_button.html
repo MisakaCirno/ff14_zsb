@@ -1,7 +1,7 @@
 {% with fragment=interaction_fragment|default:'card' %}
 <button type="submit"
         class="btn btn-sm {% if is_favorited %}btn-warning{% else %}btn-outline-secondary{% endif %}{% if fragment != 'detail' %} hover-lift w-50{% endif %}"
-        id="btn-favorite-{{ share.share_id }}"
+        id="btn-favorite-{% if fragment == 'overlay' %}overlay-{% endif %}{{ share.share_id }}"
         form="share-interaction-form-{{ fragment }}-{{ share.share_id }}"
         formaction="{% url 'toggle_favorite' share.share_id %}"
         name="target_state"
@@ -17,6 +17,6 @@
         aria-pressed="{% if is_favorited %}true{% else %}false{% endif %}"
         title="{% if is_favorited %}取消收藏{% else %}收藏{% endif %}">
     <i class="bi {% if is_favorited %}bi-star-fill{% else %}bi-star{% endif %}" aria-hidden="true"></i>
-    <span id="favorites-count-{{ share.share_id }}"{% if fragment == 'detail' %} class="ms-1"{% endif %}>{{ favorites_count }}</span>
+    <span id="favorites-count-{% if fragment == 'overlay' %}overlay-{% endif %}{{ share.share_id }}" data-reaction-count{% if fragment == 'detail' or fragment == 'overlay' %} class="ms-1"{% endif %}>{{ favorites_count }}</span>
 </button>
 {% endwith %}

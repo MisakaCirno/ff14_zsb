@@ -19,7 +19,7 @@ from shares.services.interactions import (
 from shares.web.decorators import get_safe_local_return_url, login_required_or_hx_redirect
 
 
-INTERACTION_FRAGMENTS = {'card', 'detail'}
+INTERACTION_FRAGMENTS = {'card', 'detail', 'overlay'}
 INTERACTION_TARGET_STATES = {
     'active': True,
     'inactive': False,

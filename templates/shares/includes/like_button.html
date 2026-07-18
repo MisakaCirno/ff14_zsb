@@ -1,7 +1,7 @@
 {% with fragment=interaction_fragment|default:'card' %}
 <button type="submit"
         class="btn btn-sm {% if is_liked %}btn-danger{% else %}btn-outline-danger{% endif %}{% if fragment == 'detail' %} me-2{% else %} hover-lift w-50{% endif %}"
-        id="btn-like-{{ share.share_id }}"
+        id="btn-like-{% if fragment == 'overlay' %}overlay-{% endif %}{{ share.share_id }}"
         form="share-interaction-form-{{ fragment }}-{{ share.share_id }}"
         formaction="{% url 'toggle_like' share.share_id %}"
         name="target_state"
@@ -17,6 +17,6 @@
         aria-pressed="{% if is_liked %}true{% else %}false{% endif %}"
         title="{% if is_liked %}取消点赞{% else %}点赞{% endif %}">
     <i class="bi {% if is_liked %}bi-heart-fill{% else %}bi-heart{% endif %}" aria-hidden="true"></i>
-    <span id="likes-count-{{ share.share_id }}"{% if fragment == 'detail' %} class="ms-1"{% endif %}>{{ likes_count }}</span>
+    <span id="likes-count-{% if fragment == 'overlay' %}overlay-{% endif %}{{ share.share_id }}" data-reaction-count{% if fragment == 'detail' or fragment == 'overlay' %} class="ms-1"{% endif %}>{{ likes_count }}</span>
 </button>
 {% endwith %}

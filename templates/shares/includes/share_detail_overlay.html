@@ -1,0 +1,134 @@
+{% load safe_content %}
+<article
+    class="share-detail-overlay"
+    aria-labelledby="share-detail-overlay-title"
+    data-share-detail
+    data-share-detail-overlay
+    data-share-id="{{ share.share_id }}"
+    data-share-title="{{ share.title }}"
+    data-share-author="{{ detail.author.display_name }}"
+    data-share-url="{{ canonical_share_url }}"
+    data-record-view-url="{% url 'record_view' share.share_id %}"
+    data-record-copy-url="{% url 'record_copy' share.share_id %}"
+    data-content-revealed="{% if detail.content_warning %}false{% else %}true{% endif %}"
+    {% if detail.content_warning %}data-content-warning="{{ detail.content_warning.key }}"{% endif %}>
+    <button class="share-detail-overlay__close" type="button" data-share-detail-dialog-close aria-label="关闭详情">
+        <i class="bi bi-x-lg" aria-hidden="true"></i>
+    </button>
+
+    <div class="share-detail-overlay__layout">
+        <section class="share-detail-overlay__media" aria-label="战术板预览">
+            <img
+                id="share-detail-overlay-preview"
+                class="share-detail-overlay__image{% if detail.content_warning %} blur-content{% endif %}"
+                src="{{ detail.preview_url }}"
+                alt="《{{ share.title }}》的战术板预览"
+                data-share-preview
+                decoding="async"
+                {% if detail.content_warning %}aria-hidden="true"{% endif %}>
+            {% if detail.content_warning %}
+            <div
+                class="share-detail-overlay__warning share-detail-preview__warning--{{ detail.content_warning.tone }} spoiler-overlay"
+                data-content-overlay
+                aria-labelledby="share-detail-overlay-warning-title"
+                aria-describedby="share-detail-overlay-warning-message">
+                <i class="{{ detail.content_warning.icon }}" aria-hidden="true"></i>
+                <h2 id="share-detail-overlay-warning-title">{{ detail.content_warning.title }}</h2>
+                <p id="share-detail-overlay-warning-message">{{ detail.content_warning.message }}</p>
+                <button
+                    class="btn btn-outline-light"
+                    type="button"
+                    data-reveal-content
+                    aria-controls="share-detail-overlay-preview"
+                    aria-expanded="false">
+                    <i class="bi bi-eye" aria-hidden="true"></i>
+                    显示预览
+                </button>
+            </div>
+            {% endif %}
+        </section>
+
+        <div class="share-detail-overlay__content">
+            <header class="share-detail-overlay__header">
+                <div class="share-detail-badges" role="list" aria-label="分享状态">
+                    {% for badge in detail.badges %}
+                    <span class="share-detail-badge share-detail-badge--{{ badge.tone }}" data-share-badge="{{ badge.key }}" role="listitem">
+                        <i class="{{ badge.icon }}" aria-hidden="true"></i>
+                        {{ badge.label }}
+                    </span>
+                    {% endfor %}
+                </div>
+                <h1 class="share-detail-overlay__title" id="share-detail-overlay-title">{{ share.title }}</h1>
+                <div class="share-detail-overlay__author-row">
+                    <div class="share-detail-author">
+                        <span class="share-detail-author__avatar" aria-hidden="true"><i class="bi bi-person-circle"></i></span>
+                        <div class="share-detail-author__copy">
+                            <p class="share-detail-author__name">
+                                {% if detail.author.profile_url %}<a href="{{ detail.author.profile_url }}">{{ detail.author.display_name }}</a>{% else %}<span>{{ detail.author.display_name }}</span>{% endif %}
+                            </p>
+                            <p class="share-detail-author__bio"><time datetime="{{ share.created_at|date:'c' }}">{{ share.created_at|date:"Y-m-d" }}</time></p>
+                        </div>
+                    </div>
+                    <dl class="share-detail-overlay__stats" aria-label="分享统计">
+                        <div><dt><i class="bi bi-eye" aria-hidden="true"></i><span class="visually-hidden">浏览</span></dt><dd data-views-count>{{ share.views }}</dd></div>
+                        <div><dt><i class="bi bi-clipboard" aria-hidden="true"></i><span class="visually-hidden">复制</span></dt><dd data-copies-count>{{ share.copies }}</dd></div>
+                    </dl>
+                </div>
+            </header>
+
+            {% if detail.notice %}
+            <aside class="share-detail-overlay__notice share-detail-notice--{{ detail.notice.tone }}" data-share-notice="{{ detail.notice.key }}">
+                <i class="{{ detail.notice.icon }}" aria-hidden="true"></i>
+                <div>
+                    <strong>{{ detail.notice.title }}</strong>
+                    <p>{{ detail.notice.message }}</p>
+                </div>
+            </aside>
+            {% endif %}
+
+            {% if share.description %}
+            <section class="share-detail-overlay__description" aria-labelledby="share-detail-overlay-description-title">
+                <h2 id="share-detail-overlay-description-title">内容说明</h2>
+                <div class="description-content">{{ share.description|sanitize_nested_html }}</div>
+            </section>
+            {% endif %}
+
+            <section class="share-detail-overlay__code" aria-labelledby="share-detail-overlay-code-title">
+                <div>
+                    <h2 id="share-detail-overlay-code-title">战术板代码</h2>
+                    <p>复制后可直接在游戏中使用。</p>
+                </div>
+                <div class="share-detail-overlay__code-control">
+                    <input id="share-detail-overlay-code" class="form-control strategy-code" type="text" value="{{ share.strategy_code }}" data-share-code aria-labelledby="share-detail-overlay-code-title" readonly>
+                    <button class="btn btn-primary" type="button" data-copy-detail-code>
+                        <i class="bi bi-clipboard" aria-hidden="true"></i>
+                        复制代码
+                    </button>
+                </div>
+            </section>
+
+            <footer class="share-detail-overlay__footer">
+                <div class="share-detail-reactions" role="group" aria-label="分享互动">
+                    {% if user.is_authenticated %}
+                    {% include 'shares/includes/like_button.html' with share=share is_liked=detail.is_liked likes_count=detail.likes_count interaction_fragment='overlay' only %}
+                    {% include 'shares/includes/favorite_button.html' with share=share is_favorited=detail.is_favorited favorites_count=detail.favorites_count interaction_fragment='overlay' only %}
+                    {% else %}
+                    <a href="{% url 'login' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-sm btn-outline-danger" aria-label="登录后点赞，当前 {{ detail.likes_count }} 个点赞">
+                        <i class="bi bi-heart" aria-hidden="true"></i><span>{{ detail.likes_count }}</span>
+                    </a>
+                    <a href="{% url 'login' %}?next={{ canonical_share_path|urlencode:'' }}" class="btn btn-sm btn-outline-secondary" aria-label="登录后收藏，当前 {{ detail.favorites_count }} 个收藏">
+                        <i class="bi bi-star" aria-hidden="true"></i><span>{{ detail.favorites_count }}</span>
+                    </a>
+                    {% endif %}
+                </div>
+                <a class="share-detail-overlay__full-link" href="{{ canonical_share_path }}">
+                    完整详情
+                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </a>
+                {% if user.is_authenticated %}
+                {% include 'shares/includes/share_interaction_form.html' with share=share interaction_fragment='overlay' interaction_return_url=canonical_share_path csrf_token=csrf_token only %}
+                {% endif %}
+            </footer>
+        </div>
+    </div>
+</article>

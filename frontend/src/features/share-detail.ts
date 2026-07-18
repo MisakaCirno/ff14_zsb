@@ -107,6 +107,11 @@ function copyShareUrl(root: HTMLElement, button: HTMLButtonElement): void {
 }
 
 function initializeShareDetail(root: HTMLElement): void {
+  if (root.dataset.shareDetailInitialized === 'true') {
+    return
+  }
+  root.dataset.shareDetailInitialized = 'true'
+
   const shareUrlInput = root.querySelector<HTMLInputElement>('[data-share-url-input]')
   const canonicalShareUrl = root.dataset.shareUrl
   if (shareUrlInput && canonicalShareUrl) {

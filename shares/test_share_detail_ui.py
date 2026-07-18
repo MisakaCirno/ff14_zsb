@@ -186,3 +186,88 @@ class ShareDetailUiTests(TestCase):
         self.assertEqual(content.count('<h1'), 1)
         self.assertContains(response, '<h4>第一阶段</h4>', html=True)
         self.assertContains(response, '<h5>处理细节</h5>', html=True)
+
+    def test_htmx_overlay_is_a_read_only_permission_aware_fragment(self):
+        response = self.client.get(
+            self.detail_url(),
+            {'presentation': 'overlay'},
+            HTTP_HX_REQUEST='true',
+        )
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'shares/includes/share_detail_overlay.html')
+        self.assertNotContains(response, '<!DOCTYPE html>')
+        self.assertContains(response, 'data-share-detail-overlay')
+        self.assertContains(response, 'data-share-detail-dialog-close')
+        self.assertContains(response, '完整详情')
+        self.assertEqual(content.count('<h1'), 1)
+        self.assertIn('HX-Request', response.headers['Vary'])
+        self.assertIn('Cookie', response.headers['Vary'])
+        self.share.refresh_from_db()
+        self.assertEqual(self.share.views, 12)
+
+    def test_overlay_requires_htmx_and_keeps_full_page_fallback(self):
+        response = self.client.get(
+            self.detail_url(),
+            {'presentation': 'overlay'},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'shares/detail.html')
+        self.assertContains(response, '<!DOCTYPE html>')
+        self.assertNotContains(response, 'data-share-detail-overlay')
+
+    def test_authenticated_overlay_uses_unique_interaction_fragment(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.get(
+            self.detail_url(),
+            {'presentation': 'overlay'},
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '?fragment=overlay"')
+        self.assertContains(response, f'id="btn-like-overlay-{self.share.share_id}"')
+        self.assertContains(
+            response,
+            f'id="share-interaction-form-overlay-{self.share.share_id}"',
+        )
+
+    def test_overlay_reaction_post_returns_the_same_unique_fragment(self):
+        self.client.force_login(self.viewer)
+
+        response = self.client.post(
+            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=overlay',
+            {'target_state': 'active'},
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'id="btn-like-overlay-{self.share.share_id}"')
+        self.assertContains(
+            response,
+            f'form="share-interaction-form-overlay-{self.share.share_id}"',
+        )
+        self.assertContains(response, 'aria-pressed="true"')
+        self.assertTrue(self.share.likes.filter(pk=self.viewer.pk).exists())
+
+    def test_overlay_cannot_bypass_private_share_permissions(self):
+        private_share = Share.objects.create(
+            title='私有分享',
+            strategy_code='[stgy:private-overlay]',
+            author=self.author,
+            visibility=Share.Visibility.PRIVATE,
+            status=Share.Status.APPROVED,
+        )
+
+        full_response = self.client.get(self.detail_url(private_share))
+        overlay_response = self.client.get(
+            self.detail_url(private_share),
+            {'presentation': 'overlay'},
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertRedirects(full_response, reverse('index'))
+        self.assertRedirects(overlay_response, reverse('index'))
