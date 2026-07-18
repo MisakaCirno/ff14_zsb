@@ -195,29 +195,65 @@ python ops\migration\Compare-SiteDataExports.py `
 python manage.py backup_database D:\FFXIVShareBackups\site-2026-07-11.sqlite3
 ```
 
-- 如果已部署的旧版本尚无 `backup_database` 命令，不得为取样而在生产工作区执行 `pull`、切换版本或复制新模块进去。可以把当前受审版本的 `shares\services\database_backup.py` 单独复制到生产仓库之外，先核对并在工单记录该工具文件的 SHA-256，再用它的纯标准库旁路入口只读打开活动库：
+- 如果已部署的旧版本尚无 `backup_database` 命令，不得为取样而在生产工作区执行 `pull`、切换版本或复制新模块进去。正式取样改用生产仓库外的四文件捕获门禁，固定执行顺序为 `preflight`→`capture`；不得绕过门禁单独运行备份脚本。工具目录必须精确只含以下四个受审文件，不得放置摘要文件、说明文件或 `__pycache__`：`ProductionCopyCaptureGate.py`、`ProductionCopyHandoff.py`、`Verify-SQLiteBackupSet.py`、`database_backup.py`。
 
 ```powershell
 $Python = 'C:\path\to\production\venv\Scripts\python.exe'
-$LegacyBackupTool = 'C:\FFXIVShare-R19-Tools\database_backup.py'
-$LiveDatabase = 'C:\path\to\production\db.sqlite3'
-$Output = 'E:\FFXIVShare-R19\Database\production.sqlite3'
+$ProductionRepositoryRoot = 'C:\path\to\production'
+$LiveDatabase = Join-Path $ProductionRepositoryRoot 'db.sqlite3'
+$ToolRoot = 'C:\FFXIVShare-R19\Tools'
+$CaptureRoot = 'C:\FFXIVShare-R19\Capture\capture-20260718-01'
+$AuditRoot = Join-Path $CaptureRoot 'Audit'
+$DatabaseRoot = Join-Path $CaptureRoot 'Database'
+$Gate = Join-Path $ToolRoot 'ProductionCopyCaptureGate.py'
+$HandoffCore = Join-Path $ToolRoot 'ProductionCopyHandoff.py'
+$BackupVerifier = Join-Path $ToolRoot 'Verify-SQLiteBackupSet.py'
+$BackupTool = Join-Path $ToolRoot 'database_backup.py'
+$Output = Join-Path $DatabaseRoot 'production.sqlite3'
+$PreflightReport = Join-Path $AuditRoot 'capture-preflight.json'
+$FinalReport = Join-Path $AuditRoot 'capture-final.json'
 $ReleaseApplicationVersion = 'immutable-production-release-id'
-$ExpectedToolSha256 = 'trusted-sha256-from-the-reviewed-commit'
+# 以下四值绑定受审工具提交 b1360d9a39a18509e417493925af8b7419b7ba1a。
+$ExpectedGateSha256 = '7365ec6c941f95bc174f17aa47abd40001aae0bb49f6db2dbd93e8d357197f84'
+$ExpectedHandoffSha256 = 'e5d08180b1aa39a3af77d615b8ef5b6b111b02f81e580356c3f96239acd221f6'
+$ExpectedVerifierSha256 = 'b745188292a7dd34f277ed634e74e91d335b28cf8d53e1316b87a53fb11c5f02'
+$ExpectedBackupToolSha256 = '965e4f9b7a5e497af8b5f16241e96e5c3a8d59852995f4abed957b07ea7b15aa'
 
-$ToolSha256Before = (Get-FileHash -LiteralPath $LegacyBackupTool -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($ToolSha256Before -ne $ExpectedToolSha256) { throw 'Backup tool SHA-256 mismatch.' }
-& $Python -I -S -B -X utf8 $LegacyBackupTool `
-  $LiveDatabase $Output `
-  --application-version $ReleaseApplicationVersion
-if ($LASTEXITCODE -ne 0) { throw "Sidecar backup failed: $LASTEXITCODE" }
-$ToolSha256After = (Get-FileHash -LiteralPath $LegacyBackupTool -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($ToolSha256After -ne $ExpectedToolSha256) { throw 'Backup tool changed while executing.' }
+& $Python -I -S -B -X utf8 $Gate preflight `
+  --expected-gate-sha256 $ExpectedGateSha256 `
+  --handoff-core $HandoffCore `
+  --expected-handoff-core-sha256 $ExpectedHandoffSha256 `
+  --backup-verifier $BackupVerifier `
+  --expected-backup-verifier-sha256 $ExpectedVerifierSha256 `
+  --backup-tool $BackupTool `
+  --expected-backup-tool-sha256 $ExpectedBackupToolSha256 `
+  --production-repository-root $ProductionRepositoryRoot `
+  --source-database $LiveDatabase `
+  --output-database $Output `
+  --application-version $ReleaseApplicationVersion `
+  --output-report $PreflightReport `
+  --confirm-dedicated-new-empty-output-directory
+if ($LASTEXITCODE -ne 0) { throw "Capture preflight failed: $LASTEXITCODE" }
+
+$ExpectedPreflightSha256 = (
+  Get-FileHash -LiteralPath $PreflightReport -Algorithm SHA256
+).Hash.ToLowerInvariant()
+& $Python -I -S -B -X utf8 $Gate capture `
+  --expected-gate-sha256 $ExpectedGateSha256 `
+  --expected-handoff-core-sha256 $ExpectedHandoffSha256 `
+  --expected-backup-verifier-sha256 $ExpectedVerifierSha256 `
+  --expected-backup-tool-sha256 $ExpectedBackupToolSha256 `
+  --preflight-report $PreflightReport `
+  --expected-preflight-sha256 $ExpectedPreflightSha256 `
+  --output-report $FinalReport
+if ($LASTEXITCODE -ne 0) { throw "Capture failed: $LASTEXITCODE" }
 ```
 
-- `$ExpectedToolSha256` 必须从受审提交所在的可信开发机或受控制品系统另行取得，不能使用生产机收到文件后自报的摘要代替；执行前后都精确比较，并把工具放在本次取样专用的受控 ACL 目录。示例中的 release ID 和 expected SHA 都是故意会失败的占位符，执行前必须分别替换为被备份的真实不可变版本和受审工具摘要。
-- 旁路入口不导入 Django settings、model 或 migration，不会执行部署和 schema 变更；源路径以 SQLite `mode=ro` 打开，且必须是 settings 报告的原始单链接活动库，不能使用硬链接或符号链接别名。工具自身自动拒绝相对路径、显式 UNC、源叶子符号/硬链接、活动库目录树内输出、已有任一同名输出，以及不支持原子硬链接 create-new 发布的目标。
-- 单文件工具本身不独立证明盘符不是映射盘、文件系统是 NTFS 或完整祖先链没有 reparse point。因此正式 capture 前还必须执行并归档外部 Win32 路径预检：源库、受审工具和输出都使用固定的本机绝对路径；盘符为 fixed NTFS；每个已存在祖先均非 reparse point；本次专用 Database 目录为全新空目录并使用受控 ACL。成功后该目录必须精确只含数据库、同名 `.sha256` 和 `.metadata.json` 三件套。后续 handoff 会再次用 Win32 handle、最终 DOS path、卷信息、链接数和完整祖先链复核离线输入，但不能追溯替代生产机 capture 时的这份预检记录。任一预检、备份、目录精确成员或后续 handoff 失败都必须保留现场并换全新目录重跑，禁止绕过。
+- 四个 expected SHA-256 必须从受审提交所在的可信开发机或受控制品系统另行取得，不能用生产机收到文件后的自报摘要代替。上面的值只绑定已标明的受审工具提交；任一工具代码变化都必须重新审阅、重新计算全部受影响值并更新工单。release ID 仍是故意会失败的占位符，必须替换为被备份的线上不可变版本。`capture` 会再次要求全部四个外部可信摘要，并只执行已稳定读取和匹配的工具字节；preflight 自己声明的摘要不能替代外部信任锚。
+- `$ToolRoot`、`$CaptureRoot`、`Audit` 和 `Database` 必须位于 fixed 本机 NTFS，完整祖先链不得含 reparse point。工具目录使用 protected、受控且可复核的 DACL；当前操作员若同时拥有 Administrators 权限，仍属于可以改写目录的受信任边界，因此不能把它描述成抵抗同一管理员的不可写封存。CaptureRoot 必须是本次新建的专用根，精确只含初始为空的 `Audit` 和 `Database`；两者使用只允许当前操作员、SYSTEM 和本机 Administrators 完全控制的 private protected DACL。
+- 门禁不导入 Django settings、model 或 migration，不会执行部署和 schema 变更。它要求 Python 3.10+，并绑定 preflight 与 capture 的 Python、SQLite 版本及 `-I -S -B -X utf8` 运行标志；两阶段不得更换解释器。源路径必须是 settings 报告的原始单链接活动库，不能使用硬链接或符号链接别名。`capture` 通过已核验的 `database_backup.py` 在同一门禁进程内调用 SQLite Backup API，并持续复核源路径身份、工具摘要、目录成员、输出身份和三件套内容。
+- 成功后 `Database` 必须精确只含数据库、同名 `.sha256` 和 `.metadata.json`，`Audit` 必须精确只含 preflight 与 final 两份规范 JSON。`capture-final.json` 的 `capture_set_complete=true` 和 `backup_set_contract_verified=true` 只说明捕获契约通过；它固定 `cutover_authorized=false`，不证明活动源库内容在整个过程中冻结、不证明数据库与媒体来自同一窗口，也不独立重跑 metadata 声称的 SQLite PRAGMA。随后仍必须执行独立快照检查并由 handoff 重新读取三件套。
+- 三件套与 final 报告不是同一原子文件系统事务。任何失败、Ctrl+C、强杀、目录漂移或后续 handoff 失败都必须把整个 CaptureRoot 标记为隔离现场并保留，使用全新的 CaptureRoot 从 preflight 开始重跑；禁止手工补齐、删除多余项或复用部分输出。两份捕获报告及其 SHA-256 必须与后续 handoff、Proposal 和双轮演练摘要一起归档，但 handoff 不会自动把捕获报告纳入自身签名式权威链。
 - `application_version` 必须填写被备份的线上不可变版本；旁路工具自身的代码版本和文件 SHA-256 另行归档。需要数据库与媒体同窗一致时，仍须在批准的短暂停写窗口执行备份和最终媒体复制。
 - 两种入口都会对备份执行 `PRAGMA integrity_check` 和 `foreign_key_check`，通过临时文件生成数据库、同名 `.sha256` 与 `.metadata.json`，并在正常成功路径发布完整证据集；已有任一输出时默认拒绝覆盖。三个文件不构成跨文件系统事务，断电或进程被强杀仍可能留下不完整目录；必须保留现场、改用全新输出目录重跑，并以下游三件套验证器通过作为完整性的唯一判据，绝不能手工补齐或复用部分输出。
 - 把三件套移到离线介质后，先在独立证据目录验证文件名、精确校验和、元数据契约、SQLite 文件头及读取期间稳定性：

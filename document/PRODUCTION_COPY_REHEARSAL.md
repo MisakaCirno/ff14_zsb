@@ -6,7 +6,7 @@
 
 ## 安全边界
 
-- 输入数据库必须由 `backup_database` 或同一受审备份核心的哈希封存旁路入口生成，并连同同名 `.sha256`、`.metadata.json` 一起复制到离线介质；不得把活动 `db.sqlite3`、硬链接、带 `-wal`、`-shm` 或 `-journal` 的文件当作副本。旧部署缺少管理命令时只能把 `shares\services\database_backup.py` 单文件放在生产仓库之外，以 `-I -S` 模式运行；其 SHA-256 必须与受审端提供的可信 expected 值在执行前后都精确一致并归档，不得只记录生产机收到文件后的自报摘要，也不得为取样更新生产工作区。
+- 输入数据库必须由 `backup_database` 或生产仓库外的四文件捕获门禁生成，并连同同名 `.sha256`、`.metadata.json` 一起复制到离线介质；不得把活动 `db.sqlite3`、硬链接、带 `-wal`、`-shm` 或 `-journal` 的文件当作副本。旧部署缺少管理命令时使用 `ProductionCopyCaptureGate.py` 固定执行 `preflight`→`capture`，由门禁在同一进程内调用受审 `database_backup.py`；不得单独执行备份脚本，不得只信任生产机自报工具摘要，也不得为取样更新生产工作区。四个工具摘要必须由可信开发机或受控制品系统另行提供，并在两个阶段重复传入。
 - 源数据库三件套、源媒体清单、源媒体目录和两个演练媒体副本在整个流程中保持封存。数据库三件套必须独占一个只含三个文件的目录；源媒体清单必须是位于另一目录的独立文件；五个外部范围彼此、与仓库及任何 RunRoot 都不得重叠。工具只把稳定复制后的数据库放进 RunRoot，再对私有副本执行检查和迁移。
 - Proposal RunRoot、两个 Rehearsal RunRoot 必须是三个全新的本机 NTFS 目录。Bootstrap 会审查从直接父目录到卷根的完整祖先链：owner 必须可信，不可信主体不能拥有删除、修改 DACL/owner 或在直接父目录创建/继承可写子项的权限。优先使用当前用户的本机 LocalAppData 私有目录；禁止使用 UNC、映射盘、重解析点、共享临时目录、仓库目录、输入目录或媒体目录。
 - RunRoot 创建后由 Bootstrap 收紧 ACL；`approval` 目录还会单独收紧。ACL 校验失败时不得通过放宽脚本或换到共享目录绕过。
@@ -25,12 +25,19 @@
 $Repo = 'D:\Web\FFXIVShare'
 $Python = (Resolve-Path "$Repo\venv\Scripts\python.exe").Path
 
-$SourceCopyParent = 'E:\FFXIVShare-R19'
-$SourceDatabase = Join-Path $SourceCopyParent 'Database\production.sqlite3'
+$ProductionRepositoryRoot = 'C:\Users\Administrator\Desktop\srv\ff14_zsb'
+$ProductionPython = Join-Path $ProductionRepositoryRoot 'venv\Scripts\python.exe'
+$ProductionDatabase = Join-Path $ProductionRepositoryRoot 'db.sqlite3'
+$ToolRoot = 'C:\FFXIVShare-R19\Tools'
+$CaptureRoot = 'C:\FFXIVShare-R19\Capture\capture-20260718-01'
+$CaptureAuditRoot = Join-Path $CaptureRoot 'Audit'
+$CaptureDatabaseRoot = Join-Path $CaptureRoot 'Database'
+$SourceDatabase = Join-Path $CaptureDatabaseRoot 'production.sqlite3'
 $SourceChecksum = "$SourceDatabase.sha256"
 $SourceMetadata = "$SourceDatabase.metadata.json"
-$SourceMediaRoot = Join-Path $SourceCopyParent 'SourceMedia'
-$SourceMediaManifest = Join-Path $SourceCopyParent 'Manifest\source-media-manifest.json'
+$SourceMediaParent = 'C:\FFXIVShare-R19\Media\production-20260718-01'
+$SourceMediaRoot = Join-Path $SourceMediaParent 'SourceMedia'
+$SourceMediaManifest = Join-Path $SourceMediaParent 'Manifest\source-media-manifest.json'
 
 $PrivateBase = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
 $RunParent = Join-Path $PrivateBase 'FFXIVShare\R19\Runs'
@@ -61,7 +68,7 @@ if (Test-Path -LiteralPath $PairVerificationParent) {
 $PairVerification = Join-Path $PairVerificationParent 'production-20260717-pair.json'
 ```
 
-先在旧应用环境使用 SQLite Backup API 的 `backup_database` 创建在线数据库备份三件套；旧部署没有该命令时，按 `DATA_MIGRATION_CONTRACT.md` 使用生产仓库外、SHA-256 已归档的单文件旁路入口。两种入口生成完全相同的三件套契约；不要直接复制活动数据库，也不要更新旧部署来取得命令。记录来源主机、UTC 时点、应用版本、数据库摘要、备份工具版本/摘要和操作员，并取得与该时点一致的离线媒体或存储快照。若跨数据库与媒体的一致性必须短暂冻结写入，应使用另行批准并记录的 R19 取样窗口；它不等于 R20 的最终停写或切换窗口。然后逐字节复制数据库三件套与媒体快照到演练机。媒体清单必须针对离线媒体源生成：
+先在旧应用环境使用 SQLite Backup API 的 `backup_database` 创建在线数据库备份三件套；旧部署没有该命令时，使用下方四文件捕获门禁。两种入口生成完全相同的三件套契约；不要直接复制活动数据库，也不要更新旧部署来取得命令。记录来源主机、UTC 时点、应用版本、数据库摘要、四个捕获工具摘要和操作员，并取得与该时点一致的离线媒体或存储快照。若跨数据库与媒体的一致性必须短暂冻结写入，应使用另行批准并记录的 R19 取样窗口；它不等于 R20 的最终停写或切换窗口。然后逐字节复制数据库三件套与媒体快照到演练机。媒体清单必须针对离线媒体源生成：
 
 ```powershell
 & $Python -E -s -B -X utf8 `
@@ -74,7 +81,7 @@ $PairVerification = Join-Path $PairVerificationParent 'production-20260717-pair.
 
 为两次演练分别制作完整媒体副本。复制完成后将它们离线冻结，演练期间不得有任何写入者。两个副本都必须与 `$SourceMediaManifest` 的相对路径、大小和 SHA-256 完全一致，使用私有 DACL，且不能位于任何 RunRoot 内。备份 metadata 的 `application_version` 必须是部署时设置的不可变 release 标识，并与 `$ReleaseApplicationVersion` 完全一致；`unknown`、空值和示例占位符都会被拒绝。
 
-`$SourceCopyParent` 和 `$TargetMediaParent` 必须是本次演练专用目录，复制完成后不得再放入其它文件。handoff 还会审查从每个 scope 的直接父目录到卷根的完整祖先链；如果卷根或更高层目录向不受信任主体授予删除、修改 DACL/owner 等路径控制权限，必须改用祖先链安全的专用本机 NTFS 路径，不能放宽工具检查。
+`$CaptureRoot`、`$SourceMediaParent` 和 `$TargetMediaParent` 必须是本次演练专用目录，复制完成后不得再放入其它文件。CaptureRoot 在捕获期间必须精确只含 `Audit` 与 `Database`；成功后前者精确只含两份捕获报告，后者精确只含数据库三件套。handoff 还会审查从每个 scope 的直接父目录到卷根的完整祖先链；如果卷根或更高层目录向不受信任主体授予删除、修改 DACL/owner 等路径控制权限，必须改用祖先链安全的专用本机 NTFS 路径，不能放宽工具检查。
 
 以下示例把两个专用父目录连同全部后代逐节点设置成 protected DACL，因此五个外部 scope 及其直接父目录都会只允许当前用户读/遍历，SYSTEM 和本机 Administrators 保留 Full Control。它会改 ACL 和 owner，只能在确认路径是本次离线副本后执行；不要对活动站点目录、唯一备份、共用目录或“小抄儿”路径执行。handoff 工具自身不会修改这些 ACL，也不会写入探针。
 
@@ -106,13 +113,77 @@ function Set-ExactTreeDacl {
   }
 }
 
-Set-ExactTreeDacl -LiteralPath $SourceCopyParent -Sddl $SealedSddl
+Set-ExactTreeDacl -LiteralPath $ToolRoot -Sddl $SealedSddl
+Set-ExactTreeDacl -LiteralPath $CaptureRoot -Sddl $PrivateOutputSddl
+Set-ExactTreeDacl -LiteralPath $SourceMediaParent -Sddl $SealedSddl
 Set-ExactTreeDacl -LiteralPath $TargetMediaParent -Sddl $SealedSddl
 Set-ExactTreeDacl -LiteralPath $HandoffParent -Sddl $PrivateOutputSddl
 Set-ExactTreeDacl -LiteralPath $PairVerificationParent -Sddl $PrivateOutputSddl
 ```
 
-封存后创建结构化 handoff。输出使用 create-new 语义，已存在时拒绝覆盖；创建过程会重复校验数据库三件套、源媒体和两个目标媒体副本，并自动归档五个范围及祖先链的路径身份、owner、DACL 和 ACE 投影。
+`$ToolRoot` 在设置 DACL 前必须精确只放入来自同一受审制品的四个文件：`ProductionCopyCaptureGate.py`、`ProductionCopyHandoff.py`、`Verify-SQLiteBackupSet.py` 和 `database_backup.py`。四个 expected 值不得在生产机上根据刚收到的文件自行生成；下面的占位符必须替换为可信开发机或受控制品系统提供的精确 SHA-256。CaptureRoot 必须预先新建，且只含使用 private protected DACL 的空 `Audit` 与空 `Database`。
+
+```powershell
+$Gate = Join-Path $ToolRoot 'ProductionCopyCaptureGate.py'
+$HandoffCore = Join-Path $ToolRoot 'ProductionCopyHandoff.py'
+$BackupVerifier = Join-Path $ToolRoot 'Verify-SQLiteBackupSet.py'
+$BackupTool = Join-Path $ToolRoot 'database_backup.py'
+$PreflightReport = Join-Path $CaptureAuditRoot 'capture-preflight.json'
+$FinalReport = Join-Path $CaptureAuditRoot 'capture-final.json'
+# 以下四值绑定受审工具提交 b1360d9a39a18509e417493925af8b7419b7ba1a。
+$ExpectedGateSha256 = '7365ec6c941f95bc174f17aa47abd40001aae0bb49f6db2dbd93e8d357197f84'
+$ExpectedHandoffSha256 = 'e5d08180b1aa39a3af77d615b8ef5b6b111b02f81e580356c3f96239acd221f6'
+$ExpectedVerifierSha256 = 'b745188292a7dd34f277ed634e74e91d335b28cf8d53e1316b87a53fb11c5f02'
+$ExpectedBackupToolSha256 = '965e4f9b7a5e497af8b5f16241e96e5c3a8d59852995f4abed957b07ea7b15aa'
+
+& $ProductionPython -I -S -B -X utf8 $Gate preflight `
+  --expected-gate-sha256 $ExpectedGateSha256 `
+  --handoff-core $HandoffCore `
+  --expected-handoff-core-sha256 $ExpectedHandoffSha256 `
+  --backup-verifier $BackupVerifier `
+  --expected-backup-verifier-sha256 $ExpectedVerifierSha256 `
+  --backup-tool $BackupTool `
+  --expected-backup-tool-sha256 $ExpectedBackupToolSha256 `
+  --production-repository-root $ProductionRepositoryRoot `
+  --source-database $ProductionDatabase `
+  --output-database $SourceDatabase `
+  --application-version $ReleaseApplicationVersion `
+  --output-report $PreflightReport `
+  --confirm-dedicated-new-empty-output-directory
+if ($LASTEXITCODE -ne 0) { throw "Capture preflight failed: $LASTEXITCODE" }
+
+$ExpectedPreflightSha256 = (
+  Get-FileHash -LiteralPath $PreflightReport -Algorithm SHA256
+).Hash.ToLowerInvariant()
+& $ProductionPython -I -S -B -X utf8 $Gate capture `
+  --expected-gate-sha256 $ExpectedGateSha256 `
+  --expected-handoff-core-sha256 $ExpectedHandoffSha256 `
+  --expected-backup-verifier-sha256 $ExpectedVerifierSha256 `
+  --expected-backup-tool-sha256 $ExpectedBackupToolSha256 `
+  --preflight-report $PreflightReport `
+  --expected-preflight-sha256 $ExpectedPreflightSha256 `
+  --output-report $FinalReport
+if ($LASTEXITCODE -ne 0) { throw "Capture failed: $LASTEXITCODE" }
+
+$CaptureEvidence = Get-Content -LiteralPath $FinalReport -Raw | ConvertFrom-Json
+if (
+  $CaptureEvidence.phase -ne 'capture' -or
+  $CaptureEvidence.capture_set_complete -ne $true -or
+  $CaptureEvidence.backup_set_contract_verified -ne $true -or
+  $CaptureEvidence.cutover_authorized -ne $false
+) {
+  throw 'Capture final report did not publish a complete non-cutover result.'
+}
+Get-FileHash -Algorithm SHA256 -LiteralPath $PreflightReport, $FinalReport
+```
+
+preflight 与 capture 必须使用同一个 Python/SQLite 运行时；门禁会绑定版本和 `-I -S -B -X utf8` 标志。活动库允许继续写入，门禁冻结和复核的是源路径身份而不是全过程内容；SQLite Backup API 生成一致备份，但捕获报告不证明数据库与媒体同窗一致。final 报告也不独立重跑 metadata 声称的 integrity/foreign-key PRAGMA，后续 Proposal/Inspector 仍必须完成独立检查。任意失败或中断都要隔离并保留整个 CaptureRoot，换全新根从 preflight 重跑，禁止补文件或复用部分输出。
+
+捕获完成后，对 `$CaptureDatabaseRoot` 设置 `$SealedSddl`，再创建结构化 handoff。输出使用 create-new 语义，已存在时拒绝覆盖；创建过程会重复校验数据库三件套、源媒体和两个目标媒体副本，并自动归档五个范围及祖先链的路径身份、owner、DACL 和 ACE 投影。handoff 不会自动绑定两份捕获报告，因此必须把报告原件及 SHA-256 另行附到同一受控工单。
+
+```powershell
+Set-ExactTreeDacl -LiteralPath $CaptureDatabaseRoot -Sddl $SealedSddl
+```
 
 ```powershell
 $HandoffTool = "$Repo\ops\migration\ProductionCopyHandoff.py"
@@ -403,6 +474,8 @@ Get-FileHash -Algorithm SHA256 -LiteralPath $PairVerification
 这些检查不读取线上副本，也不使用浏览器：
 
 ```powershell
+& "$Repo\ops\migration\Test-ProductionCopyCaptureGate.ps1" -RepositoryRoot $Repo -PythonExecutable $Python
+& "$Repo\ops\migration\Test-SQLiteBackupSet.ps1" -RepositoryRoot $Repo -PythonExecutable $Python
 & "$Repo\ops\migration\Test-ProductionCopyHandoff.ps1" -RepositoryRoot $Repo -PythonExecutable $Python
 & "$Repo\ops\migration\Test-ProductionCopyBootstrap.ps1" -RepositoryRoot $Repo -PythonExecutable $Python
 & "$Repo\ops\migration\Test-ProductionCopyPolicyApproval.ps1" -RepositoryRoot $Repo -PythonExecutable $Python
@@ -428,4 +501,4 @@ handoff 合同和端到端脚本使用真实 NTFS/DACL；其余快速合同的�
 
 ## R19 完成门禁
 
-自动化测试通过只证明工具链和测试数据有效。只有使用可证明来源及时间点的线上不可变数据库备份和对应媒体快照完成上述两次演练、归档全部摘要与人工审阅记录后，R19 才能标记完成。在此之前，`document\REFACTORING_PLAN.md` 中的 R19 必须保持未完成状态，也不得进入 R20 正式切换。
+自动化测试通过只证明工具链和测试数据有效。只有使用可证明来源及时间点的线上不可变数据库备份和对应媒体快照完成上述两次演练，归档捕获 preflight/final、handoff、Proposal/Review/Policy、双轮报告的原件与摘要以及人工审阅记录后，R19 才能标记完成。在此之前，`document\REFACTORING_PLAN.md` 中的 R19 必须保持未完成状态，也不得进入 R20 正式切换。
