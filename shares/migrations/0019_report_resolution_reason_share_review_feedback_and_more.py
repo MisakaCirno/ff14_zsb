@@ -6,6 +6,218 @@ from django.db.migrations.exceptions import IrreversibleError
 import django.db.models.deletion
 
 
+SQLITE_SEQUENCE_FLOOR_TABLE = 'shares_migration_0019_sqlite_sequence_floor'
+SQLITE_SEQUENCE_FLOOR_OWNER = (
+    'ffxivshare.shares.0019.sqlite-sequence-floor.v1'
+)
+
+
+def _sequence_floor_create_sql(connection):
+    quoted_table = connection.ops.quote_name(SQLITE_SEQUENCE_FLOOR_TABLE)
+    return (
+        f'CREATE TABLE {quoted_table} ('
+        '"table_name" TEXT NOT NULL, '
+        '"sequence_floor" INTEGER NOT NULL CHECK ('
+        'typeof("sequence_floor") = \'integer\' '
+        'AND "sequence_floor" >= 0), '
+        '"migration_owner" TEXT NOT NULL CHECK ('
+        f'"migration_owner" = \'{SQLITE_SEQUENCE_FLOOR_OWNER}\'))'
+    )
+
+
+def _normalize_schema_sql(sql):
+    return ' '.join(sql.split()) if isinstance(sql, str) else None
+
+
+def _validate_sequence_rows(rows, *, source):
+    validated = []
+    seen_names = set()
+    for row_number, row in enumerate(rows, start=1):
+        if not isinstance(row, (tuple, list)) or len(row) != 2:
+            raise RuntimeError(
+                f'{source} row {row_number} must contain exactly two values.'
+            )
+        table_name, sequence_floor = row
+        if not isinstance(table_name, str) or not table_name:
+            raise RuntimeError(
+                f'{source} row {row_number} has an invalid table name.'
+            )
+        if (
+            isinstance(sequence_floor, bool)
+            or not isinstance(sequence_floor, int)
+            or sequence_floor < 0
+        ):
+            raise RuntimeError(
+                f'{source} row {row_number} has an invalid sequence value.'
+            )
+        comparison_name = table_name.casefold()
+        if comparison_name in seen_names:
+            raise RuntimeError(
+                f'{source} contains duplicate table name {table_name!r}.'
+            )
+        seen_names.add(comparison_name)
+        validated.append((table_name, sequence_floor))
+    return validated
+
+
+def _objects_using_sequence_floor_name(cursor):
+    cursor.execute(
+        """
+        SELECT type, name, tbl_name
+        FROM sqlite_schema
+        WHERE lower(name) = lower(%s) OR lower(tbl_name) = lower(%s)
+        ORDER BY type, name
+        """,
+        [SQLITE_SEQUENCE_FLOOR_TABLE, SQLITE_SEQUENCE_FLOOR_TABLE],
+    )
+    return cursor.fetchall()
+
+
+def _validate_owned_sequence_floor_table(cursor, *, allow_missing):
+    objects = _objects_using_sequence_floor_name(cursor)
+    if not objects:
+        if allow_missing:
+            return False
+        raise RuntimeError(
+            f'SQLite sequence floor table {SQLITE_SEQUENCE_FLOOR_TABLE!r} is missing.'
+        )
+    expected_object = (
+        'table',
+        SQLITE_SEQUENCE_FLOOR_TABLE,
+        SQLITE_SEQUENCE_FLOOR_TABLE,
+    )
+    if objects != [expected_object]:
+        raise RuntimeError(
+            'Refusing to use the SQLite sequence floor name because it is '
+            f'owned by unexpected schema objects: {objects!r}.'
+        )
+
+    quoted_table = cursor.db.ops.quote_name(SQLITE_SEQUENCE_FLOOR_TABLE)
+    cursor.execute(f'PRAGMA table_info({quoted_table})')
+    columns = cursor.fetchall()
+    expected_columns = [
+        (0, 'table_name', 'TEXT', 1, None, 0),
+        (1, 'sequence_floor', 'INTEGER', 1, None, 0),
+        (2, 'migration_owner', 'TEXT', 1, None, 0),
+    ]
+    if columns != expected_columns:
+        raise RuntimeError(
+            'SQLite sequence floor table has an unexpected schema: '
+            f'{columns!r}.'
+        )
+    cursor.execute(
+        'SELECT sql FROM sqlite_schema WHERE type = \'table\' AND name = %s',
+        [SQLITE_SEQUENCE_FLOOR_TABLE],
+    )
+    stored_create_sql = cursor.fetchone()[0]
+    expected_create_sql = _sequence_floor_create_sql(cursor.db)
+    if _normalize_schema_sql(stored_create_sql) != _normalize_schema_sql(
+        expected_create_sql
+    ):
+        raise RuntimeError(
+            'SQLite sequence floor table does not carry the expected '
+            'migration ownership signature.'
+        )
+    return True
+
+
+def _read_captured_sequence_rows(cursor, quoted_table):
+    cursor.execute(
+        f'SELECT "table_name", "sequence_floor", "migration_owner" '
+        f'FROM {quoted_table} ORDER BY "table_name"'
+    )
+    sequence_rows = []
+    for row_number, row in enumerate(cursor.fetchall(), start=1):
+        table_name, sequence_floor, migration_owner = row
+        if (
+            not isinstance(migration_owner, str)
+            or migration_owner != SQLITE_SEQUENCE_FLOOR_OWNER
+        ):
+            raise RuntimeError(
+                'SQLite sequence floor table row '
+                f'{row_number} has an invalid migration owner.'
+            )
+        sequence_rows.append((table_name, sequence_floor))
+    return _validate_sequence_rows(
+        sequence_rows,
+        source=SQLITE_SEQUENCE_FLOOR_TABLE,
+    )
+
+
+def capture_sqlite_sequence_floors(apps, schema_editor):
+    """Capture every SQLite AUTOINCREMENT high-water mark before table rebuilds."""
+    connection = schema_editor.connection
+    if connection.vendor != 'sqlite':
+        return
+
+    quoted_table = connection.ops.quote_name(SQLITE_SEQUENCE_FLOOR_TABLE)
+    with connection.cursor() as cursor:
+        if _objects_using_sequence_floor_name(cursor):
+            raise RuntimeError(
+                'Refusing to overwrite an existing SQLite schema object named '
+                f'{SQLITE_SEQUENCE_FLOOR_TABLE!r}.'
+            )
+
+        cursor.execute(
+            "SELECT type FROM sqlite_schema WHERE name = 'sqlite_sequence'"
+        )
+        sqlite_sequence_object = cursor.fetchall()
+        if sqlite_sequence_object not in ([], [('table',)]):
+            raise RuntimeError(
+                'sqlite_sequence is not an ordinary SQLite table: '
+                f'{sqlite_sequence_object!r}.'
+            )
+        if sqlite_sequence_object:
+            cursor.execute('SELECT name, seq FROM sqlite_sequence ORDER BY name')
+            source_rows = _validate_sequence_rows(
+                cursor.fetchall(),
+                source='sqlite_sequence',
+            )
+        else:
+            source_rows = []
+
+        cursor.execute(_sequence_floor_create_sql(connection))
+        if source_rows:
+            cursor.executemany(
+                f'INSERT INTO {quoted_table} '
+                '("table_name", "sequence_floor", "migration_owner") '
+                'VALUES (%s, %s, %s)',
+                [
+                    (table_name, sequence_floor, SQLITE_SEQUENCE_FLOOR_OWNER)
+                    for table_name, sequence_floor in source_rows
+                ],
+            )
+        captured_rows = _read_captured_sequence_rows(cursor, quoted_table)
+        if captured_rows != source_rows:
+            raise RuntimeError(
+                'SQLite sequence floor capture did not reproduce the source '
+                'sqlite_sequence rows exactly.'
+            )
+
+
+def cleanup_sqlite_sequence_floors_on_reverse(apps, schema_editor):
+    """Remove only the exact migration-owned table when 0019 reverses."""
+    connection = schema_editor.connection
+    if connection.vendor != 'sqlite':
+        return
+
+    quoted_table = connection.ops.quote_name(SQLITE_SEQUENCE_FLOOR_TABLE)
+    with connection.cursor() as cursor:
+        try:
+            exists = _validate_owned_sequence_floor_table(
+                cursor,
+                allow_missing=True,
+            )
+        except RuntimeError as exc:
+            raise IrreversibleError(str(exc)) from exc
+        if exists:
+            try:
+                _read_captured_sequence_rows(cursor, quoted_table)
+            except RuntimeError as exc:
+                raise IrreversibleError(str(exc)) from exc
+            cursor.execute(f'DROP TABLE {quoted_table}')
+
+
 def guard_moderation_data_before_reverse(apps, schema_editor):
     """Refuse to drop moderation data introduced by this migration."""
     database_alias = schema_editor.connection.alias
@@ -43,6 +255,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(
+            capture_sqlite_sequence_floors,
+            cleanup_sqlite_sequence_floors_on_reverse,
+            atomic=True,
+        ),
         migrations.AddField(
             model_name='report',
             name='resolution_reason',
