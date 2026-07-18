@@ -16,7 +16,7 @@
     <a class="app-skip-link" href="#main-content">跳到主要内容</a>
 
     <header class="app-header">
-        <nav class="navbar navbar-expand-xl navbar-dark app-navbar" aria-label="主导航">
+        <nav class="navbar navbar-expand-xl navbar-light app-navbar" aria-label="主导航">
             <div class="container-fluid app-navbar__container">
                 <a class="navbar-brand app-navbar__brand" href="{% url 'index' %}" aria-label="粘鼠板儿主页">
                     <span class="app-navbar__brand-mark" aria-hidden="true">
@@ -42,7 +42,7 @@
                                 href="{% url 'index' %}"
                                 {% if request.resolver_match.url_name == 'index' %}aria-current="page"{% endif %}>
                                 <i class="bi bi-house" aria-hidden="true"></i>
-                                <span>主页</span>
+                                <span>发现</span>
                             </a>
                         </li>
                         <li class="nav-item">
@@ -196,6 +196,20 @@
                 </div>
             </div>
         </nav>
+        <form class="app-mobile-search" action="{% url 'search' %}" method="get" role="search">
+            <label class="visually-hidden" for="mobile-site-search">搜索分享或分享 ID</label>
+            <i class="bi bi-search app-mobile-search__icon" aria-hidden="true"></i>
+            <input
+                class="form-control"
+                id="mobile-site-search"
+                type="search"
+                name="q"
+                value="{{ request.GET.q|default:'' }}"
+                placeholder="搜索战术板、作者或分享 ID"
+                autocomplete="off"
+                required>
+            <button class="btn btn-primary" type="submit">搜索</button>
+        </form>
         <noscript>
             <nav class="app-noscript-account" aria-label="无脚本账户导航" data-noscript-account-nav>
                 <div class="container-fluid app-noscript-account__inner">
@@ -251,6 +265,43 @@
             </div>
         </div>
     </footer>
+
+    <nav class="app-mobile-nav" aria-label="移动端主导航">
+        <a class="app-mobile-nav__item{% if request.resolver_match.url_name == 'index' or request.resolver_match.url_name == 'search' %} active{% endif %}" href="{% url 'index' %}"{% if request.resolver_match.url_name == 'index' or request.resolver_match.url_name == 'search' %} aria-current="page"{% endif %}>
+            <i class="bi bi-compass{% if request.resolver_match.url_name == 'index' or request.resolver_match.url_name == 'search' %}-fill{% endif %}" aria-hidden="true"></i>
+            <span>发现</span>
+        </a>
+        <a class="app-mobile-nav__item" href="#mobile-site-search">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <span>搜索</span>
+        </a>
+        <a class="app-mobile-nav__item app-mobile-nav__item--create{% if request.resolver_match.url_name == 'create_share' %} active{% endif %}" href="{% url 'create_share' %}"{% if request.resolver_match.url_name == 'create_share' %} aria-current="page"{% endif %}>
+            <span class="app-mobile-nav__create-mark" aria-hidden="true"><i class="bi bi-plus-lg"></i></span>
+            <span>发布</span>
+        </a>
+        {% if user.is_authenticated %}
+        <a class="app-mobile-nav__item{% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %} active{% endif %}" href="{% url 'site_message_list' %}"{% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %} aria-current="page"{% endif %}>
+            <span class="app-mobile-nav__icon-wrap">
+                <i class="bi bi-chat-square-text{% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %}-fill{% endif %}" aria-hidden="true"></i>
+                {% if global_unread_site_messages_count > 0 %}<span class="app-mobile-nav__dot"><span class="visually-hidden">有未读站内信</span></span>{% endif %}
+            </span>
+            <span>消息</span>
+        </a>
+        <a class="app-mobile-nav__item{% if request.resolver_match.url_name == 'my_shares' or request.resolver_match.url_name == 'profile_edit' %} active{% endif %}" href="{% url 'my_shares' %}"{% if request.resolver_match.url_name == 'my_shares' or request.resolver_match.url_name == 'profile_edit' %} aria-current="page"{% endif %}>
+            <i class="bi bi-person{% if request.resolver_match.url_name == 'my_shares' or request.resolver_match.url_name == 'profile_edit' %}-fill{% endif %}" aria-hidden="true"></i>
+            <span>我的</span>
+        </a>
+        {% else %}
+        <a class="app-mobile-nav__item{% if request.resolver_match.url_name == 'announcement_list' %} active{% endif %}" href="{% url 'announcement_list' %}"{% if request.resolver_match.url_name == 'announcement_list' %} aria-current="page"{% endif %}>
+            <i class="bi bi-megaphone{% if request.resolver_match.url_name == 'announcement_list' %}-fill{% endif %}" aria-hidden="true"></i>
+            <span>动态</span>
+        </a>
+        <a class="app-mobile-nav__item{% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'register' %} active{% endif %}" href="{% url 'login' %}"{% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'register' %} aria-current="page"{% endif %}>
+            <i class="bi bi-person" aria-hidden="true"></i>
+            <span>登录</span>
+        </a>
+        {% endif %}
+    </nav>
 
     {% include 'shares/includes/manual_copy_modal.html' %}
 

@@ -92,7 +92,7 @@ class FrontendShellContractTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn('class="app-skip-link" href="#main-content"', content)
-        self.assertIn('<nav class="navbar navbar-expand-xl navbar-dark app-navbar" aria-label="主导航">', content)
+        self.assertIn('<nav class="navbar navbar-expand-xl navbar-light app-navbar" aria-label="主导航">', content)
         self.assertIn('aria-controls="navbarNav"', content)
         self.assertIn('aria-expanded="false"', content)
         self.assertIn('aria-label="展开或收起导航菜单"', content)
@@ -106,6 +106,8 @@ class FrontendShellContractTests(TestCase):
         self.assertIn('role="search"', content)
         self.assertIn('for="site-search">搜索分享或分享 ID</label>', content)
         self.assertIn('aria-label="提交搜索"', content)
+        self.assertIn('aria-label="移动端主导航"', content)
+        self.assertIn('for="mobile-site-search">搜索分享或分享 ID</label>', content)
         self.assertIn('<main id="main-content" class="app-main py-4" tabindex="-1">', content)
         self.assertIn(f'2010 - {timezone.localdate().year} SQUARE ENIX', content)
 
@@ -1177,14 +1179,14 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assert_css_rule_contains(
             shell_source,
             '.app-navbar .navbar-toggler',
-            ('border-color: var(--app-color-shell-control-border);',),
+            ('border-color: var(--app-color-border);',),
         )
         self.assert_css_rule_contains(
             shell_source,
             '.app-navbar .navbar-toggler:focus',
             (
                 'box-shadow: 0 0 0 var(--app-focus-ring-width) '
-                'var(--app-color-shell-focus-ring);',
+                'var(--app-focus-ring-color);',
             ),
         )
         self.assert_css_rule_contains(
@@ -1192,7 +1194,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             '.app-navbar__search .form-control:focus',
             (
                 'box-shadow: 0 0 0 var(--app-focus-ring-width) '
-                'var(--app-color-shell-focus-ring);',
+                'var(--app-focus-ring-color);',
             ),
         )
         self.assert_css_rule_contains(
