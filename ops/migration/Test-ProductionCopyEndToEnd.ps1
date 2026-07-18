@@ -211,6 +211,13 @@ PRIVATE_DACL_STATUS = (
 PROPOSAL_ENTRYPOINT = "ops/migration/Propose-ProductionCopyPolicy.py"
 REHEARSAL_ENTRYPOINT = "ops/migration/Rehearse-ProductionCopy.py"
 SOURCE_MIGRATION = ("shares", "0018_default_home_feed_waterfall")
+SOURCE_FORWARD_MIGRATION_TARGETS = (
+    ("contenttypes", "0002_remove_content_type_name"),
+    ("auth", "0012_alter_user_first_name_max_length"),
+    ("admin", "0003_logentry_add_action_flag_choices"),
+    ("sessions", "0001_initial"),
+    SOURCE_MIGRATION,
+)
 PENDING_MIGRATIONS = (
     ("shares", "0019_report_resolution_reason_share_review_feedback_and_more"),
     ("shares", "0020_replace_ckeditor_field"),
@@ -219,6 +226,34 @@ PENDING_MIGRATIONS = (
     ("shares", "0023_userprofile_integrity"),
     ("shares", "0024_widen_site_message_titles"),
     ("shares", "0025_add_collection_owner_index"),
+)
+SQLITE_SEQUENCE_MINIMUM_HEADROOM = 1_000_000
+SQLITE_SEQUENCE_REBUILD_FLOORS = {
+    "shares_collectionitem": 9_100_001,
+    "shares_report": 9_200_002,
+    "shares_share": 9_300_003,
+    "shares_sharelog": 9_400_004,
+    "shares_userprofile": 9_500_005,
+}
+SQLITE_SEQUENCE_CONTROL_FLOORS = {
+    # This AUTOINCREMENT table is not rebuilt by shares/0019 through shares/0025.
+    "shares_announcement": 9_600_006,
+}
+SQLITE_SEQUENCE_SOURCE_FLOORS = {
+    **SQLITE_SEQUENCE_REBUILD_FLOORS,
+    **SQLITE_SEQUENCE_CONTROL_FLOORS,
+}
+# shares/0023 creates one missing UserProfile, but SQLite may assign an unused
+# primary key below the preserved AUTOINCREMENT high-water mark.  Therefore its
+# sequence is required to stay at or above the source floor, not to increase.
+# No pending migration or dataset import allocates a fresh primary key for the
+# tables below, so their exact source floors are stable contract fixtures.
+SQLITE_SEQUENCE_EXACT_DESTINATION_TABLES = (
+    "shares_announcement",
+    "shares_collectionitem",
+    "shares_report",
+    "shares_share",
+    "shares_sharelog",
 )
 LEGACY_TABLES = (
     "auth_group",
@@ -391,6 +426,158 @@ def applied_migrations(database: Path) -> set[tuple[str, str]]:
         }
     finally:
         connection.close()
+
+
+def assert_forward_only_migration_recorder(database: Path) -> None:
+    connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        connection.execute("PRAGMA query_only = ON")
+        count, minimum_id, maximum_id = connection.execute(
+            "SELECT COUNT(*), MIN(id), MAX(id) FROM django_migrations"
+        ).fetchone()
+        sequence = connection.execute(
+            "SELECT seq FROM sqlite_sequence WHERE name = 'django_migrations'"
+        ).fetchone()
+        assert type(count) is int and count > 0, count
+        assert minimum_id == 1, minimum_id
+        assert maximum_id == count, (maximum_id, count)
+        assert sequence == (maximum_id,), (sequence, maximum_id)
+    finally:
+        connection.close()
+
+
+def _sqlite_sequence_values(connection: sqlite3.Connection) -> dict[str, int]:
+    objects = connection.execute(
+        "SELECT type FROM sqlite_schema WHERE name = 'sqlite_sequence'"
+    ).fetchall()
+    assert objects == [("table",)], objects
+    rows = connection.execute(
+        "SELECT name, seq FROM sqlite_sequence ORDER BY name COLLATE BINARY"
+    ).fetchall()
+    values: dict[str, int] = {}
+    for table, sequence in rows:
+        assert isinstance(table, str) and table
+        assert type(sequence) is int and sequence >= 0, (table, sequence)
+        assert table not in values, table
+        values[table] = sequence
+    assert list(values) == sorted(values)
+    return values
+
+
+def readonly_sqlite_sequence_values(database: Path) -> dict[str, int]:
+    connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        connection.execute("PRAGMA query_only = ON")
+        assert connection.execute("PRAGMA query_only").fetchone() == (1,)
+        return _sqlite_sequence_values(connection)
+    finally:
+        connection.close()
+
+
+def inspection_sqlite_sequence_values(report: dict[str, Any]) -> dict[str, int]:
+    inventory = report["inspection"]["sqlite_sequence"]
+    assert set(inventory) == {"present", "count", "high_water_marks"}
+    assert inventory["present"] is True
+    marks = inventory["high_water_marks"]
+    assert type(inventory["count"]) is int
+    assert inventory["count"] == len(marks)
+    values: dict[str, int] = {}
+    for item in marks:
+        assert set(item) == {"table", "sequence"}
+        table = item["table"]
+        sequence = item["sequence"]
+        assert isinstance(table, str) and table
+        assert type(sequence) is int and sequence >= 0, (table, sequence)
+        assert table not in values, table
+        values[table] = sequence
+    assert list(values) == sorted(values)
+    return values
+
+
+def assert_sqlite_sequence_floors(
+    values: dict[str, int],
+    source_floors: dict[str, int],
+    *,
+    label: str,
+    exact_tables: tuple[str, ...] = (),
+) -> None:
+    for table, source_floor in sorted(source_floors.items()):
+        destination_value = values.get(table)
+        assert destination_value is not None, (label, table, values)
+        assert destination_value >= source_floor, (
+            label,
+            table,
+            source_floor,
+            destination_value,
+        )
+    for table in exact_tables:
+        assert values[table] == source_floors[table], (
+            label,
+            table,
+            source_floors[table],
+            values[table],
+        )
+
+
+def set_source_sqlite_sequence_floors(database: Path) -> None:
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        for table, source_floor in sorted(SQLITE_SEQUENCE_SOURCE_FLOORS.items()):
+            quoted_table = '"' + table.replace('"', '""') + '"'
+            table_object = connection.execute(
+                "SELECT type FROM sqlite_schema WHERE name = ?",
+                (table,),
+            ).fetchall()
+            assert table_object == [("table",)], (table, table_object)
+            maximum_id = connection.execute(
+                f'SELECT MAX("id") FROM {quoted_table}'
+            ).fetchone()[0]
+            assert type(maximum_id) is int, (table, maximum_id)
+            assert source_floor - maximum_id >= SQLITE_SEQUENCE_MINIMUM_HEADROOM, (
+                table,
+                source_floor,
+                maximum_id,
+            )
+            update = connection.execute(
+                "UPDATE sqlite_sequence SET seq = ? WHERE name = ?",
+                (source_floor, table),
+            )
+            assert update.rowcount == 1, (table, update.rowcount)
+        connection.commit()
+    except BaseException:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def assert_source_sqlite_sequence_fixture(database: Path) -> dict[str, int]:
+    values = readonly_sqlite_sequence_values(database)
+    assert_sqlite_sequence_floors(
+        values,
+        SQLITE_SEQUENCE_SOURCE_FLOORS,
+        label="deployed shares/0018 source fixture",
+        exact_tables=tuple(SQLITE_SEQUENCE_SOURCE_FLOORS),
+    )
+    connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        connection.execute("PRAGMA query_only = ON")
+        assert connection.execute("PRAGMA query_only").fetchone() == (1,)
+        for table, source_floor in sorted(SQLITE_SEQUENCE_SOURCE_FLOORS.items()):
+            quoted_table = '"' + table.replace('"', '""') + '"'
+            maximum_id = connection.execute(
+                f'SELECT MAX("id") FROM {quoted_table}'
+            ).fetchone()[0]
+            assert type(maximum_id) is int, (table, maximum_id)
+            assert source_floor - maximum_id >= SQLITE_SEQUENCE_MINIMUM_HEADROOM, (
+                table,
+                source_floor,
+                maximum_id,
+            )
+    finally:
+        connection.close()
+    return values
 
 
 def legacy_table_snapshot(database: Path) -> dict[str, dict[str, Any]]:
@@ -625,18 +812,22 @@ manage = [
     str(repository / "manage.py"),
 ]
 
-run_command(
-    [*manage, "migrate", "--noinput", "--verbosity", "0"],
-    label="initial complete source migration",
-    cwd=repository,
-    env=setup_env,
-)
-run_command(
-    [*manage, "migrate", "shares", "0018", "--noinput", "--verbosity", "0"],
-    label="source rollback to deployed shares 0018",
-    cwd=repository,
-    env=setup_env,
-)
+for app_label, migration_name in SOURCE_FORWARD_MIGRATION_TARGETS:
+    run_command(
+        [
+            *manage,
+            "migrate",
+            app_label,
+            migration_name,
+            "--noinput",
+            "--verbosity",
+            "0",
+        ],
+        label=f"forward source migration {app_label}.{migration_name}",
+        cwd=repository,
+        env=setup_env,
+    )
+assert_forward_only_migration_recorder(source_database)
 
 SEED_SCRIPT = r'''
 from __future__ import annotations
@@ -798,6 +989,8 @@ run_command(
     cwd=repository,
     env=setup_env,
 )
+set_source_sqlite_sequence_floors(source_database)
+source_sequence_fixture = assert_source_sqlite_sequence_fixture(source_database)
 
 source_applied = applied_migrations(source_database)
 assert SOURCE_MIGRATION in source_applied
@@ -815,6 +1008,7 @@ run_command(
     env=setup_env,
 )
 assert applied_migrations(source_backup) == source_applied
+assert readonly_sqlite_sequence_values(source_backup) == source_sequence_fixture
 assert_no_sidecars(source_backup)
 
 media_file = source_media_root / "uploads" / "e2e" / "strategy-preview.bin"
@@ -995,6 +1189,8 @@ frozen_source_inspection = assert_artifact_reference(
     proposal["body"]["evidence"]["source_snapshot_inspection"],
 )
 source_inspection = load_json(frozen_source_inspection)
+proposal_source_sequence = inspection_sqlite_sequence_values(source_inspection)
+assert proposal_source_sequence == source_sequence_fixture
 source_sqlite_schema_sha256 = source_inspection["inspection"]["sqlite_schema"][
     "sha256"
 ]
@@ -1211,6 +1407,7 @@ def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
     assert result["sensitive_retention_scope"] == "entire_run_root"
     required_stages = {
         "approved_policy_evidence_verified",
+        "database_structure_preserved",
         "import_verified",
         "idempotence_verified",
         "target_export_compared",
@@ -1300,6 +1497,168 @@ def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
         "status": "ok",
         "violations": 0,
     }
+    rehearsal_source_inspection = load_json(
+        run_root / "evidence" / "source-inspection.json"
+    )
+    upgraded_source_inspection = load_json(
+        run_root / "evidence" / "upgraded-source-inspection.json"
+    )
+    source_sequence_values = inspection_sqlite_sequence_values(
+        rehearsal_source_inspection
+    )
+    upgraded_sequence_values = inspection_sqlite_sequence_values(
+        upgraded_source_inspection
+    )
+    target_sequence_values = inspection_sqlite_sequence_values(inspection)
+    assert source_sequence_values == proposal_source_sequence
+    assert_sqlite_sequence_floors(
+        source_sequence_values,
+        SQLITE_SEQUENCE_SOURCE_FLOORS,
+        label=f"{name} source inspection",
+        exact_tables=tuple(SQLITE_SEQUENCE_SOURCE_FLOORS),
+    )
+    for sequence_label, sequence_values in (
+        ("upgraded source inspection", upgraded_sequence_values),
+        ("target inspection", target_sequence_values),
+    ):
+        assert_sqlite_sequence_floors(
+            sequence_values,
+            source_sequence_values,
+            label=f"{name} {sequence_label}",
+            exact_tables=SQLITE_SEQUENCE_EXACT_DESTINATION_TABLES,
+        )
+    for table in SQLITE_SEQUENCE_SOURCE_FLOORS:
+        assert target_sequence_values[table] >= upgraded_sequence_values[table], (
+            name,
+            table,
+            upgraded_sequence_values[table],
+            target_sequence_values[table],
+        )
+
+    structure_report_path = (
+        run_root / "evidence" / "database-structure-preservation.json"
+    )
+    structure_report = load_json(structure_report_path)
+    structure_projection = structure_report["projection"]
+    assert structure_projection["format"] == (
+        "ffxivshare-database-structure-preservation"
+    )
+    assert structure_projection["format_version"] == 1
+    assert (
+        "sqlite_sequence original-source and upgraded-source effective floors"
+        in structure_projection["automated_coverage"]
+    )
+    assert structure_projection["cross_destination_schema_equal"] is True
+    assert structure_projection["preserved"] is True
+    assert structure_projection["issues"] == []
+    reported_source_floors = {
+        item["table"]: item["sequence"]
+        for item in structure_projection["source"]["sequence"]
+    }
+    assert len(reported_source_floors) == len(
+        structure_projection["source"]["sequence"]
+    )
+    for table in SQLITE_SEQUENCE_SOURCE_FLOORS:
+        assert reported_source_floors[table] == source_sequence_values[table]
+    final_sequence = structure_projection["destinations"]["final_target"]
+    for destination_name, destination_values in (
+        ("upgraded_source", upgraded_sequence_values),
+        ("final_target", target_sequence_values),
+    ):
+        destination = structure_projection["destinations"][destination_name]
+        assert destination["preserved"] is True
+        assert destination["issues"] == []
+        sequence_checks = {
+            item["table"]: item for item in destination["sequence_checks"]
+        }
+        assert len(sequence_checks) == len(destination["sequence_checks"])
+        upgraded_floors = (
+            upgraded_sequence_values if destination_name == "final_target" else None
+        )
+        sequence_scope = destination["sequence_scope"]
+        floor_tables = set(source_sequence_values)
+        if upgraded_floors is None:
+            expected_tables = floor_tables
+            assert sequence_scope == {
+                "mode": "all_original_source_entries",
+                "declared_tables": None,
+                "checked_tables": sorted(expected_tables),
+                "observed_excluded_entries": [],
+            }
+        else:
+            floor_tables.update(upgraded_floors)
+            assert set(sequence_scope) == {
+                "mode",
+                "declared_tables",
+                "checked_tables",
+                "observed_excluded_entries",
+            }
+            assert sequence_scope["mode"] == (
+                "v3_direct_portable_entity_tables"
+            )
+            declared_tables = sequence_scope["declared_tables"]
+            assert declared_tables == sorted(set(declared_tables))
+            declared_keys = set(declared_tables)
+            expected_tables = {
+                table for table in floor_tables if table in declared_keys
+            }
+            assert sequence_scope["checked_tables"] == sorted(expected_tables)
+            excluded_sequence_items = sequence_scope[
+                "observed_excluded_entries"
+            ]
+            assert all(
+                set(item) == {
+                    "table",
+                    "original_source_value",
+                    "upgraded_source_value",
+                    "destination_value",
+                    "reason",
+                }
+                for item in excluded_sequence_items
+            )
+            excluded_entries = {
+                item["table"]: item
+                for item in excluded_sequence_items
+            }
+            assert len(excluded_entries) == len(excluded_sequence_items)
+            observed_tables = floor_tables | set(destination_values)
+            expected_excluded = {
+                table
+                for table in observed_tables
+                if table not in declared_keys
+            }
+            assert set(excluded_entries) == expected_excluded
+            for table in sorted(expected_excluded):
+                excluded = excluded_entries[table]
+                assert excluded["original_source_value"] == (
+                    source_sequence_values.get(table)
+                )
+                assert excluded["upgraded_source_value"] == (
+                    upgraded_sequence_values.get(table)
+                )
+                assert excluded["destination_value"] == (
+                    destination_values.get(table)
+                )
+                assert isinstance(excluded["reason"], str) and excluded["reason"]
+        assert set(sequence_checks) == expected_tables
+        for table in sorted(expected_tables):
+            original_source_floor = source_sequence_values.get(table)
+            upgraded_source_floor = (
+                None if upgraded_floors is None else upgraded_floors.get(table)
+            )
+            effective_floor = max(
+                floor
+                for floor in (original_source_floor, upgraded_source_floor)
+                if floor is not None
+            )
+            assert sequence_checks[table] == {
+                "table": table,
+                "original_source_floor": original_source_floor,
+                "upgraded_source_floor": upgraded_source_floor,
+                "effective_floor": effective_floor,
+                "destination_value": destination_values[table],
+                "preserved": True,
+            }
 
     media_comparison = load_json(run_root / "evidence" / "media-comparison.json")
     final_media_comparison = load_json(
@@ -1321,6 +1680,23 @@ def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
     assert_entity_counts(source_export_manifest)
     assert_entity_counts(final_export_manifest)
     assert source_export_manifest["entities"] == final_export_manifest["entities"]
+    portable_sequence_tables = {
+        metadata["table"]
+        for metadata in source_export_manifest["identity"]["sequences"].values()
+    }
+    assert portable_sequence_tables == set(
+        final_sequence["sequence_scope"]["declared_tables"]
+    )
+    assert portable_sequence_tables == set(
+        final_sequence["sequence_scope"]["checked_tables"]
+    )
+    assert portable_sequence_tables == {
+        item["table"] for item in final_sequence["sequence_checks"]
+    }
+    assert portable_sequence_tables == {
+        metadata["table"]
+        for metadata in final_export_manifest["identity"]["sequences"].values()
+    }
     target_database = run_root / "target" / "ffxivshare.sqlite3"
     assert_legacy_table_snapshot_preserved(target_database, legacy_snapshot)
     assert_expected_migration_outcome(target_database)
@@ -1340,6 +1716,15 @@ def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
     assert events[0]["stage"] == "created"
     assert events[1]["stage"] == "runtime_fingerprint_initial_verified"
     stage_events = {event["stage"]: event for event in events}
+    structure_event = stage_events["database_structure_preserved"]
+    assert structure_event["outcome"] == "passed"
+    assert (
+        assert_artifact_reference(
+            run_root,
+            structure_event["details"]["artifact"],
+        )
+        == structure_report_path
+    )
     initial_runtime = stage_events["runtime_fingerprint_initial_verified"]
     pre_migrate_runtime = stage_events[
         "runtime_fingerprint_pre_migrate_verified"
@@ -1443,9 +1828,38 @@ def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
     assert candidate["backup_sha256"] == backup_initial["artifact"]["sha256"]
     assert candidate["backup_set"]["database"]["sha256"] == candidate["backup_sha256"]
     assert_artifact_reference(run_root, candidate["snapshot_inspection"])
+    assert candidate["database_structure_preservation"] == structure_event[
+        "details"
+    ]["artifact"]
+    assert (
+        assert_artifact_reference(
+            run_root,
+            candidate["database_structure_preservation"],
+        )
+        == structure_report_path
+    )
     assert_artifact_reference(run_root, candidate["final_site_data_comparison"])
     assert_artifact_reference(run_root, candidate["final_restriction_preflight"])
     assert_artifact_reference(run_root, candidate["target_media_final_comparison"])
+    final_backup_database = assert_artifact_reference(
+        run_root,
+        candidate["backup_set"]["database"],
+    )
+    final_backup_before = protected_snapshot(final_backup_database)
+    assert_no_sidecars(final_backup_database)
+    final_backup_sequence_values = readonly_sqlite_sequence_values(
+        final_backup_database
+    )
+    assert_sqlite_sequence_floors(
+        final_backup_sequence_values,
+        source_sequence_values,
+        label=f"{name} final backup read-only inspection",
+        exact_tables=SQLITE_SEQUENCE_EXACT_DESTINATION_TABLES,
+    )
+    for table in SQLITE_SEQUENCE_SOURCE_FLOORS:
+        assert final_backup_sequence_values[table] == target_sequence_values[table]
+    assert protected_snapshot(final_backup_database) == final_backup_before
+    assert_no_sidecars(final_backup_database)
 
     assert {path: protected_snapshot(path) for path in protected_paths} == protected_before
     assert tree_snapshot(source_media_root) == source_media_tree_before
@@ -1570,6 +1984,12 @@ first_business = pair_report["runs"]["first"]["business_summary"]
 second_business = pair_report["runs"]["second"]["business_summary"]
 assert first_business == second_business
 matched_projections = pair_report["comparison"]["matched_projections"]
+assert matched_projections["source_sqlite_schema_sha256"] == pair_authority[
+    "source_sqlite_schema_sha256"
+]
+assert matched_projections["database_structure_preservation_sha256"] == (
+    pair_authority["database_structure_preservation_sha256"]
+)
 for name in (
     "entity_inventory_sha256",
     "media_inventory_sha256",
