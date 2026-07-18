@@ -18,7 +18,7 @@ they never change an ACL and never create a probe in an external scope.
 import argparse
 import ctypes
 from ctypes import wintypes
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import importlib.util
 import json
@@ -261,7 +261,11 @@ class _ByHandleFileInformation(ctypes.Structure):
 
 
 def _utc_now() -> str:
-    return datetime.now(UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="microseconds")
+        .replace("+00:00", "Z")
+    )
 
 
 def _canonical_json_bytes(value: Any) -> bytes:

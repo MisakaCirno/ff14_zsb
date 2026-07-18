@@ -86,6 +86,12 @@ try {
         }
 
         if (-not $SkipTests) {
+            Invoke-CheckedStep 'Production-copy capture gate contracts' {
+                & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyCaptureGate.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
+                    -PythonExecutable $PythonExecutable
+            }
+
             Invoke-CheckedStep 'SQLite backup-set verification contracts' {
                 & (Join-Path $PSScriptRoot 'ops\migration\Test-SQLiteBackupSet.ps1') `
                     -RepositoryRoot $PSScriptRoot `

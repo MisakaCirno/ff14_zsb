@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 import os
@@ -484,7 +484,9 @@ def verify_backup_set(arguments: argparse.Namespace) -> Path:
     report = {
         "format": REPORT_FORMAT,
         "format_version": REPORT_FORMAT_VERSION,
-        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "generated_at": (
+            datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        ),
         "verified": True,
         "cutover_authorized": False,
         "inspection_required": True,
