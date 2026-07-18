@@ -289,6 +289,7 @@ database_path = backup_root / "contract.sqlite3"
 connection = sqlite3.connect(database_path)
 try:
     connection.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, value TEXT UNIQUE)")
+    connection.execute("CREATE TABLE sqliteXboundary (id INTEGER PRIMARY KEY)")
     connection.execute("CREATE INDEX sample_value_idx ON sample(value)")
     connection.commit()
 finally:
@@ -366,6 +367,7 @@ schema_projection = module._sqlite_schema_projection(
     label="contract database",
 )
 assert {row["type"] for row in schema_projection} == {"index", "table"}
+assert "sqliteXboundary" in {row["name"] for row in schema_projection}
 
 schema_connection = sqlite3.connect(
     database_path.resolve().as_uri() + "?mode=ro&immutable=1",
@@ -586,6 +588,7 @@ semantic_projection = {
         "final_target": {"applied": [["shares", "0001_initial"]]}
     },
     "target_backup_inspection": {"integrity_check": "ok"},
+    "database_structure_preservation": {"preserved": True},
 }
 comparison = module._compare_semantic_projections(
     semantic_projection,
@@ -602,6 +605,7 @@ assert set(comparison["matched_projections"]) == {
     "media_inventory_sha256",
     "applied_migrations_sha256",
     "target_backup_semantics_sha256",
+    "database_structure_preservation_sha256",
 }
 
 for mismatched_key in (
@@ -612,6 +616,7 @@ for mismatched_key in (
     "final_target_media",
     "migration_states",
     "target_backup_inspection",
+    "database_structure_preservation",
 ):
     mismatched_projection = deepcopy(semantic_projection)
     mismatched_projection[mismatched_key] = {"changed": True}

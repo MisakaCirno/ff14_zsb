@@ -57,6 +57,27 @@ SQLITE_SCHEMA_INVENTORY_KEYS = frozenset(
 SQLITE_SCHEMA_OBJECT_KEYS = frozenset({"type", "name", "tbl_name", "sql"})
 SQLITE_SCHEMA_OBJECT_TYPES = ("index", "table", "trigger", "view")
 SQLITE_SCHEMA_INTERNAL_PREFIX = "sqlite_"
+SQLITE_SEQUENCE_KEYS = frozenset({"present", "count", "high_water_marks"})
+SQLITE_SEQUENCE_ENTRY_KEYS = frozenset({"table", "sequence"})
+SQLITE_ASCII_IDENTIFIER_FOLD = str.maketrans(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
+)
+TABLE_STRUCTURE_KEYS = frozenset(
+    {"format", "format_version", "schema", "table_count", "tables", "sha256"}
+)
+TABLE_STRUCTURE_ENTRY_KEYS = frozenset(
+    {"name", "column_count", "columns", "foreign_keys", "unique_constraints"}
+)
+TABLE_COLUMN_KEYS = frozenset(
+    {"cid", "name", "type", "notnull", "default", "primary_key", "hidden"}
+)
+TABLE_FOREIGN_KEY_KEYS = frozenset(
+    {"id", "sequence", "table", "from", "to", "on_update", "on_delete", "match"}
+)
+TABLE_UNIQUE_CONSTRAINT_KEYS = frozenset({"columns", "partial"})
+TABLE_UNIQUE_COLUMN_KEYS = frozenset(
+    {"cid", "name", "descending", "collation"}
+)
 UTC_TIMESTAMP_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$"
 )
@@ -159,6 +180,10 @@ REVIEW_KEYS = {
 
 class ApprovalError(RuntimeError):
     pass
+
+
+def _sqlite_identifier_key(value: str) -> str:
+    return value.translate(SQLITE_ASCII_IDENTIFIER_FOLD)
 
 
 def _load_handoff_module() -> Any:
@@ -415,13 +440,14 @@ def _validate_sqlite_schema_inventory(value: Any) -> str:
         raise ApprovalError("SQLite schema inventory has an invalid exact shape.")
     if (
         value["format"] != "ffxivshare-sqlite-schema-inventory"
+        or type(value["format_version"]) is not int
         or value["format_version"] != 1
         or value["schema"] != "main"
         or value["included_object_types"] != list(SQLITE_SCHEMA_OBJECT_TYPES)
         or value["excluded_objects"]
         != {
             "name_prefix": SQLITE_SCHEMA_INTERNAL_PREFIX,
-            "comparison": "case-sensitive Unicode code-point prefix match",
+            "comparison": "SQLite ASCII case-insensitive prefix/identifier comparison",
             "reason": "SQLite-reserved internal and automatically generated objects",
         }
         or value["normalization"]
@@ -456,14 +482,18 @@ def _validate_sqlite_schema_inventory(value: Any) -> str:
             object_type not in SQLITE_SCHEMA_OBJECT_TYPES
             or not isinstance(name, str)
             or not name
-            or name.startswith(SQLITE_SCHEMA_INTERNAL_PREFIX)
+            or _sqlite_identifier_key(name).startswith(SQLITE_SCHEMA_INTERNAL_PREFIX)
             or not isinstance(table_name, str)
             or not table_name
             or not isinstance(sql, str)
             or not sql
         ):
             raise ApprovalError("SQLite schema inventory object value is invalid.")
-        identity = (object_type, name, table_name)
+        identity = (
+            object_type,
+            _sqlite_identifier_key(name),
+            _sqlite_identifier_key(table_name),
+        )
         if identity in seen:
             raise ApprovalError("SQLite schema inventory contains duplicate objects.")
         seen.add(identity)
@@ -478,6 +508,230 @@ def _validate_sqlite_schema_inventory(value: Any) -> str:
     ):
         raise ApprovalError("SQLite schema inventory SHA-256 is invalid.")
     return digest
+
+
+def _validate_sqlite_sequence_inventory(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict) or set(value) != SQLITE_SEQUENCE_KEYS:
+        raise ApprovalError("SQLite sequence inventory has an invalid exact shape.")
+    if not isinstance(value["present"], bool):
+        raise ApprovalError("SQLite sequence presence is invalid.")
+    marks = value["high_water_marks"]
+    if (
+        type(value["count"]) is not int
+        or not isinstance(marks, list)
+        or value["count"] != len(marks)
+        or (value["present"] is False and (value["count"] != 0 or marks != []))
+    ):
+        raise ApprovalError("SQLite sequence count is invalid.")
+    projection: dict[str, int] = {}
+    ordered_tables: list[str] = []
+    for item in marks:
+        if (
+            not isinstance(item, dict)
+            or set(item) != SQLITE_SEQUENCE_ENTRY_KEYS
+            or not isinstance(item["table"], str)
+            or not item["table"]
+            or _sqlite_identifier_key(item["table"]).startswith(
+                SQLITE_SCHEMA_INTERNAL_PREFIX
+            )
+            or type(item["sequence"]) is not int
+            or item["sequence"] < 0
+        ):
+            raise ApprovalError("SQLite sequence entry is invalid.")
+        ordered_tables.append(item["table"])
+        projection[item["table"]] = item["sequence"]
+    if len({_sqlite_identifier_key(table) for table in ordered_tables}) != len(
+        ordered_tables
+    ):
+        raise ApprovalError("SQLite sequence inventory contains duplicate tables.")
+    if ordered_tables != sorted(ordered_tables):
+        raise ApprovalError("SQLite sequence inventory is not canonical.")
+    return projection
+
+
+def _table_structure_projection(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value[key]
+        for key in ("format", "format_version", "schema", "table_count", "tables")
+    }
+
+
+def _table_structure_sha256(value: dict[str, Any]) -> str:
+    serialized = json.dumps(
+        _table_structure_projection(value),
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _validate_table_structures(value: Any) -> tuple[str, set[str]]:
+    if not isinstance(value, dict) or set(value) != TABLE_STRUCTURE_KEYS:
+        raise ApprovalError("SQLite table structure inventory has an invalid exact shape.")
+    if (
+        value["format"] != "ffxivshare-sqlite-table-structure-inventory"
+        or type(value["format_version"]) is not int
+        or value["format_version"] != 1
+        or value["schema"] != "main"
+    ):
+        raise ApprovalError("SQLite table structure metadata is invalid.")
+    tables = value["tables"]
+    if (
+        not isinstance(tables, list)
+        or type(value["table_count"]) is not int
+        or value["table_count"] != len(tables)
+    ):
+        raise ApprovalError("SQLite table structure count is invalid.")
+
+    ordered_tables: list[str] = []
+    for table in tables:
+        if not isinstance(table, dict) or set(table) != TABLE_STRUCTURE_ENTRY_KEYS:
+            raise ApprovalError("SQLite table structure entry is invalid.")
+        name = table["name"]
+        columns = table["columns"]
+        if (
+            not isinstance(name, str)
+            or not name
+            or _sqlite_identifier_key(name).startswith(SQLITE_SCHEMA_INTERNAL_PREFIX)
+            or not isinstance(columns, list)
+            or type(table["column_count"]) is not int
+            or table["column_count"] != len(columns)
+            or not columns
+        ):
+            raise ApprovalError("SQLite table structure value is invalid.")
+        ordered_tables.append(name)
+
+        ordered_column_names: list[str] = []
+        ordered_column_ids: list[int] = []
+        for column in columns:
+            if not isinstance(column, dict) or set(column) != TABLE_COLUMN_KEYS:
+                raise ApprovalError("SQLite table column structure is invalid.")
+            if (
+                type(column["cid"]) is not int
+                or column["cid"] < 0
+                or not isinstance(column["name"], str)
+                or not column["name"]
+                or not isinstance(column["type"], str)
+                or type(column["notnull"]) is not int
+                or column["notnull"] not in (0, 1)
+                or (
+                    column["default"] is not None
+                    and not isinstance(column["default"], str)
+                )
+                or type(column["primary_key"]) is not int
+                or column["primary_key"] < 0
+                or type(column["hidden"]) is not int
+                or column["hidden"] not in (0, 1, 2, 3)
+            ):
+                raise ApprovalError("SQLite table column value is invalid.")
+            ordered_column_names.append(column["name"])
+            ordered_column_ids.append(column["cid"])
+        if len({_sqlite_identifier_key(name) for name in ordered_column_names}) != len(
+            ordered_column_names
+        ):
+            raise ApprovalError("SQLite table columns contain duplicate names.")
+        if ordered_column_ids != sorted(set(ordered_column_ids)):
+            raise ApprovalError("SQLite table columns are not canonically ordered.")
+
+        foreign_keys = table["foreign_keys"]
+        if not isinstance(foreign_keys, list):
+            raise ApprovalError("SQLite table foreign keys are invalid.")
+        foreign_key_order: list[tuple[int, int]] = []
+        for foreign_key in foreign_keys:
+            if (
+                not isinstance(foreign_key, dict)
+                or set(foreign_key) != TABLE_FOREIGN_KEY_KEYS
+                or type(foreign_key["id"]) is not int
+                or foreign_key["id"] < 0
+                or type(foreign_key["sequence"]) is not int
+                or foreign_key["sequence"] < 0
+                or not isinstance(foreign_key["table"], str)
+                or not foreign_key["table"]
+                or not isinstance(foreign_key["from"], str)
+                or not foreign_key["from"]
+                or (
+                    foreign_key["to"] is not None
+                    and (
+                        not isinstance(foreign_key["to"], str)
+                        or not foreign_key["to"]
+                    )
+                )
+                or not all(
+                    isinstance(foreign_key[key], str) and foreign_key[key]
+                    for key in ("on_update", "on_delete", "match")
+                )
+            ):
+                raise ApprovalError("SQLite table foreign-key value is invalid.")
+            foreign_key_order.append((foreign_key["id"], foreign_key["sequence"]))
+        if foreign_key_order != sorted(set(foreign_key_order)):
+            raise ApprovalError("SQLite table foreign keys are not canonical.")
+
+        unique_constraints = table["unique_constraints"]
+        if not isinstance(unique_constraints, list):
+            raise ApprovalError("SQLite table unique constraints are invalid.")
+        unique_order: list[str] = []
+        for constraint in unique_constraints:
+            if (
+                not isinstance(constraint, dict)
+                or set(constraint) != TABLE_UNIQUE_CONSTRAINT_KEYS
+                or type(constraint["partial"]) is not int
+                or constraint["partial"] not in (0, 1)
+                or not isinstance(constraint["columns"], list)
+                or not constraint["columns"]
+            ):
+                raise ApprovalError("SQLite unique-constraint value is invalid.")
+            for column in constraint["columns"]:
+                if (
+                    not isinstance(column, dict)
+                    or set(column) != TABLE_UNIQUE_COLUMN_KEYS
+                    or type(column["cid"]) is not int
+                    or column["cid"] < -2
+                    or (
+                        column["name"] is not None
+                        and (
+                            not isinstance(column["name"], str)
+                            or not column["name"]
+                        )
+                    )
+                    or type(column["descending"]) is not int
+                    or column["descending"] not in (0, 1)
+                    or (
+                        column["collation"] is not None
+                        and (
+                            not isinstance(column["collation"], str)
+                            or not column["collation"]
+                        )
+                    )
+                ):
+                    raise ApprovalError("SQLite unique-constraint column is invalid.")
+            unique_order.append(
+                json.dumps(
+                    constraint,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+        if unique_order != sorted(set(unique_order)):
+            raise ApprovalError("SQLite table unique constraints are not canonical.")
+
+    if len({_sqlite_identifier_key(name) for name in ordered_tables}) != len(
+        ordered_tables
+    ):
+        raise ApprovalError("SQLite table structures contain duplicate names.")
+    if ordered_tables != sorted(ordered_tables):
+        raise ApprovalError("SQLite table structures are not canonically ordered.")
+    digest = value["sha256"]
+    if (
+        not isinstance(digest, str)
+        or SHA256_PATTERN.fullmatch(digest) is None
+        or digest != _table_structure_sha256(value)
+    ):
+        raise ApprovalError("SQLite table structure SHA-256 is invalid.")
+    return digest, set(ordered_tables)
 
 
 def _load_json(
@@ -1602,6 +1856,7 @@ def _validate_evidence(
     if (
         not isinstance(inspection, dict)
         or inspection.get("format") != "ffxivshare-sqlite-snapshot-inspection"
+        or type(inspection.get("format_version")) is not int
         or inspection.get("format_version") != 1
         or not isinstance(database, dict)
         or database.get("sha256") != projection["source_database_sha256"]
@@ -1632,6 +1887,17 @@ def _validate_evidence(
     schema_sha256 = _validate_sqlite_schema_inventory(checks.get("sqlite_schema"))
     if schema_sha256 != projection["source_sqlite_schema_sha256"]:
         raise ApprovalError("Inspection SQLite schema digest differs from the proposal.")
+    _validate_sqlite_sequence_inventory(checks.get("sqlite_sequence"))
+    _, structured_tables = _validate_table_structures(checks.get("table_structures"))
+    schema_tables = {
+        item["name"]
+        for item in checks["sqlite_schema"]["objects"]
+        if item["type"] == "table"
+    }
+    if schema_tables != structured_tables:
+        raise ApprovalError(
+            "Inspection table structures disagree with the SQLite schema inventory."
+        )
 
     media = _load_json(
         snapshots["source_media_manifest"],

@@ -736,12 +736,12 @@ def _execute_proposal(
         ],
         env=base_env,
     )
-    _inspection, inspected_applied, source_sqlite_schema_sha256 = (
-        core._validate_inspection_report(
-            inspection_path,
-            expected_sha256=source_sha256,
-        )
+    inspection_validation = core._validate_inspection_report(
+        inspection_path,
+        expected_sha256=source_sha256,
     )
+    inspected_applied = inspection_validation.applied_migrations
+    source_sqlite_schema_sha256 = inspection_validation.schema_sha256
     work_database = config.run_root / "work" / "proposal-source.sqlite3"
     core._copy_stable(private_database, work_database)
     work_size, work_sha256, work_identity = core._source_snapshot_checkpoint(

@@ -44,6 +44,7 @@ SUCCESS_STAGE_SEQUENCE = (
     "execution_bundle_pre_migrate_verified",
     "runtime_fingerprint_post_migrate_verified",
     "source_schema_ready",
+    "upgraded_source_inspected",
     "dataset_exported",
     "dataset_validated",
     "target_schema_created",
@@ -53,6 +54,7 @@ SUCCESS_STAGE_SEQUENCE = (
     "target_export_compared",
     "restriction_preflight",
     "target_snapshot_verified",
+    "database_structure_preserved",
     "final_target_migration_state_verified",
     "final_target_dataset_validated",
     "final_target_export_compared",
@@ -571,6 +573,11 @@ def _compare_semantic_projections(
         )
     matched_projections = {
         "source_sqlite_schema_sha256": first["source_sqlite_schema_sha256"],
+        "database_structure_preservation_sha256": (
+            approval_core._canonical_json_sha256(
+                first["database_structure_preservation"]
+            )
+        ),
         "entity_inventory_sha256": approval_core._canonical_json_sha256(
             first["final_target_dataset"]["entities"]
         ),
@@ -1311,9 +1318,7 @@ def _sqlite_schema_projection(path: Path, *, label: str) -> list[dict[str, Any]]
         try:
             connection.execute("PRAGMA query_only = ON")
             rows = connection.execute(
-                "SELECT type, name, tbl_name, sql FROM sqlite_schema "
-                "WHERE name NOT LIKE 'sqlite_%' "
-                "ORDER BY type, name, tbl_name"
+                "SELECT type, name, tbl_name, sql FROM sqlite_schema"
             ).fetchall()
         finally:
             connection.close()
@@ -1321,6 +1326,10 @@ def _sqlite_schema_projection(path: Path, *, label: str) -> list[dict[str, Any]]
         raise PairVerificationError(f"{label} sqlite_schema cannot be inspected.") from exc
     projection: list[dict[str, Any]] = []
     for kind, name, table, sql in rows:
+        if isinstance(name, str) and rehearsal_core._sqlite_identifier_key(
+            name
+        ).startswith("sqlite_"):
+            continue
         _require(
             kind in {"index", "table", "trigger", "view"}
             and isinstance(name, str)
@@ -1328,7 +1337,18 @@ def _sqlite_schema_projection(path: Path, *, label: str) -> list[dict[str, Any]]
             and (sql is None or isinstance(sql, str)),
             f"{label} sqlite_schema row is invalid.",
         )
-        projection.append({"type": kind, "name": name, "table": table, "sql": sql})
+        projection.append(
+            {"type": kind, "name": name, "tbl_name": table, "sql": sql}
+        )
+    projection.sort(
+        key=lambda item: (
+            item["type"],
+            item["name"],
+            item["tbl_name"],
+            item["sql"] is not None,
+            "" if item["sql"] is None else item["sql"],
+        )
+    )
     return projection
 
 
@@ -1789,12 +1809,15 @@ def _validate_run(
         stage="source_inspected",
         expected_path="evidence/source-inspection.json",
     )
-    source_inspection, source_applied, source_sqlite_schema_sha256 = _call_validator(
+    source_inspection_validation = _call_validator(
         "source snapshot inspection",
         rehearsal_core._validate_inspection_report,
         source_inspection_snapshot.path,
         expected_sha256=policy["source_database_sha256"],
     )
+    source_inspection = source_inspection_validation.report
+    source_applied = source_inspection_validation.applied_migrations
+    source_sqlite_schema_sha256 = source_inspection_validation.schema_sha256
     _require(
         approval_core._canonical_json_sha256(source_applied)
         == policy["source_applied_migrations_sha256"],
@@ -1858,6 +1881,34 @@ def _validate_run(
         migration_states["target"]["applied"]
         == migration_states["final_target"]["applied"],
         f"{label} target migration history changed before final backup.",
+    )
+    upgraded_inspection_snapshot = _event_artifact(
+        tracker=tracker,
+        run_root=root,
+        events=events,
+        stage="upgraded_source_inspected",
+        expected_path="evidence/upgraded-source-inspection.json",
+    )
+    upgraded_details = events["upgraded_source_inspected"]["details"]
+    upgraded_database_sha256 = upgraded_details.get("database_sha256")
+    _sha256_value(
+        upgraded_database_sha256,
+        label=f"{label} upgraded source database sha256",
+    )
+    upgraded_inspection_validation = _call_validator(
+        "upgraded source snapshot inspection",
+        rehearsal_core._validate_inspection_report,
+        upgraded_inspection_snapshot.path,
+        expected_sha256=upgraded_database_sha256,
+    )
+    _require(
+        upgraded_inspection_validation.applied_migrations
+        == migration_states["upgraded_source"]["applied"]
+        and upgraded_details.get("sqlite_schema_sha256")
+        == upgraded_inspection_validation.schema_sha256
+        and upgraded_details.get("table_structures_sha256")
+        == upgraded_inspection_validation.table_structures_sha256,
+        f"{label} upgraded source inspection differs from migration state or ledger.",
     )
 
     for stage, filename, callback, kwargs in (
@@ -2013,12 +2064,14 @@ def _validate_run(
     )
     target_backup_sha256 = candidate.get("backup_sha256")
     _sha256_value(target_backup_sha256, label="target backup sha256")
-    target_inspection, target_applied, _target_sqlite_schema_sha256 = _call_validator(
+    target_inspection_validation = _call_validator(
         "target snapshot inspection",
         rehearsal_core._validate_inspection_report,
         target_inspection_snapshot.path,
         expected_sha256=target_backup_sha256,
     )
+    target_inspection = target_inspection_validation.report
+    target_applied = target_inspection_validation.applied_migrations
     _require(
         target_applied == migration_states["target"]["applied"],
         f"{label} target backup migration projection differs from target state.",
@@ -2031,6 +2084,41 @@ def _validate_run(
         and target_snapshot_event.get("backup_set_verification")
         == candidate["backup_set_initial_verification"],
         f"{label} initial target-snapshot ledger binding is invalid.",
+    )
+    structure_projection = rehearsal_core._database_structure_preservation_projection(
+        source_inspection_validation,
+        upgraded_inspection_validation,
+        target_inspection_validation,
+    )
+    _require(
+        structure_projection["preserved"] is True
+        and structure_projection["issues"] == [],
+        f"{label} independently recomputed database structure preservation failed.",
+    )
+    structure_event = events["database_structure_preserved"]["details"]
+    structure_snapshot = _artifact_snapshot(
+        tracker,
+        root,
+        candidate["database_structure_preservation"],
+        label="database structure preservation",
+        expected_path="evidence/database-structure-preservation.json",
+    )
+    _call_validator(
+        "database structure preservation report",
+        rehearsal_core._validate_structure_preservation_report,
+        structure_snapshot.path,
+        expected_projection=structure_projection,
+    )
+    _require(
+        structure_event.get("artifact")
+        == candidate["database_structure_preservation"]
+        and structure_event.get("source_schema_sha256")
+        == source_inspection_validation.schema_sha256
+        and structure_event.get("upgraded_source_schema_sha256")
+        == upgraded_inspection_validation.schema_sha256
+        and structure_event.get("final_target_schema_sha256")
+        == target_inspection_validation.schema_sha256,
+        f"{label} structure-preservation ledger binding is invalid.",
     )
     initial_backup_snapshot = _artifact_snapshot(
         tracker,
@@ -2247,6 +2335,7 @@ def _validate_run(
             ],
         },
         "sqlite_sequence": target_inspection["inspection"]["sqlite_sequence"],
+        "table_structures": target_inspection["inspection"]["table_structures"],
         "sqlite_schema": _sqlite_schema_projection(
             target_database.path,
             label=f"{label} target backup",
@@ -2254,6 +2343,7 @@ def _validate_run(
     }
     semantic_projection = {
         "source_sqlite_schema_sha256": source_sqlite_schema_sha256,
+        "database_structure_preservation": structure_projection,
         "source_backup_set": {
             name: source_private[name] for name in ("database", "checksum", "metadata")
         },
@@ -2650,6 +2740,11 @@ def verify_rehearsal_pair(config: PairVerificationConfig) -> Path:
             "source_applied_migrations_sha256"
         ],
         "source_sqlite_schema_sha256": policy["source_sqlite_schema_sha256"],
+        "database_structure_preservation_sha256": (
+            approval_core._canonical_json_sha256(
+                first.semantic_projection["database_structure_preservation"]
+            )
+        ),
         "migration_plan_sha256": policy["migration_plan_sha256"],
         "migration_runtime_sha256": policy["migration_runtime_sha256"],
         "runtime_fingerprint_sha256": policy["runtime_fingerprint_sha256"],

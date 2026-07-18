@@ -34,6 +34,29 @@ SCHEMA_INVENTORY_KEYS = frozenset(
     }
 )
 SCHEMA_OBJECT_KEYS = frozenset({"type", "name", "tbl_name", "sql"})
+TABLE_STRUCTURE_FORMAT = "ffxivshare-sqlite-table-structure-inventory"
+TABLE_STRUCTURE_FORMAT_VERSION = 1
+TABLE_STRUCTURE_KEYS = frozenset(
+    {"format", "format_version", "schema", "table_count", "tables", "sha256"}
+)
+TABLE_ENTRY_KEYS = frozenset(
+    {"name", "column_count", "columns", "foreign_keys", "unique_constraints"}
+)
+TABLE_COLUMN_KEYS = frozenset(
+    {"cid", "name", "type", "notnull", "default", "primary_key", "hidden"}
+)
+TABLE_FOREIGN_KEY_KEYS = frozenset(
+    {"id", "sequence", "table", "from", "to", "on_update", "on_delete", "match"}
+)
+TABLE_UNIQUE_CONSTRAINT_KEYS = frozenset({"columns", "partial"})
+TABLE_UNIQUE_COLUMN_KEYS = frozenset(
+    {"cid", "name", "descending", "collation"}
+)
+SQLITE_SEQUENCE_KEYS = frozenset({"present", "count", "high_water_marks"})
+SQLITE_SEQUENCE_ENTRY_KEYS = frozenset({"table", "sequence"})
+SQLITE_ASCII_IDENTIFIER_FOLD = str.maketrans(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
+)
 SQLITE_HEADER = b"SQLite format 3\x00"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
@@ -42,6 +65,10 @@ SQLITE_SIDECAR_SUFFIXES = ("-wal", "-shm", "-journal")
 
 class InspectionError(RuntimeError):
     pass
+
+
+def _sqlite_identifier_key(value: str) -> str:
+    return value.translate(SQLITE_ASCII_IDENTIFIER_FOLD)
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -259,13 +286,14 @@ def _validate_schema_inventory(inventory: dict[str, Any]) -> None:
         raise InspectionError("SQLite schema inventory has an invalid structure.")
     if (
         inventory["format"] != SCHEMA_INVENTORY_FORMAT
+        or type(inventory["format_version"]) is not int
         or inventory["format_version"] != SCHEMA_INVENTORY_FORMAT_VERSION
         or inventory["schema"] != "main"
         or inventory["included_object_types"] != list(SCHEMA_OBJECT_TYPES)
         or inventory["excluded_objects"]
         != {
             "name_prefix": SCHEMA_INTERNAL_NAME_PREFIX,
-            "comparison": "case-sensitive Unicode code-point prefix match",
+            "comparison": "SQLite ASCII case-insensitive prefix/identifier comparison",
             "reason": "SQLite-reserved internal and automatically generated objects",
         }
         or inventory["normalization"]
@@ -301,14 +329,18 @@ def _validate_schema_inventory(inventory: dict[str, Any]) -> None:
             object_type not in SCHEMA_OBJECT_TYPES
             or not isinstance(name, str)
             or not name
-            or name.startswith(SCHEMA_INTERNAL_NAME_PREFIX)
+            or _sqlite_identifier_key(name).startswith(SCHEMA_INTERNAL_NAME_PREFIX)
             or not isinstance(table_name, str)
             or not table_name
             or not isinstance(sql, str)
             or not sql
         ):
             raise InspectionError("SQLite schema inventory object value is invalid.")
-        identity = (object_type, name, table_name)
+        identity = (
+            object_type,
+            _sqlite_identifier_key(name),
+            _sqlite_identifier_key(table_name),
+        )
         if identity in seen:
             raise InspectionError("SQLite schema inventory contains duplicate objects.")
         seen.add(identity)
@@ -334,7 +366,7 @@ def _sqlite_schema_inventory(connection: sqlite3.Connection) -> dict[str, Any]:
         # generated objects (for example sqlite_sequence and sqlite_autoindex_*).
         # Keep those out of the human review surface; sqlite_sequence values are
         # recorded separately by _sqlite_sequence().
-        if name.startswith(SCHEMA_INTERNAL_NAME_PREFIX):
+        if _sqlite_identifier_key(name).startswith(SCHEMA_INTERNAL_NAME_PREFIX):
             continue
         objects.append(
             {
@@ -352,7 +384,7 @@ def _sqlite_schema_inventory(connection: sqlite3.Connection) -> dict[str, Any]:
         "included_object_types": list(SCHEMA_OBJECT_TYPES),
         "excluded_objects": {
             "name_prefix": SCHEMA_INTERNAL_NAME_PREFIX,
-            "comparison": "case-sensitive Unicode code-point prefix match",
+            "comparison": "SQLite ASCII case-insensitive prefix/identifier comparison",
             "reason": "SQLite-reserved internal and automatically generated objects",
         },
         "normalization": {
@@ -387,6 +419,258 @@ def _table_inventory(connection: sqlite3.Connection) -> list[dict[str, Any]]:
     return inventory
 
 
+def _table_structure_projection(inventory: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: inventory[key]
+        for key in ("format", "format_version", "schema", "table_count", "tables")
+    }
+
+
+def _validate_table_structures(inventory: dict[str, Any]) -> None:
+    if not isinstance(inventory, dict) or set(inventory) != TABLE_STRUCTURE_KEYS:
+        raise InspectionError("SQLite table structure inventory is invalid.")
+    if (
+        inventory["format"] != TABLE_STRUCTURE_FORMAT
+        or type(inventory["format_version"]) is not int
+        or inventory["format_version"] != TABLE_STRUCTURE_FORMAT_VERSION
+        or inventory["schema"] != "main"
+    ):
+        raise InspectionError("SQLite table structure metadata is invalid.")
+    tables = inventory["tables"]
+    if (
+        not isinstance(tables, list)
+        or type(inventory["table_count"]) is not int
+        or inventory["table_count"] != len(tables)
+    ):
+        raise InspectionError("SQLite table structure count is invalid.")
+    table_names: list[str] = []
+    for table in tables:
+        if not isinstance(table, dict) or set(table) != TABLE_ENTRY_KEYS:
+            raise InspectionError("SQLite table structure entry is invalid.")
+        name = table["name"]
+        columns = table["columns"]
+        if (
+            not isinstance(name, str)
+            or not name
+            or _sqlite_identifier_key(name).startswith(SCHEMA_INTERNAL_NAME_PREFIX)
+            or not isinstance(columns, list)
+            or type(table["column_count"]) is not int
+            or table["column_count"] != len(columns)
+            or not columns
+        ):
+            raise InspectionError("SQLite table structure value is invalid.")
+        table_names.append(name)
+        column_names: list[str] = []
+        column_ids: list[int] = []
+        for column in columns:
+            if not isinstance(column, dict) or set(column) != TABLE_COLUMN_KEYS:
+                raise InspectionError("SQLite table column structure is invalid.")
+            if (
+                type(column["cid"]) is not int
+                or column["cid"] < 0
+                or not isinstance(column["name"], str)
+                or not column["name"]
+                or not isinstance(column["type"], str)
+                or type(column["notnull"]) is not int
+                or column["notnull"] not in (0, 1)
+                or (
+                    column["default"] is not None
+                    and not isinstance(column["default"], str)
+                )
+                or type(column["primary_key"]) is not int
+                or column["primary_key"] < 0
+                or type(column["hidden"]) is not int
+                or column["hidden"] not in (0, 1, 2, 3)
+            ):
+                raise InspectionError("SQLite table column value is invalid.")
+            column_names.append(column["name"])
+            column_ids.append(column["cid"])
+        if len({_sqlite_identifier_key(name) for name in column_names}) != len(
+            column_names
+        ):
+            raise InspectionError("SQLite table columns contain duplicate names.")
+        if column_ids != sorted(set(column_ids)):
+            raise InspectionError("SQLite table columns are not canonically ordered.")
+        foreign_keys = table["foreign_keys"]
+        if not isinstance(foreign_keys, list):
+            raise InspectionError("SQLite table foreign keys are invalid.")
+        foreign_key_order: list[tuple[int, int]] = []
+        for foreign_key in foreign_keys:
+            if (
+                not isinstance(foreign_key, dict)
+                or set(foreign_key) != TABLE_FOREIGN_KEY_KEYS
+                or type(foreign_key["id"]) is not int
+                or foreign_key["id"] < 0
+                or type(foreign_key["sequence"]) is not int
+                or foreign_key["sequence"] < 0
+                or not isinstance(foreign_key["table"], str)
+                or not foreign_key["table"]
+                or not isinstance(foreign_key["from"], str)
+                or not foreign_key["from"]
+                or (
+                    foreign_key["to"] is not None
+                    and (
+                        not isinstance(foreign_key["to"], str)
+                        or not foreign_key["to"]
+                    )
+                )
+                or not all(
+                    isinstance(foreign_key[key], str) and foreign_key[key]
+                    for key in ("on_update", "on_delete", "match")
+                )
+            ):
+                raise InspectionError("SQLite table foreign-key value is invalid.")
+            foreign_key_order.append((foreign_key["id"], foreign_key["sequence"]))
+        if foreign_key_order != sorted(set(foreign_key_order)):
+            raise InspectionError("SQLite table foreign keys are not canonical.")
+        unique_constraints = table["unique_constraints"]
+        if not isinstance(unique_constraints, list):
+            raise InspectionError("SQLite table unique constraints are invalid.")
+        unique_order: list[str] = []
+        for constraint in unique_constraints:
+            if (
+                not isinstance(constraint, dict)
+                or set(constraint) != TABLE_UNIQUE_CONSTRAINT_KEYS
+                or type(constraint["partial"]) is not int
+                or constraint["partial"] not in (0, 1)
+                or not isinstance(constraint["columns"], list)
+                or not constraint["columns"]
+            ):
+                raise InspectionError("SQLite unique-constraint value is invalid.")
+            for column in constraint["columns"]:
+                if (
+                    not isinstance(column, dict)
+                    or set(column) != TABLE_UNIQUE_COLUMN_KEYS
+                    or type(column["cid"]) is not int
+                    or column["cid"] < -2
+                    or (column["name"] is not None and not isinstance(column["name"], str))
+                    or type(column["descending"]) is not int
+                    or column["descending"] not in (0, 1)
+                    or (
+                        column["collation"] is not None
+                        and not isinstance(column["collation"], str)
+                    )
+                ):
+                    raise InspectionError("SQLite unique-constraint column is invalid.")
+            unique_order.append(
+                json.dumps(
+                    constraint,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+        if unique_order != sorted(set(unique_order)):
+            raise InspectionError("SQLite table unique constraints are not canonical.")
+    if len({_sqlite_identifier_key(name) for name in table_names}) != len(table_names):
+        raise InspectionError("SQLite table structures contain duplicate names.")
+    if table_names != sorted(table_names):
+        raise InspectionError("SQLite table structures are not canonically ordered.")
+    digest = inventory["sha256"]
+    if (
+        not isinstance(digest, str)
+        or SHA256_PATTERN.fullmatch(digest) is None
+        or digest != _canonical_json_sha256(_table_structure_projection(inventory))
+    ):
+        raise InspectionError("SQLite table structure SHA256 is invalid.")
+
+
+def _table_structures(
+    connection: sqlite3.Connection,
+    schema_inventory: dict[str, Any],
+) -> dict[str, Any]:
+    table_names = sorted(
+        item["name"]
+        for item in schema_inventory["objects"]
+        if item["type"] == "table"
+    )
+    tables = []
+    for table_name in table_names:
+        columns = []
+        for cid, name, declared_type, notnull, default, primary_key, hidden in (
+            connection.execute(
+                f"PRAGMA main.table_xinfo({_quoted_identifier(table_name)})"
+            )
+        ):
+            columns.append(
+                {
+                    "cid": cid,
+                    "name": name,
+                    "type": declared_type,
+                    "notnull": notnull,
+                    "default": default,
+                    "primary_key": primary_key,
+                    "hidden": hidden,
+                }
+            )
+        foreign_keys = [
+            {
+                "id": row[0],
+                "sequence": row[1],
+                "table": row[2],
+                "from": row[3],
+                "to": row[4],
+                "on_update": row[5],
+                "on_delete": row[6],
+                "match": row[7],
+            }
+            for row in connection.execute(
+                f"PRAGMA main.foreign_key_list({_quoted_identifier(table_name)})"
+            )
+        ]
+        foreign_keys.sort(key=lambda item: (item["id"], item["sequence"]))
+        unique_constraints = []
+        for _sequence, index_name, unique, _origin, partial in connection.execute(
+            f"PRAGMA main.index_list({_quoted_identifier(table_name)})"
+        ):
+            if unique != 1:
+                continue
+            key_columns = []
+            for _seqno, cid, name, descending, collation, key in connection.execute(
+                f"PRAGMA main.index_xinfo({_quoted_identifier(index_name)})"
+            ):
+                if key != 1:
+                    continue
+                key_columns.append(
+                    {
+                        "cid": cid,
+                        "name": name,
+                        "descending": descending,
+                        "collation": collation,
+                    }
+                )
+            unique_constraints.append({"columns": key_columns, "partial": partial})
+        unique_constraints.sort(
+            key=lambda item: json.dumps(
+                item,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
+        tables.append(
+            {
+                "name": table_name,
+                "column_count": len(columns),
+                "columns": columns,
+                "foreign_keys": foreign_keys,
+                "unique_constraints": unique_constraints,
+            }
+        )
+    inventory = {
+        "format": TABLE_STRUCTURE_FORMAT,
+        "format_version": TABLE_STRUCTURE_FORMAT_VERSION,
+        "schema": "main",
+        "table_count": len(tables),
+        "tables": tables,
+    }
+    inventory["sha256"] = _canonical_json_sha256(inventory)
+    _validate_table_structures(inventory)
+    return inventory
+
+
 def _django_migrations(
     connection: sqlite3.Connection,
     table_names: set[str],
@@ -413,7 +697,9 @@ def _sqlite_sequence(
     table_names: set[str],
 ) -> dict[str, Any]:
     if "sqlite_sequence" not in table_names:
-        return {"present": False, "count": 0, "high_water_marks": []}
+        value = {"present": False, "count": 0, "high_water_marks": []}
+        _validate_sqlite_sequence(value)
+        return value
 
     high_water_marks = [
         {"table": row[0], "sequence": row[1]}
@@ -421,11 +707,47 @@ def _sqlite_sequence(
             "SELECT name, seq FROM main.sqlite_sequence ORDER BY name COLLATE BINARY"
         )
     ]
-    return {
+    value = {
         "present": True,
         "count": len(high_water_marks),
         "high_water_marks": high_water_marks,
     }
+    _validate_sqlite_sequence(value)
+    return value
+
+
+def _validate_sqlite_sequence(value: dict[str, Any]) -> None:
+    if not isinstance(value, dict) or set(value) != SQLITE_SEQUENCE_KEYS:
+        raise InspectionError("SQLite sequence inventory is invalid.")
+    if not isinstance(value["present"], bool):
+        raise InspectionError("SQLite sequence presence is invalid.")
+    marks = value["high_water_marks"]
+    if (
+        type(value["count"]) is not int
+        or not isinstance(marks, list)
+        or value["count"] != len(marks)
+        or (value["present"] is False and (value["count"] != 0 or marks != []))
+    ):
+        raise InspectionError("SQLite sequence count is invalid.")
+    tables: list[str] = []
+    for item in marks:
+        if (
+            not isinstance(item, dict)
+            or set(item) != SQLITE_SEQUENCE_ENTRY_KEYS
+            or not isinstance(item["table"], str)
+            or not item["table"]
+            or _sqlite_identifier_key(item["table"]).startswith(
+                SCHEMA_INTERNAL_NAME_PREFIX
+            )
+            or type(item["sequence"]) is not int
+            or item["sequence"] < 0
+        ):
+            raise InspectionError("SQLite sequence entry is invalid.")
+        tables.append(item["table"])
+    if len({_sqlite_identifier_key(table) for table in tables}) != len(tables):
+        raise InspectionError("SQLite sequence inventory contains duplicate tables.")
+    if tables != sorted(tables):
+        raise InspectionError("SQLite sequence inventory is not canonical.")
 
 
 def _count_foreign_key_violations(connection: sqlite3.Connection) -> int:
@@ -468,6 +790,7 @@ def _inspect_database(database: Path, header: dict[str, Any]) -> dict[str, Any]:
 
         tables = _table_inventory(connection)
         table_names = {item["name"] for item in tables}
+        schema_inventory = _sqlite_schema_inventory(connection)
         return {
             "sqlite_version": sqlite_version,
             "python_sqlite_version": sqlite3.sqlite_version,
@@ -477,7 +800,8 @@ def _inspect_database(database: Path, header: dict[str, Any]) -> dict[str, Any]:
             "user_version": user_version,
             "page_count": page_count,
             "tables": tables,
-            "sqlite_schema": _sqlite_schema_inventory(connection),
+            "sqlite_schema": schema_inventory,
+            "table_structures": _table_structures(connection, schema_inventory),
             "django_migrations": _django_migrations(connection, table_names),
             "sqlite_sequence": _sqlite_sequence(connection, table_names),
         }

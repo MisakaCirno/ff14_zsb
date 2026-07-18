@@ -43,6 +43,118 @@ SQLITE_SCHEMA_INVENTORY_KEYS = frozenset(
 SQLITE_SCHEMA_OBJECT_KEYS = frozenset({"type", "name", "tbl_name", "sql"})
 SQLITE_SCHEMA_OBJECT_TYPES = ("index", "table", "trigger", "view")
 SQLITE_SCHEMA_INTERNAL_PREFIX = "sqlite_"
+SQLITE_SEQUENCE_KEYS = frozenset({"present", "count", "high_water_marks"})
+SQLITE_SEQUENCE_ENTRY_KEYS = frozenset({"table", "sequence"})
+SQLITE_ASCII_IDENTIFIER_FOLD = str.maketrans(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
+)
+TABLE_STRUCTURE_KEYS = frozenset(
+    {"format", "format_version", "schema", "table_count", "tables", "sha256"}
+)
+TABLE_STRUCTURE_ENTRY_KEYS = frozenset(
+    {"name", "column_count", "columns", "foreign_keys", "unique_constraints"}
+)
+TABLE_COLUMN_KEYS = frozenset(
+    {"cid", "name", "type", "notnull", "default", "primary_key", "hidden"}
+)
+TABLE_FOREIGN_KEY_KEYS = frozenset(
+    {"id", "sequence", "table", "from", "to", "on_update", "on_delete", "match"}
+)
+TABLE_UNIQUE_CONSTRAINT_KEYS = frozenset({"columns", "partial"})
+TABLE_UNIQUE_COLUMN_KEYS = frozenset(
+    {"cid", "name", "descending", "collation"}
+)
+SQL_CHANGE_EXCEPTIONS = {
+    ("table", "shares_collectionitem", "shares_collectionitem"): {
+        "source_sql_sha256": "0dea4fbafc2cd03c57ae5f3ceecafb95b61ae0c22de0160fd3883c5d245fb5ec",
+        "destination_sql_sha256": "140870626a45265777ac1b093442a476b865e52faed90c9e28c7d0c8a16f8606",
+        "reason": "0021 replaces legacy collection uniqueness with named constraints",
+    },
+    ("table", "shares_report", "shares_report"): {
+        "source_sql_sha256": "3fb8df1f2da3fd7eebb32b22ed204305b4248b7768b46574ed09fdd5066e493a",
+        "destination_sql_sha256": "36623641ece690da65ac2f679d1b49638da7310175ed435483578822c95bf3b6",
+        "reason": "0019-0022 add moderation metadata, constraints, and nullable reporter",
+    },
+    ("table", "shares_share", "shares_share"): {
+        "source_sql_sha256": "b7dfabad0e0a46d924c81f8cab7582920e978d35a056c7d9ba088135764cd2c8",
+        "destination_sql_sha256": "5a40804373ecb71ef6ae37a7cb3c8dcad44932ab923808ae03e6ff1ef95eaec9",
+        "reason": "0019-0022 add review and restriction provenance with constraints",
+    },
+    ("table", "shares_sharelog", "shares_sharelog"): {
+        "source_sql_sha256": "c0a7c8c77a57b60d9f1828fb4b0d1870a8e1564bda6017fbe01ca9b42292cee6",
+        "destination_sql_sha256": "9ccc10586462593f2f4d21584d6e11d2b99d480e66e6086886f3b73065374744",
+        "reason": "0022 makes the audit actor nullable while preserving historical logs",
+    },
+    ("table", "shares_userprofile", "shares_userprofile"): {
+        "source_sql_sha256": "32bf5a9e37e8656c029d463492d5a061b5c4ecc08d14a07ce12df748c5412f60",
+        "destination_sql_sha256": "415fa9ddd83655b6d28cb268941d98d32c588f20b92e7e9dae278266c5717829",
+        "reason": "0021 adds the home-feed-mode integrity constraint",
+    },
+}
+MISSING_OBJECT_EXCEPTIONS = {
+    (
+        "index",
+        "shares_collectionitem_collection_id_share_id_748d688d_uniq",
+        "shares_collectionitem",
+    ): {
+        "source_sql_sha256": "b0a23cbc495c25c6a139720e7bc73436ec41261ab10a208676c869cf21f36266",
+        "reason": "0021 replaces legacy unique_together with collection_share_unique",
+    },
+}
+ADDED_OBJECT_EXCEPTIONS = {
+    ("index", "announcement_active_idx", "shares_announcement"): "28d25b981a1bbc3686490d2fdd1ed568a448d7e0da4af11aa22d830a448414b3",
+    ("index", "collection_author_idx", "shares_collection"): "b278b88e7168e7533047215aaf5d6523da1994b5189ce1a58e4aa88dd1dbf49d",
+    ("index", "collection_item_order_idx", "shares_collectionitem"): "d873cf4ab52d8e629ea1d13f076bb3f2aed54e7afb886dd830db826c22d31630",
+    ("index", "collection_owner_updated_idx", "shares_collection"): "bb1b243310e4024ad3f17ad3774781357f5635a6c7094429cbe4a8b2e1dfc633",
+    ("index", "message_inbox_idx", "shares_sitemessage"): "dde7815006e2b14794dfb333f35d1f963fc507efeb4cc4b1d104ea8caaa406aa",
+    ("index", "report_one_pending", "shares_report"): "ae5f2cde68636dd2661a3de03e3f89b27b253a60807497bb67b5cbea4036e35d",
+    ("index", "report_queue_idx", "shares_report"): "942fd2a94b07e6c9574a017ca6a749b85f87dd567ea099f349896215d7d9c80b",
+    ("index", "report_reporter_idx", "shares_report"): "a59516847c0ffad08272e37fbd6b14844d0884b63b2d2945f6236e4136c49a45",
+    ("index", "share_author_idx", "shares_share"): "1730849dac13ef8607e9acfe416d969a5bb82a50ced639e4f9f05a90add6f3c0",
+    ("index", "share_feed_idx", "shares_share"): "d6ffd2ac17093b8541fb692f1974ddd7ef135f331693ea8d77d5234d550d54a6",
+    ("index", "share_log_share_idx", "shares_sharelog"): "85b5301238d6022a92603b8e7fdef989f5aa9740503b480adfff2e8cd95b4952",
+    ("index", "share_log_user_idx", "shares_sharelog"): "99fd46e8a38cfa100e2afcfd2237aee81ba6f9c9345e0f7343f05e049485b7fb",
+    ("index", "shares_share_restricted_by_id_3fe4e29c", "shares_share"): "202ee10d1c210891decdb0c234eaaf6fd8299d77f904bd7b35b5d9b329fb1cd1",
+    ("index", "shares_share_reviewed_by_id_12967517", "shares_share"): "70d9021b33b8508d5bddf7bc2b27c90dfd7226f930d97b7f5abc6df776895c40",
+    ("index", "shares_site_recipie_ea589e_idx", "shares_sitemessage"): "bef46fa07edd74396c8e2731342f94a2cdf24a82200fcd5cd66c6dd35f92f1d0",
+    ("index", "shares_sitemessage_recipient_id_b834f35c", "shares_sitemessage"): "0667c64ef6810265858819bebdc625387a1df4907cf92cac49a373aa6775806a",
+    ("index", "shares_sitemessage_related_report_id_94747581", "shares_sitemessage"): "bf7edf4f05ce735db810bd66909bbfa7350b28aa438fa229806a31570609bc7c",
+    ("index", "shares_sitemessage_related_share_id_d2ef1c02", "shares_sitemessage"): "0678cdc707013ea82a88b712f6decff3fdd68c30be37da775bd4c1d9ef11250e",
+    ("index", "shares_sitemessage_sender_id_a2f47d61", "shares_sitemessage"): "d662f71595ea8fdf8f283cb300382a131a2230592c3edae6ff8de470d3d08804",
+    ("table", "shares_sitemessage", "shares_sitemessage"): "0cd79c1481b53cc64e619878bb2d07e0320249f5ee26324b7c15cf21bf4d7052",
+}
+COLUMN_ATTRIBUTE_EXCEPTIONS = {
+    ("shares_report", "reporter_id", "notnull"): (1, 0),
+    ("shares_sharelog", "user_id", "notnull"): (1, 0),
+}
+FINAL_TARGET_SEQUENCE_TABLES = frozenset(
+    {
+        "auth_group",
+        "auth_user",
+        "shares_userprofile",
+        "shares_share",
+        "shares_collection",
+        "shares_collectionitem",
+        "shares_report",
+        "shares_sharelog",
+        "shares_announcement",
+        "shares_sitemessage",
+        "django_admin_log",
+    }
+)
+EMBEDDED_BRIDGE_SEQUENCE_TABLES = frozenset(
+    {
+        "auth_group_permissions",
+        "auth_user_groups",
+        "auth_user_user_permissions",
+        "shares_share_favorites",
+        "shares_share_likes",
+    }
+)
+REGENERATED_SEQUENCE_TABLES = frozenset(
+    {"auth_permission", "django_content_type", "django_migrations"}
+)
+FORCE_LOGOUT_SEQUENCE_TABLES = frozenset({"django_session"})
 UTC_TIMESTAMP_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$"
 )
@@ -72,6 +184,10 @@ class RehearsalError(RuntimeError):
         super().__init__(code)
         self.code = code
         self.stage = stage
+
+
+def _sqlite_identifier_key(value: str) -> str:
+    return value.translate(SQLITE_ASCII_IDENTIFIER_FOLD)
 
 
 class RehearsalBlocked(RehearsalError):
@@ -153,6 +269,17 @@ class CommandResult:
     returncode: int
     stdout_path: Path
     stderr_path: Path
+
+
+@dataclass(frozen=True)
+class InspectionValidation:
+    report: dict[str, Any]
+    applied_migrations: list[list[str]]
+    schema_sha256: str
+    sqlite_sequence: dict[str, int]
+    schema_objects: dict[tuple[str, str, str], str]
+    table_structures_sha256: str
+    table_structures: dict[str, dict[str, Any]]
 
 
 class Runner(Protocol):
@@ -1470,13 +1597,14 @@ def _validate_sqlite_schema_inventory(value: Any) -> str:
         raise RehearsalError("snapshot_sqlite_schema_inventory_invalid")
     if (
         value["format"] != "ffxivshare-sqlite-schema-inventory"
+        or type(value["format_version"]) is not int
         or value["format_version"] != 1
         or value["schema"] != "main"
         or value["included_object_types"] != list(SQLITE_SCHEMA_OBJECT_TYPES)
         or value["excluded_objects"]
         != {
             "name_prefix": SQLITE_SCHEMA_INTERNAL_PREFIX,
-            "comparison": "case-sensitive Unicode code-point prefix match",
+            "comparison": "SQLite ASCII case-insensitive prefix/identifier comparison",
             "reason": "SQLite-reserved internal and automatically generated objects",
         }
         or value["normalization"]
@@ -1512,14 +1640,18 @@ def _validate_sqlite_schema_inventory(value: Any) -> str:
             object_type not in SQLITE_SCHEMA_OBJECT_TYPES
             or not isinstance(name, str)
             or not name
-            or name.startswith(SQLITE_SCHEMA_INTERNAL_PREFIX)
+            or _sqlite_identifier_key(name).startswith(SQLITE_SCHEMA_INTERNAL_PREFIX)
             or not isinstance(table_name, str)
             or not table_name
             or not isinstance(sql, str)
             or not sql
         ):
             raise RehearsalError("snapshot_sqlite_schema_object_value_invalid")
-        identity = (object_type, name, table_name)
+        identity = (
+            object_type,
+            _sqlite_identifier_key(name),
+            _sqlite_identifier_key(table_name),
+        )
         if identity in seen:
             raise RehearsalError("snapshot_sqlite_schema_duplicate_object")
         seen.add(identity)
@@ -1536,20 +1668,252 @@ def _validate_sqlite_schema_inventory(value: Any) -> str:
     return digest
 
 
+def _validate_sqlite_sequence_inventory(value: Any) -> dict[str, int]:
+    if not isinstance(value, dict) or set(value) != SQLITE_SEQUENCE_KEYS:
+        raise RehearsalError("snapshot_sqlite_sequence_invalid")
+    if not isinstance(value["present"], bool):
+        raise RehearsalError("snapshot_sqlite_sequence_presence_invalid")
+    marks = value["high_water_marks"]
+    if (
+        type(value["count"]) is not int
+        or not isinstance(marks, list)
+        or value["count"] != len(marks)
+        or (value["present"] is False and (value["count"] != 0 or marks != []))
+    ):
+        raise RehearsalError("snapshot_sqlite_sequence_count_invalid")
+    projection: dict[str, int] = {}
+    ordered_tables: list[str] = []
+    for item in marks:
+        if (
+            not isinstance(item, dict)
+            or set(item) != SQLITE_SEQUENCE_ENTRY_KEYS
+            or not isinstance(item["table"], str)
+            or not item["table"]
+            or _sqlite_identifier_key(item["table"]).startswith(
+                SQLITE_SCHEMA_INTERNAL_PREFIX
+            )
+            or type(item["sequence"]) is not int
+            or item["sequence"] < 0
+        ):
+            raise RehearsalError("snapshot_sqlite_sequence_entry_invalid")
+        table = item["table"]
+        ordered_tables.append(table)
+        projection[table] = item["sequence"]
+    if len({_sqlite_identifier_key(table) for table in ordered_tables}) != len(
+        ordered_tables
+    ):
+        raise RehearsalError("snapshot_sqlite_sequence_duplicate_table")
+    if ordered_tables != sorted(ordered_tables):
+        raise RehearsalError("snapshot_sqlite_sequence_not_canonical")
+    return projection
+
+
+def _table_structure_projection(inventory: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: inventory[key]
+        for key in ("format", "format_version", "schema", "table_count", "tables")
+    }
+
+
+def _table_structure_sha256(inventory: dict[str, Any]) -> str:
+    serialized = json.dumps(
+        _table_structure_projection(inventory),
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _validate_table_structures(
+    value: Any,
+) -> tuple[str, dict[str, dict[str, Any]]]:
+    if not isinstance(value, dict) or set(value) != TABLE_STRUCTURE_KEYS:
+        raise RehearsalError("snapshot_table_structures_invalid")
+    if (
+        value["format"] != "ffxivshare-sqlite-table-structure-inventory"
+        or type(value["format_version"]) is not int
+        or value["format_version"] != 1
+        or value["schema"] != "main"
+    ):
+        raise RehearsalError("snapshot_table_structure_metadata_invalid")
+    tables = value["tables"]
+    if (
+        not isinstance(tables, list)
+        or type(value["table_count"]) is not int
+        or value["table_count"] != len(tables)
+    ):
+        raise RehearsalError("snapshot_table_structure_count_invalid")
+    projection: dict[str, dict[str, Any]] = {}
+    ordered_tables: list[str] = []
+    for table in tables:
+        if not isinstance(table, dict) or set(table) != TABLE_STRUCTURE_ENTRY_KEYS:
+            raise RehearsalError("snapshot_table_structure_entry_invalid")
+        name = table["name"]
+        columns = table["columns"]
+        if (
+            not isinstance(name, str)
+            or not name
+            or _sqlite_identifier_key(name).startswith(SQLITE_SCHEMA_INTERNAL_PREFIX)
+            or not isinstance(columns, list)
+            or type(table["column_count"]) is not int
+            or table["column_count"] != len(columns)
+            or not columns
+        ):
+            raise RehearsalError("snapshot_table_structure_value_invalid")
+        ordered_tables.append(name)
+        column_projection: dict[str, dict[str, Any]] = {}
+        ordered_column_names: list[str] = []
+        ordered_column_ids: list[int] = []
+        for column in columns:
+            if not isinstance(column, dict) or set(column) != TABLE_COLUMN_KEYS:
+                raise RehearsalError("snapshot_table_column_invalid")
+            if (
+                type(column["cid"]) is not int
+                or column["cid"] < 0
+                or not isinstance(column["name"], str)
+                or not column["name"]
+                or not isinstance(column["type"], str)
+                or type(column["notnull"]) is not int
+                or column["notnull"] not in (0, 1)
+                or (
+                    column["default"] is not None
+                    and not isinstance(column["default"], str)
+                )
+                or type(column["primary_key"]) is not int
+                or column["primary_key"] < 0
+                or type(column["hidden"]) is not int
+                or column["hidden"] not in (0, 1, 2, 3)
+            ):
+                raise RehearsalError("snapshot_table_column_value_invalid")
+            column_name = column["name"]
+            ordered_column_names.append(column_name)
+            ordered_column_ids.append(column["cid"])
+            column_projection[column_name] = dict(column)
+        if len({_sqlite_identifier_key(name) for name in ordered_column_names}) != len(
+            ordered_column_names
+        ):
+            raise RehearsalError("snapshot_table_column_duplicate")
+        if ordered_column_ids != sorted(set(ordered_column_ids)):
+            raise RehearsalError("snapshot_table_columns_not_canonical")
+        foreign_keys = table["foreign_keys"]
+        if not isinstance(foreign_keys, list):
+            raise RehearsalError("snapshot_table_foreign_keys_invalid")
+        foreign_key_order: list[tuple[int, int]] = []
+        for foreign_key in foreign_keys:
+            if (
+                not isinstance(foreign_key, dict)
+                or set(foreign_key) != TABLE_FOREIGN_KEY_KEYS
+                or type(foreign_key["id"]) is not int
+                or foreign_key["id"] < 0
+                or type(foreign_key["sequence"]) is not int
+                or foreign_key["sequence"] < 0
+                or not isinstance(foreign_key["table"], str)
+                or not foreign_key["table"]
+                or not isinstance(foreign_key["from"], str)
+                or not foreign_key["from"]
+                or (
+                    foreign_key["to"] is not None
+                    and (
+                        not isinstance(foreign_key["to"], str)
+                        or not foreign_key["to"]
+                    )
+                )
+                or not all(
+                    isinstance(foreign_key[key], str) and foreign_key[key]
+                    for key in ("on_update", "on_delete", "match")
+                )
+            ):
+                raise RehearsalError("snapshot_table_foreign_key_value_invalid")
+            foreign_key_order.append((foreign_key["id"], foreign_key["sequence"]))
+        if foreign_key_order != sorted(set(foreign_key_order)):
+            raise RehearsalError("snapshot_table_foreign_keys_not_canonical")
+        unique_constraints = table["unique_constraints"]
+        if not isinstance(unique_constraints, list):
+            raise RehearsalError("snapshot_table_unique_constraints_invalid")
+        unique_order: list[str] = []
+        for constraint in unique_constraints:
+            if (
+                not isinstance(constraint, dict)
+                or set(constraint) != TABLE_UNIQUE_CONSTRAINT_KEYS
+                or type(constraint["partial"]) is not int
+                or constraint["partial"] not in (0, 1)
+                or not isinstance(constraint["columns"], list)
+                or not constraint["columns"]
+            ):
+                raise RehearsalError("snapshot_table_unique_constraint_invalid")
+            for column in constraint["columns"]:
+                if (
+                    not isinstance(column, dict)
+                    or set(column) != TABLE_UNIQUE_COLUMN_KEYS
+                    or type(column["cid"]) is not int
+                    or column["cid"] < -2
+                    or (
+                        column["name"] is not None
+                        and not isinstance(column["name"], str)
+                    )
+                    or type(column["descending"]) is not int
+                    or column["descending"] not in (0, 1)
+                    or (
+                        column["collation"] is not None
+                        and not isinstance(column["collation"], str)
+                    )
+                ):
+                    raise RehearsalError(
+                        "snapshot_table_unique_constraint_column_invalid"
+                    )
+            unique_order.append(
+                json.dumps(
+                    constraint,
+                    ensure_ascii=False,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+            )
+        if unique_order != sorted(set(unique_order)):
+            raise RehearsalError(
+                "snapshot_table_unique_constraints_not_canonical"
+            )
+        projection[name] = {
+            "columns": column_projection,
+            "foreign_keys": [dict(item) for item in foreign_keys],
+            "unique_constraints": [dict(item) for item in unique_constraints],
+        }
+    if len({_sqlite_identifier_key(name) for name in ordered_tables}) != len(
+        ordered_tables
+    ):
+        raise RehearsalError("snapshot_table_structure_duplicate")
+    if ordered_tables != sorted(ordered_tables):
+        raise RehearsalError("snapshot_table_structures_not_canonical")
+    digest = value["sha256"]
+    if (
+        not isinstance(digest, str)
+        or SHA256_PATTERN.fullmatch(digest) is None
+        or digest != _table_structure_sha256(value)
+    ):
+        raise RehearsalError("snapshot_table_structure_sha256_invalid")
+    return digest, projection
+
+
 def _validate_inspection_report(
     path: Path,
     *,
     expected_sha256: str,
-) -> tuple[dict[str, Any], list[list[str]], str]:
+) -> InspectionValidation:
     report = _load_json(path, maximum_size=32 * 1024 * 1024)
     database = report.get("database") if isinstance(report, dict) else None
     inspection = report.get("inspection") if isinstance(report, dict) else None
     migrations = inspection.get("django_migrations") if isinstance(inspection, dict) else None
     foreign_keys = inspection.get("foreign_key_check") if isinstance(inspection, dict) else None
     sqlite_schema = inspection.get("sqlite_schema") if isinstance(inspection, dict) else None
+    sqlite_sequence = inspection.get("sqlite_sequence") if isinstance(inspection, dict) else None
+    table_structures = inspection.get("table_structures") if isinstance(inspection, dict) else None
     if (
         not isinstance(report, dict)
         or report.get("format") != "ffxivshare-sqlite-snapshot-inspection"
+        or type(report.get("format_version")) is not int
         or report.get("format_version") != 1
         or not isinstance(database, dict)
         or database.get("sha256") != expected_sha256
@@ -1582,7 +1946,594 @@ def _validate_inspection_report(
     if canonical != sorted(applied) or len(canonical) != len(applied):
         raise RehearsalError("snapshot_migration_projection_not_canonical")
     schema_sha256 = _validate_sqlite_schema_inventory(sqlite_schema)
-    return report, canonical, schema_sha256
+    sequence_projection = _validate_sqlite_sequence_inventory(sqlite_sequence)
+    table_structures_sha256, table_structure_projection = _validate_table_structures(
+        table_structures
+    )
+    schema_objects = {
+        (item["type"], item["name"], item["tbl_name"]): item["sql"]
+        for item in sqlite_schema["objects"]
+    }
+    schema_tables = {
+        identity[1] for identity in schema_objects if identity[0] == "table"
+    }
+    if schema_tables != set(table_structure_projection):
+        raise RehearsalError("snapshot_table_structure_schema_mismatch")
+    return InspectionValidation(
+        report=report,
+        applied_migrations=canonical,
+        schema_sha256=schema_sha256,
+        sqlite_sequence=sequence_projection,
+        schema_objects=schema_objects,
+        table_structures_sha256=table_structures_sha256,
+        table_structures=table_structure_projection,
+    )
+
+
+def _schema_identity_payload(identity: tuple[str, str, str]) -> dict[str, str]:
+    return {"type": identity[0], "name": identity[1], "tbl_name": identity[2]}
+
+
+def _sql_sha256(sql: str) -> str:
+    return sha256(sql.encode("utf-8")).hexdigest()
+
+
+def _foreign_key_semantics(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    groups: dict[int, list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault(row["id"], []).append(row)
+    projection = []
+    for group in groups.values():
+        ordered = sorted(group, key=lambda item: item["sequence"])
+        projection.append(
+            [
+                {
+                    key: item[key]
+                    for key in (
+                        "table",
+                        "from",
+                        "to",
+                        "on_update",
+                        "on_delete",
+                        "match",
+                    )
+                }
+                for item in ordered
+            ]
+        )
+    projection.sort(
+        key=lambda item: json.dumps(
+            item,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
+    return projection
+
+
+def _unique_constraint_semantics(
+    constraints: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    projection = []
+    for constraint in constraints:
+        columns = []
+        for column in constraint["columns"]:
+            cid = column["cid"]
+            if cid >= 0:
+                kind = "column"
+            elif cid == -1:
+                kind = "rowid"
+            else:
+                kind = "expression"
+            columns.append(
+                {
+                    "kind": kind,
+                    "name": column["name"],
+                    "descending": column["descending"],
+                    "collation": column["collation"],
+                }
+            )
+        projection.append(
+            {"columns": columns, "partial": constraint["partial"]}
+        )
+    return projection
+
+
+def _canonical_values(value: list[Any]) -> list[str]:
+    return sorted(
+        json.dumps(
+            item,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        for item in value
+    )
+
+
+def _final_target_sequence_exclusion_reason(table: str) -> str:
+    table_key = _sqlite_identifier_key(table)
+    if table_key in EMBEDDED_BRIDGE_SEQUENCE_TABLES:
+        return "embedded bridge surrogate IDs are regenerated during portable import"
+    if table_key in REGENERATED_SEQUENCE_TABLES:
+        return "framework metadata rows and IDs are regenerated on the target"
+    if table_key in FORCE_LOGOUT_SEQUENCE_TABLES:
+        return "sessions are intentionally excluded to force logout after migration"
+    return "table is outside the v3 direct portable entity sequence scope"
+
+
+def _destination_structure_projection(
+    source: InspectionValidation,
+    destination: InspectionValidation,
+    *,
+    label: str,
+    upgraded_source_sequence: dict[str, int] | None = None,
+    sequence_scope: frozenset[str] | None = None,
+) -> dict[str, Any]:
+    issues: list[str] = []
+    sequence_checks = []
+    floor_tables = set(source.sqlite_sequence)
+    if upgraded_source_sequence is not None:
+        floor_tables.update(upgraded_source_sequence)
+    if sequence_scope is None:
+        sequence_tables = set(source.sqlite_sequence)
+        sequence_scope_report = {
+            "mode": "all_original_source_entries",
+            "declared_tables": None,
+            "checked_tables": sorted(sequence_tables),
+            "observed_excluded_entries": [],
+        }
+    else:
+        sequence_tables = {
+            table
+            for table in floor_tables
+            if _sqlite_identifier_key(table) in sequence_scope
+        }
+        observed_tables = floor_tables | set(destination.sqlite_sequence)
+        excluded_tables = sorted(
+            table
+            for table in observed_tables
+            if _sqlite_identifier_key(table) not in sequence_scope
+        )
+        sequence_scope_report = {
+            "mode": "v3_direct_portable_entity_tables",
+            "declared_tables": sorted(sequence_scope),
+            "checked_tables": sorted(sequence_tables),
+            "observed_excluded_entries": [
+                {
+                    "table": table,
+                    "original_source_value": source.sqlite_sequence.get(table),
+                    "upgraded_source_value": (
+                        None
+                        if upgraded_source_sequence is None
+                        else upgraded_source_sequence.get(table)
+                    ),
+                    "destination_value": destination.sqlite_sequence.get(table),
+                    "reason": _final_target_sequence_exclusion_reason(table),
+                }
+                for table in excluded_tables
+            ],
+        }
+    for table in sorted(sequence_tables):
+        original_source_floor = source.sqlite_sequence.get(table)
+        upgraded_source_floor = (
+            None
+            if upgraded_source_sequence is None
+            else upgraded_source_sequence.get(table)
+        )
+        effective_floor = max(
+            floor
+            for floor in (original_source_floor, upgraded_source_floor)
+            if floor is not None
+        )
+        destination_value = destination.sqlite_sequence.get(table)
+        preserved = (
+            destination_value is not None and destination_value >= effective_floor
+        )
+        sequence_checks.append(
+            {
+                "table": table,
+                "original_source_floor": original_source_floor,
+                "upgraded_source_floor": upgraded_source_floor,
+                "effective_floor": effective_floor,
+                "destination_value": destination_value,
+                "preserved": preserved,
+            }
+        )
+        if not preserved:
+            issues.append(
+                f"{label}: sqlite_sequence {table!r} fell below {effective_floor}: "
+                f"{destination_value!r}"
+            )
+
+    missing_objects = []
+    changed_sql = []
+    consumed_missing_exceptions = []
+    consumed_sql_exceptions = []
+    consumed_missing_identities: set[tuple[str, str, str]] = set()
+    consumed_sql_identities: set[tuple[str, str, str]] = set()
+    for identity, source_sql in sorted(source.schema_objects.items()):
+        destination_sql = destination.schema_objects.get(identity)
+        if destination_sql is None:
+            contract = MISSING_OBJECT_EXCEPTIONS.get(identity)
+            source_sql_sha256 = _sql_sha256(source_sql)
+            allowed = (
+                contract is not None
+                and source_sql_sha256 == contract["source_sql_sha256"]
+            )
+            entry = _schema_identity_payload(identity)
+            entry.update(
+                {
+                    "allowed": allowed,
+                    "source_sql_sha256": source_sql_sha256,
+                }
+            )
+            if allowed:
+                entry["reason"] = contract["reason"]
+                consumed_missing_exceptions.append(entry)
+                consumed_missing_identities.add(identity)
+            else:
+                issues.append(f"{label}: source schema object missing: {identity!r}")
+            missing_objects.append(entry)
+            continue
+        if destination_sql != source_sql:
+            contract = SQL_CHANGE_EXCEPTIONS.get(identity)
+            source_sql_sha256 = _sql_sha256(source_sql)
+            destination_sql_sha256 = _sql_sha256(destination_sql)
+            allowed = (
+                contract is not None
+                and identity[0] not in {"trigger", "view"}
+                and source_sql_sha256 == contract["source_sql_sha256"]
+                and destination_sql_sha256
+                == contract["destination_sql_sha256"]
+            )
+            entry = {
+                **_schema_identity_payload(identity),
+                "allowed": allowed,
+                "source_sql_sha256": source_sql_sha256,
+                "destination_sql_sha256": destination_sql_sha256,
+            }
+            if allowed:
+                entry["reason"] = contract["reason"]
+                consumed_sql_exceptions.append(entry)
+                consumed_sql_identities.add(identity)
+            else:
+                issues.append(f"{label}: source schema SQL changed: {identity!r}")
+            changed_sql.append(entry)
+
+    added_identities = sorted(
+        set(destination.schema_objects) - set(source.schema_objects)
+    )
+    added_objects = []
+    consumed_added_exceptions = []
+    consumed_added_identities: set[tuple[str, str, str]] = set()
+    for identity in added_identities:
+        destination_sql_sha256 = _sql_sha256(destination.schema_objects[identity])
+        expected_sql_sha256 = ADDED_OBJECT_EXCEPTIONS.get(identity)
+        allowed = destination_sql_sha256 == expected_sql_sha256
+        entry = {
+            **_schema_identity_payload(identity),
+            "allowed": allowed,
+            "destination_sql_sha256": destination_sql_sha256,
+        }
+        added_objects.append(entry)
+        if allowed:
+            consumed_added_exceptions.append(entry)
+            consumed_added_identities.add(identity)
+        else:
+            issues.append(f"{label}: unexpected schema object added: {identity!r}")
+
+    missing_columns = []
+    changed_columns = []
+    column_cid_diagnostics = []
+    missing_foreign_keys = []
+    missing_unique_constraints = []
+    consumed_column_exceptions = []
+    consumed_column_identities: set[tuple[str, str, str]] = set()
+    for table_name, source_table in sorted(source.table_structures.items()):
+        destination_table = destination.table_structures.get(table_name)
+        if destination_table is None:
+            issues.append(f"{label}: source table structure missing: {table_name!r}")
+            continue
+        destination_columns = destination_table["columns"]
+        for column_name, source_column in sorted(source_table["columns"].items()):
+            destination_column = destination_columns.get(column_name)
+            if destination_column is None:
+                missing_columns.append({"table": table_name, "column": column_name})
+                issues.append(
+                    f"{label}: source column missing: {table_name}.{column_name}"
+                )
+                continue
+            differences = []
+            for attribute, source_value in source_column.items():
+                destination_value = destination_column[attribute]
+                if destination_value == source_value:
+                    continue
+                if attribute == "cid":
+                    diagnostic = {
+                        "table": table_name,
+                        "column": column_name,
+                        "source": source_value,
+                        "destination": destination_value,
+                    }
+                    column_cid_diagnostics.append(diagnostic)
+                    differences.append(
+                        {
+                            "attribute": attribute,
+                            "source": source_value,
+                            "destination": destination_value,
+                            "allowed": True,
+                            "diagnostic_only": True,
+                        }
+                    )
+                    continue
+                exception = COLUMN_ATTRIBUTE_EXCEPTIONS.get(
+                    (table_name, column_name, attribute)
+                )
+                allowed = exception == (source_value, destination_value)
+                differences.append(
+                    {
+                        "attribute": attribute,
+                        "source": source_value,
+                        "destination": destination_value,
+                        "allowed": allowed,
+                        "diagnostic_only": False,
+                    }
+                )
+                if not allowed:
+                    issues.append(
+                        f"{label}: source column attribute changed: "
+                        f"{table_name}.{column_name}.{attribute}"
+                    )
+                else:
+                    exception_identity = (table_name, column_name, attribute)
+                    consumed_column_identities.add(exception_identity)
+                    consumed_column_exceptions.append(
+                        {
+                            "table": table_name,
+                            "column": column_name,
+                            "attribute": attribute,
+                            "source": source_value,
+                            "destination": destination_value,
+                        }
+                    )
+            if differences:
+                changed_columns.append(
+                    {
+                        "table": table_name,
+                        "column": column_name,
+                        "differences": differences,
+                    }
+                )
+
+        source_foreign_keys = _canonical_values(
+            _foreign_key_semantics(source_table["foreign_keys"])
+        )
+        destination_foreign_keys = set(
+            _canonical_values(
+                _foreign_key_semantics(destination_table["foreign_keys"])
+            )
+        )
+        for foreign_key in source_foreign_keys:
+            if foreign_key not in destination_foreign_keys:
+                missing_foreign_keys.append(
+                    {"table": table_name, "foreign_key": json.loads(foreign_key)}
+                )
+                issues.append(f"{label}: source foreign key missing on {table_name}")
+
+        source_uniques = _canonical_values(
+            _unique_constraint_semantics(source_table["unique_constraints"])
+        )
+        destination_uniques = set(
+            _canonical_values(
+                _unique_constraint_semantics(
+                    destination_table["unique_constraints"]
+                )
+            )
+        )
+        for unique_constraint in source_uniques:
+            if unique_constraint not in destination_uniques:
+                missing_unique_constraints.append(
+                    {
+                        "table": table_name,
+                        "unique_constraint": json.loads(unique_constraint),
+                    }
+                )
+                issues.append(
+                    f"{label}: source unique constraint missing on {table_name}"
+                )
+
+    unconsumed_missing = sorted(
+        set(MISSING_OBJECT_EXCEPTIONS) - consumed_missing_identities
+    )
+    unconsumed_sql = sorted(set(SQL_CHANGE_EXCEPTIONS) - consumed_sql_identities)
+    unconsumed_added = sorted(
+        set(ADDED_OBJECT_EXCEPTIONS) - consumed_added_identities
+    )
+    unconsumed_columns = sorted(
+        set(COLUMN_ATTRIBUTE_EXCEPTIONS) - consumed_column_identities
+    )
+    for exception_type, identities in (
+        ("missing-object", unconsumed_missing),
+        ("SQL-change", unconsumed_sql),
+        ("added-object", unconsumed_added),
+        ("column-attribute", unconsumed_columns),
+    ):
+        for identity in identities:
+            issues.append(
+                f"{label}: declared {exception_type} exception was not consumed: "
+                f"{identity!r}"
+            )
+
+    return {
+        "label": label,
+        "schema_sha256": destination.schema_sha256,
+        "table_structures_sha256": destination.table_structures_sha256,
+        "sequence_scope": sequence_scope_report,
+        "sequence_checks": sequence_checks,
+        "missing_objects": missing_objects,
+        "changed_sql": changed_sql,
+        "added_objects": added_objects,
+        "missing_columns": missing_columns,
+        "changed_columns": changed_columns,
+        "column_cid_diagnostics": column_cid_diagnostics,
+        "missing_foreign_keys": missing_foreign_keys,
+        "missing_unique_constraints": missing_unique_constraints,
+        "consumed_missing_object_exceptions": consumed_missing_exceptions,
+        "consumed_sql_change_exceptions": consumed_sql_exceptions,
+        "consumed_added_object_exceptions": consumed_added_exceptions,
+        "consumed_column_attribute_exceptions": consumed_column_exceptions,
+        "unconsumed_declared_exceptions": {
+            "missing_objects": [
+                _schema_identity_payload(identity) for identity in unconsumed_missing
+            ],
+            "sql_changes": [
+                _schema_identity_payload(identity) for identity in unconsumed_sql
+            ],
+            "added_objects": [
+                _schema_identity_payload(identity) for identity in unconsumed_added
+            ],
+            "column_attributes": [
+                {
+                    "table": identity[0],
+                    "column": identity[1],
+                    "attribute": identity[2],
+                }
+                for identity in unconsumed_columns
+            ],
+        },
+        "preserved": not issues,
+        "issues": sorted(set(issues)),
+    }
+
+
+def _database_structure_preservation_projection(
+    source: InspectionValidation,
+    upgraded_source: InspectionValidation,
+    final_target: InspectionValidation,
+) -> dict[str, Any]:
+    upgraded_projection = _destination_structure_projection(
+        source, upgraded_source, label="upgraded_source"
+    )
+    target_projection = _destination_structure_projection(
+        source,
+        final_target,
+        label="final_target",
+        upgraded_source_sequence=upgraded_source.sqlite_sequence,
+        sequence_scope=FINAL_TARGET_SEQUENCE_TABLES,
+    )
+    cross_issues = []
+    if upgraded_source.schema_objects != final_target.schema_objects:
+        cross_issues.append(
+            "upgraded_source and final_target sqlite_schema projections differ"
+        )
+    if upgraded_source.table_structures != final_target.table_structures:
+        cross_issues.append(
+            "upgraded_source and final_target table structures differ"
+        )
+    issues = sorted(
+        set(upgraded_projection["issues"])
+        | set(target_projection["issues"])
+        | set(cross_issues)
+    )
+    return {
+        "format": "ffxivshare-database-structure-preservation",
+        "format_version": 1,
+        "source": {
+            "schema_sha256": source.schema_sha256,
+            "table_structures_sha256": source.table_structures_sha256,
+            "sequence": [
+                {"table": table, "sequence": sequence}
+                for table, sequence in sorted(source.sqlite_sequence.items())
+            ],
+        },
+        "declared_exceptions": {
+            "missing_objects": [
+                {
+                    **_schema_identity_payload(identity),
+                    **contract,
+                }
+                for identity, contract in sorted(MISSING_OBJECT_EXCEPTIONS.items())
+            ],
+            "sql_changes": [
+                {
+                    **_schema_identity_payload(identity),
+                    **contract,
+                }
+                for identity, contract in sorted(SQL_CHANGE_EXCEPTIONS.items())
+            ],
+            "added_objects": [
+                {
+                    **_schema_identity_payload(identity),
+                    "destination_sql_sha256": destination_sql_sha256,
+                }
+                for identity, destination_sql_sha256 in sorted(
+                    ADDED_OBJECT_EXCEPTIONS.items()
+                )
+            ],
+            "column_attributes": [
+                {
+                    "table": identity[0],
+                    "column": identity[1],
+                    "attribute": identity[2],
+                    "source": values[0],
+                    "destination": values[1],
+                }
+                for identity, values in sorted(COLUMN_ATTRIBUTE_EXCEPTIONS.items())
+            ],
+        },
+        "automated_coverage": [
+            "sqlite_sequence original-source and upgraded-source effective floors",
+            "all original-source sqlite_sequence floors in upgraded source",
+            "v3 direct portable entity sqlite_sequence floors in final target",
+            "sqlite_schema object identities",
+            "trigger and view SQL",
+            "non-exempt source object SQL",
+            "source table columns and primary-key attributes",
+            "source foreign-key semantics",
+            "source unique-constraint semantics",
+            "upgraded-source versus final-target exact schema projection",
+        ],
+        "residual_manual_review": {
+            "required": True,
+            "scope": [
+                _schema_identity_payload(identity)
+                for identity in sorted(SQL_CHANGE_EXCEPTIONS)
+            ],
+            "reason": (
+                "Exact source-to-destination table SQL SHA-256 pairs are enforced; "
+                "manual review documents why each explicitly pinned SQL transition "
+                "is acceptable."
+            ),
+        },
+        "destinations": {
+            "upgraded_source": upgraded_projection,
+            "final_target": target_projection,
+        },
+        "cross_destination_schema_equal": not cross_issues,
+        "preserved": not issues,
+        "issues": issues,
+    }
+
+
+def _validate_structure_preservation_report(
+    path: Path,
+    *,
+    expected_projection: dict[str, Any],
+) -> dict[str, Any]:
+    report = _load_json(path, maximum_size=32 * 1024 * 1024)
+    if (
+        not isinstance(report, dict)
+        or set(report) != {"generated_at", "projection"}
+        or not isinstance(report["generated_at"], str)
+        or UTC_TIMESTAMP_PATTERN.fullmatch(report["generated_at"]) is None
+        or report["projection"] != expected_projection
+    ):
+        raise RehearsalError("database_structure_preservation_report_invalid")
+    return report
 
 
 def _validate_migration_state(path: Path) -> dict[str, Any]:
@@ -4969,12 +5920,12 @@ class Rehearsal:
             expected_identity=private_source_identity,
             issue_prefix="private_source",
         )
-        _inspection, inspected_applied, source_sqlite_schema_sha256 = (
-            _validate_inspection_report(
-                source_inspection,
-                expected_sha256=self.source_expected_sha256,
-            )
+        source_inspection_validation = _validate_inspection_report(
+            source_inspection,
+            expected_sha256=self.source_expected_sha256,
         )
+        inspected_applied = source_inspection_validation.applied_migrations
+        source_sqlite_schema_sha256 = source_inspection_validation.schema_sha256
         if source_sqlite_schema_sha256 != policy["source_sqlite_schema_sha256"]:
             raise RehearsalBlocked("policy_source_sqlite_schema_sha256_mismatch")
         self._record_artifact(
@@ -5106,6 +6057,74 @@ class Rehearsal:
             post_state_path,
             migration_plan_sha256=plan_sha256,
             target_leaf_nodes=post_state["applied_leaf_nodes"],
+        )
+
+        _assert_no_sqlite_sidecars(
+            self.work_database,
+            issue_code="upgraded_source_sqlite_sidecar_present",
+        )
+        upgraded_source_size, upgraded_source_sha256 = _hash_stable(
+            self.work_database
+        )
+        _upgraded_size, _upgraded_sha256, upgraded_source_identity = (
+            _source_snapshot_checkpoint(
+                self.work_database,
+                expected_sha256=upgraded_source_sha256,
+                expected_identity=None,
+                issue_prefix="upgraded_source",
+            )
+        )
+        if _upgraded_size != upgraded_source_size:
+            raise RehearsalBlocked("upgraded_source_size_changed")
+        upgraded_source_inspection = (
+            self.evidence / "upgraded-source-inspection.json"
+        )
+        self._command(
+            "upgraded_source_inspected",
+            [
+                str(config.python_executable),
+                "-E",
+                "-s",
+                "-B",
+                "-X",
+                "utf8",
+                self._python_tool("Inspect-SQLiteSnapshot.py"),
+                "--database",
+                str(self.work_database),
+                "--expected-sha256",
+                upgraded_source_sha256,
+                "--output",
+                str(upgraded_source_inspection),
+            ],
+            env=base_env,
+        )
+        _source_snapshot_checkpoint(
+            self.work_database,
+            expected_sha256=upgraded_source_sha256,
+            expected_identity=upgraded_source_identity,
+            issue_prefix="upgraded_source",
+        )
+        upgraded_source_inspection_validation = _validate_inspection_report(
+            upgraded_source_inspection,
+            expected_sha256=upgraded_source_sha256,
+        )
+        if (
+            upgraded_source_inspection_validation.applied_migrations
+            != post_state["applied"]
+        ):
+            raise RehearsalBlocked(
+                "upgraded_source_inspection_migration_state_mismatch"
+            )
+        self._record_artifact(
+            "upgraded_source_inspected",
+            upgraded_source_inspection,
+            database_sha256=upgraded_source_sha256,
+            sqlite_schema_sha256=(
+                upgraded_source_inspection_validation.schema_sha256
+            ),
+            table_structures_sha256=(
+                upgraded_source_inspection_validation.table_structures_sha256
+            ),
         )
 
         source_export = self.artifacts / "source-export"
@@ -5326,18 +6345,63 @@ class Rehearsal:
             ],
             env=base_env,
         )
-        _target_inspection, _target_applied, _target_sqlite_schema_sha256 = (
-            _validate_inspection_report(
-                target_inspection,
-                expected_sha256=target_backup_sha256,
-            )
+        target_inspection_validation = _validate_inspection_report(
+            target_inspection,
+            expected_sha256=target_backup_sha256,
         )
+        if target_inspection_validation.applied_migrations != target_state["applied"]:
+            raise RehearsalBlocked(
+                "target_inspection_migration_state_mismatch"
+            )
         self._record_artifact(
             "target_snapshot_verified",
             target_inspection,
             backup_sha256=target_backup_sha256,
             backup_set=target_backup_initial_references,
             backup_set_verification=target_backup_initial_evidence_reference,
+        )
+
+        structure_preservation_projection = (
+            _database_structure_preservation_projection(
+                source_inspection_validation,
+                upgraded_source_inspection_validation,
+                target_inspection_validation,
+            )
+        )
+        structure_preservation_report = (
+            self.evidence / "database-structure-preservation.json"
+        )
+        _write_json_create_new(
+            structure_preservation_report,
+            {
+                "generated_at": _utc_now(),
+                "projection": structure_preservation_projection,
+            },
+        )
+        _validate_structure_preservation_report(
+            structure_preservation_report,
+            expected_projection=structure_preservation_projection,
+        )
+        if not structure_preservation_projection["preserved"]:
+            self.ledger.record(
+                "database_structure_preserved",
+                "blocked",
+                {
+                    "artifact": _artifact_reference(
+                        structure_preservation_report, self.root
+                    ),
+                    "issues": structure_preservation_projection["issues"],
+                },
+            )
+            raise RehearsalBlocked("database_structure_preservation_failed")
+        self._record_artifact(
+            "database_structure_preserved",
+            structure_preservation_report,
+            source_schema_sha256=source_inspection_validation.schema_sha256,
+            upgraded_source_schema_sha256=(
+                upgraded_source_inspection_validation.schema_sha256
+            ),
+            final_target_schema_sha256=target_inspection_validation.schema_sha256,
         )
 
         final_verification_database = (
@@ -5711,6 +6775,10 @@ class Rehearsal:
             ),
             "snapshot_inspection": _artifact_reference(
                 target_inspection,
+                self.root,
+            ),
+            "database_structure_preservation": _artifact_reference(
+                structure_preservation_report,
                 self.root,
             ),
             "final_site_data_comparison": _artifact_reference(

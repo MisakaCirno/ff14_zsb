@@ -72,6 +72,7 @@ $fixtureScript = Join-Path $temporaryRoot 'test_policy_approval.py'
 $fixtureSource = @'
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
 import importlib.util
@@ -620,7 +621,7 @@ def build_fixture(
         "included_object_types": ["index", "table", "trigger", "view"],
         "excluded_objects": {
             "name_prefix": "sqlite_",
-            "comparison": "case-sensitive Unicode code-point prefix match",
+            "comparison": "SQLite ASCII case-insensitive prefix/identifier comparison",
             "reason": "SQLite-reserved internal and automatically generated objects",
         },
         "normalization": {
@@ -645,6 +646,50 @@ def build_fixture(
     }
     schema_inventory_sha256 = compact_digest_value(schema_inventory)
     schema_inventory["sha256"] = schema_inventory_sha256
+    table_structures = {
+        "format": "ffxivshare-sqlite-table-structure-inventory",
+        "format_version": 1,
+        "schema": "main",
+        "table_count": 1,
+        "tables": [
+            {
+                "name": "django_migrations",
+                "column_count": 3,
+                "columns": [
+                    {
+                        "cid": 0,
+                        "name": "id",
+                        "type": "INTEGER",
+                        "notnull": 0,
+                        "default": None,
+                        "primary_key": 1,
+                        "hidden": 0,
+                    },
+                    {
+                        "cid": 1,
+                        "name": "app",
+                        "type": "varchar(255)",
+                        "notnull": 0,
+                        "default": None,
+                        "primary_key": 0,
+                        "hidden": 0,
+                    },
+                    {
+                        "cid": 2,
+                        "name": "name",
+                        "type": "varchar(255)",
+                        "notnull": 0,
+                        "default": None,
+                        "primary_key": 0,
+                        "hidden": 0,
+                    },
+                ],
+                "foreign_keys": [],
+                "unique_constraints": [],
+            }
+        ],
+    }
+    table_structures["sha256"] = compact_digest_value(table_structures)
     write_json(
         inspection_path,
         {
@@ -665,6 +710,14 @@ def build_fixture(
                 "integrity_check": "ok",
                 "foreign_key_check": {"status": "ok", "violations": 0},
                 "sqlite_schema": schema_inventory,
+                "sqlite_sequence": {
+                    "present": True,
+                    "count": 1,
+                    "high_water_marks": [
+                        {"table": "django_migrations", "sequence": 19}
+                    ],
+                },
+                "table_structures": table_structures,
                 "django_migrations": {
                     "present": True,
                     "applied": [
@@ -1095,6 +1148,80 @@ def invoke_verify(
 
 
 recorded = build_fixture("record-review-positive")
+approval_inspection = json.loads(
+    (recorded.run_root / "evidence" / "proposal-source-inspection.json").read_text(
+        encoding="utf-8"
+    )
+)["inspection"]
+approval._validate_table_structures(approval_inspection["table_structures"])
+assert approval._sqlite_identifier_key("Straße") != approval._sqlite_identifier_key(
+    "STRASSE"
+)
+
+strict_mutations = []
+bool_structure_version = deepcopy(approval_inspection["table_structures"])
+bool_structure_version["format_version"] = True
+strict_mutations.append(
+    lambda value=bool_structure_version: approval._validate_table_structures(value)
+)
+case_duplicate_table = deepcopy(approval_inspection["table_structures"])
+case_table = deepcopy(case_duplicate_table["tables"][0])
+case_table["name"] = "DJANGO_MIGRATIONS"
+case_duplicate_table["tables"].insert(0, case_table)
+case_duplicate_table["table_count"] = 2
+case_duplicate_table["sha256"] = approval._table_structure_sha256(
+    case_duplicate_table
+)
+strict_mutations.append(
+    lambda value=case_duplicate_table: approval._validate_table_structures(value)
+)
+case_duplicate_column = deepcopy(approval_inspection["table_structures"])
+case_column = deepcopy(case_duplicate_column["tables"][0]["columns"][0])
+case_column["cid"] = 3
+case_column["name"] = "ID"
+case_duplicate_column["tables"][0]["columns"].append(case_column)
+case_duplicate_column["tables"][0]["column_count"] = 4
+case_duplicate_column["sha256"] = approval._table_structure_sha256(
+    case_duplicate_column
+)
+strict_mutations.append(
+    lambda value=case_duplicate_column: approval._validate_table_structures(value)
+)
+case_duplicate_sequence = deepcopy(approval_inspection["sqlite_sequence"])
+case_duplicate_sequence["count"] = 2
+case_duplicate_sequence["high_water_marks"].insert(
+    0, {"table": "DJANGO_MIGRATIONS", "sequence": 20}
+)
+strict_mutations.append(
+    lambda value=case_duplicate_sequence: approval._validate_sqlite_sequence_inventory(
+        value
+    )
+)
+case_duplicate_schema = deepcopy(approval_inspection["sqlite_schema"])
+case_schema_object = deepcopy(case_duplicate_schema["objects"][0])
+case_schema_object["name"] = "DJANGO_MIGRATIONS"
+case_schema_object["tbl_name"] = "DJANGO_MIGRATIONS"
+case_duplicate_schema["objects"].insert(0, case_schema_object)
+case_duplicate_schema["object_count"] = 2
+case_duplicate_schema["sha256"] = approval._sqlite_schema_inventory_sha256(
+    case_duplicate_schema
+)
+strict_mutations.append(
+    lambda value=case_duplicate_schema: approval._validate_sqlite_schema_inventory(value)
+)
+bool_schema_version = deepcopy(approval_inspection["sqlite_schema"])
+bool_schema_version["format_version"] = True
+strict_mutations.append(
+    lambda value=bool_schema_version: approval._validate_sqlite_schema_inventory(value)
+)
+for mutation in strict_mutations:
+    try:
+        mutation()
+    except approval.ApprovalError:
+        pass
+    else:
+        raise AssertionError("Malformed approval inspection inventory passed")
+
 recorded.review_path.unlink()
 recorded_run = invoke_record_review(recorded, notes="")
 assert recorded_run.returncode == 0, recorded_run.stderr.decode(

@@ -117,6 +117,8 @@ foreach ($requiredText in @(
     'sha256_after',
     'SCHEMA_INVENTORY_FORMAT',
     '_validate_schema_inventory',
+    'TABLE_STRUCTURE_FORMAT',
+    '_validate_table_structures',
     'main.sqlite_schema',
     'django_migrations',
     'sqlite_sequence'
@@ -277,6 +279,31 @@ try {
         -Condition ($report.inspection.sqlite_sequence.count -ge 1) `
         -Message 'Inspection report did not inventory sqlite_sequence.'
 
+    $tableStructures = $report.inspection.table_structures
+    Assert-True `
+        -Condition ($tableStructures.format -eq 'ffxivshare-sqlite-table-structure-inventory') `
+        -Message 'Inspection report has an unexpected table structure format.'
+    Assert-True `
+        -Condition ($tableStructures.sha256 -match '^[0-9a-f]{64}$') `
+        -Message 'Inspection report has an invalid table structure digest.'
+    Assert-True `
+        -Condition ($tableStructures.table_count -eq @($tableStructures.tables).Count) `
+        -Message 'Inspection report has an inconsistent table structure count.'
+    $parentStructure = @($tableStructures.tables | Where-Object { $_.name -eq 'parent' })
+    $childStructure = @($tableStructures.tables | Where-Object { $_.name -eq 'child' })
+    Assert-True `
+        -Condition ($parentStructure.Count -eq 1 -and @($parentStructure[0].columns).Count -eq 3 -and @($parentStructure[0].unique_constraints).Count -ge 1) `
+        -Message 'Parent columns or unique constraints were not inventoried.'
+    Assert-True `
+        -Condition ($childStructure.Count -eq 1 -and @($childStructure[0].foreign_keys).Count -eq 1) `
+        -Message 'Child foreign keys were not inventoried.'
+    $structuredTableNames = @($tableStructures.tables | ForEach-Object { $_.name })
+    foreach ($mark in @($report.inspection.sqlite_sequence.high_water_marks)) {
+        Assert-True `
+            -Condition ($structuredTableNames -ccontains $mark.table) `
+            -Message "sqlite_sequence references a table absent from table_structures: $($mark.table)"
+    }
+
     $schemaInventory = $report.inspection.sqlite_schema
     Assert-True `
         -Condition ($schemaInventory.format -eq 'ffxivshare-sqlite-schema-inventory') `
@@ -396,6 +423,9 @@ for candidate in mutations:
     Assert-True `
         -Condition ($sameSchemaReport.inspection.sqlite_schema.sha256 -eq $schemaInventory.sha256) `
         -Message 'Business row changes must not change the schema inventory digest.'
+    Assert-True `
+        -Condition ($sameSchemaReport.inspection.table_structures.sha256 -eq $tableStructures.sha256) `
+        -Message 'Business row changes must not change the table structure digest.'
 
     $schemaDriftHash = (
         Get-FileHash -LiteralPath $schemaDriftDatabase -Algorithm SHA256

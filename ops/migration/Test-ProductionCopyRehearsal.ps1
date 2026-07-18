@@ -208,7 +208,7 @@ def sqlite_schema_inventory() -> dict[str, object]:
         "included_object_types": ["index", "table", "trigger", "view"],
         "excluded_objects": {
             "name_prefix": "sqlite_",
-            "comparison": "case-sensitive Unicode code-point prefix match",
+            "comparison": "SQLite ASCII case-insensitive prefix/identifier comparison",
             "reason": "SQLite-reserved internal and automatically generated objects",
         },
         "normalization": {
@@ -243,6 +243,44 @@ def sqlite_schema_inventory() -> dict[str, object]:
 SOURCE_SQLITE_SCHEMA_SHA256 = sqlite_schema_inventory()["sha256"]
 
 
+def table_structure_inventory() -> dict[str, object]:
+    inventory = {
+        "format": "ffxivshare-sqlite-table-structure-inventory",
+        "format_version": 1,
+        "schema": "main",
+        "table_count": 1,
+        "tables": [
+            {
+                "name": "fixture_table",
+                "column_count": 1,
+                "columns": [
+                    {
+                        "cid": 0,
+                        "name": "id",
+                        "type": "INTEGER",
+                        "notnull": 0,
+                        "default": None,
+                        "primary_key": 1,
+                        "hidden": 0,
+                    }
+                ],
+                "foreign_keys": [],
+                "unique_constraints": [],
+            }
+        ],
+    }
+    inventory["sha256"] = sha256(
+        json.dumps(
+            inventory,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return inventory
+
+
 def inspection_report(digest: str, applied: list[list[str]]) -> dict[str, object]:
     return {
         "format": "ffxivshare-sqlite-snapshot-inspection",
@@ -258,6 +296,12 @@ def inspection_report(digest: str, applied: list[list[str]]) -> dict[str, object
             "integrity_check": "ok",
             "foreign_key_check": {"status": "ok", "violations": 0},
             "sqlite_schema": sqlite_schema_inventory(),
+            "sqlite_sequence": {
+                "present": True,
+                "count": 1,
+                "high_water_marks": [{"table": "fixture_table", "sequence": 7}],
+            },
+            "table_structures": table_structure_inventory(),
             "django_migrations": {
                 "present": True,
                 "applied": [
@@ -272,12 +316,14 @@ def inspection_report(digest: str, applied: list[list[str]]) -> dict[str, object
 inspection_contract_path = test_root / "inspection-contract.json"
 valid_inspection = inspection_report("9" * 64, SOURCE_APPLIED)
 write_json(inspection_contract_path, valid_inspection)
-_report, _applied, schema_sha256 = module._validate_inspection_report(
+inspection_validation = module._validate_inspection_report(
     inspection_contract_path,
     expected_sha256="9" * 64,
 )
-assert _applied == SOURCE_APPLIED
-assert schema_sha256 == SOURCE_SQLITE_SCHEMA_SHA256
+assert inspection_validation.applied_migrations == SOURCE_APPLIED
+assert inspection_validation.schema_sha256 == SOURCE_SQLITE_SCHEMA_SHA256
+assert inspection_validation.sqlite_sequence == {"fixture_table": 7}
+assert module._sqlite_identifier_key("Straße") != module._sqlite_identifier_key("STRASSE")
 
 for mutation in ("extra_key", "metadata", "order", "digest"):
     candidate = deepcopy(valid_inspection)
@@ -306,6 +352,509 @@ for mutation in ("extra_key", "metadata", "order", "digest"):
         pass
     else:
         raise AssertionError(f"Malformed SQLite schema inventory passed: {mutation}")
+
+case_duplicate_schema = deepcopy(valid_inspection)
+case_schema = case_duplicate_schema["inspection"]["sqlite_schema"]
+case_object = deepcopy(case_schema["objects"][0])
+case_object["name"] = "FIXTURE_TABLE"
+case_object["tbl_name"] = "FIXTURE_TABLE"
+case_schema["objects"].insert(0, case_object)
+case_schema["object_count"] = 2
+case_schema["sha256"] = module._sqlite_schema_inventory_sha256(case_schema)
+bool_schema_version = deepcopy(valid_inspection)
+bool_schema_version["inspection"]["sqlite_schema"]["format_version"] = True
+
+
+sequence_mutations = []
+bad_sequence_shape = deepcopy(valid_inspection)
+bad_sequence_shape["inspection"]["sqlite_sequence"]["unexpected"] = True
+sequence_mutations.append(bad_sequence_shape)
+bool_sequence_count = deepcopy(valid_inspection)
+bool_sequence_count["inspection"]["sqlite_sequence"]["count"] = True
+sequence_mutations.append(bool_sequence_count)
+bool_sequence_value = deepcopy(valid_inspection)
+bool_sequence_value["inspection"]["sqlite_sequence"]["high_water_marks"][0][
+    "sequence"
+] = True
+sequence_mutations.append(bool_sequence_value)
+negative_sequence = deepcopy(valid_inspection)
+negative_sequence["inspection"]["sqlite_sequence"]["high_water_marks"][0][
+    "sequence"
+] = -1
+sequence_mutations.append(negative_sequence)
+duplicate_sequence = deepcopy(valid_inspection)
+duplicate_sequence["inspection"]["sqlite_sequence"]["count"] = 2
+duplicate_sequence["inspection"]["sqlite_sequence"]["high_water_marks"].append(
+    {"table": "fixture_table", "sequence": 8}
+)
+sequence_mutations.append(duplicate_sequence)
+case_duplicate_sequence = deepcopy(valid_inspection)
+case_duplicate_sequence["inspection"]["sqlite_sequence"]["count"] = 2
+case_duplicate_sequence["inspection"]["sqlite_sequence"]["high_water_marks"].insert(
+    0, {"table": "FIXTURE_TABLE", "sequence": 8}
+)
+sequence_mutations.append(case_duplicate_sequence)
+unordered_sequence = deepcopy(valid_inspection)
+unordered_sequence["inspection"]["sqlite_sequence"]["count"] = 2
+unordered_sequence["inspection"]["sqlite_sequence"]["high_water_marks"].append(
+    {"table": "aaa_table", "sequence": 1}
+)
+sequence_mutations.append(unordered_sequence)
+bool_report_version = deepcopy(valid_inspection)
+bool_report_version["format_version"] = True
+sequence_mutations.append(bool_report_version)
+sequence_mutations.extend((case_duplicate_schema, bool_schema_version))
+for candidate in sequence_mutations:
+    write_json(inspection_contract_path, candidate)
+    try:
+        module._validate_inspection_report(
+            inspection_contract_path,
+            expected_sha256="9" * 64,
+        )
+    except module.RehearsalError:
+        pass
+    else:
+        raise AssertionError("Malformed SQLite sequence inventory passed validation")
+
+case_duplicate_table = deepcopy(valid_inspection)
+case_tables = case_duplicate_table["inspection"]["table_structures"]
+case_table = deepcopy(case_tables["tables"][0])
+case_table["name"] = "FIXTURE_TABLE"
+case_tables["tables"].insert(0, case_table)
+case_tables["table_count"] = 2
+case_tables["sha256"] = module._table_structure_sha256(case_tables)
+case_duplicate_column = deepcopy(valid_inspection)
+case_columns = case_duplicate_column["inspection"]["table_structures"]
+case_column = deepcopy(case_columns["tables"][0]["columns"][0])
+case_column["cid"] = 1
+case_column["name"] = "ID"
+case_columns["tables"][0]["columns"].append(case_column)
+case_columns["tables"][0]["column_count"] = 2
+case_columns["sha256"] = module._table_structure_sha256(case_columns)
+bool_table_version = deepcopy(valid_inspection)
+bool_table_version["inspection"]["table_structures"]["format_version"] = True
+for candidate in (case_duplicate_table, case_duplicate_column, bool_table_version):
+    write_json(inspection_contract_path, candidate)
+    try:
+        module._validate_inspection_report(
+            inspection_contract_path,
+            expected_sha256="9" * 64,
+        )
+    except module.RehearsalError:
+        pass
+    else:
+        raise AssertionError("Malformed SQLite table structure inventory passed")
+
+
+def validated_inspection(payload: dict[str, object]) -> object:
+    write_json(inspection_contract_path, payload)
+    return module._validate_inspection_report(
+        inspection_contract_path,
+        expected_sha256="9" * 64,
+    )
+
+
+source_structure = validated_inspection(valid_inspection)
+module.SQL_CHANGE_EXCEPTIONS = {}
+module.MISSING_OBJECT_EXCEPTIONS = {}
+module.ADDED_OBJECT_EXCEPTIONS = {}
+module.COLUMN_ATTRIBUTE_EXCEPTIONS = {}
+assert module._database_structure_preservation_projection(
+    source_structure,
+    source_structure,
+    source_structure,
+)["preserved"] is True
+
+def with_sequence_marks(
+    payload: dict[str, object], marks: list[tuple[str, int]]
+) -> dict[str, object]:
+    candidate = deepcopy(payload)
+    candidate["inspection"]["sqlite_sequence"] = {
+        "present": True,
+        "count": len(marks),
+        "high_water_marks": [
+            {"table": table, "sequence": sequence}
+            for table, sequence in sorted(marks)
+        ],
+    }
+    return candidate
+
+
+portable_source = validated_inspection(
+    with_sequence_marks(
+        valid_inspection,
+        [
+            ("auth_user", 7),
+            ("auth_user_groups", 70),
+            ("django_migrations", 80),
+            ("django_session", 90),
+        ],
+    )
+)
+portable_upgraded = validated_inspection(
+    with_sequence_marks(
+        valid_inspection,
+        [
+            ("auth_user", 9),
+            ("auth_user_groups", 71),
+            ("django_migrations", 81),
+            ("django_session", 91),
+        ],
+    )
+)
+portable_target = validated_inspection(
+    with_sequence_marks(
+        valid_inspection,
+        [
+            ("auth_user", 9),
+            ("auth_user_groups", 1),
+            ("django_migrations", 1),
+            ("django_session", 1),
+        ],
+    )
+)
+portable_projection = module._database_structure_preservation_projection(
+    portable_source,
+    portable_upgraded,
+    portable_target,
+)
+assert portable_projection["preserved"] is True
+final_sequence = portable_projection["destinations"]["final_target"]
+assert final_sequence["sequence_scope"]["declared_tables"] == sorted(
+    module.FINAL_TARGET_SEQUENCE_TABLES
+)
+assert final_sequence["sequence_scope"]["checked_tables"] == ["auth_user"]
+assert final_sequence["sequence_checks"] == [
+    {
+        "table": "auth_user",
+        "original_source_floor": 7,
+        "upgraded_source_floor": 9,
+        "effective_floor": 9,
+        "destination_value": 9,
+        "preserved": True,
+    }
+]
+excluded_sequence = {
+    item["table"]: item
+    for item in final_sequence["sequence_scope"]["observed_excluded_entries"]
+}
+assert set(excluded_sequence) == {
+    "auth_user_groups",
+    "django_migrations",
+    "django_session",
+}
+assert all(item["reason"] for item in excluded_sequence.values())
+
+portable_target_low = validated_inspection(
+    with_sequence_marks(
+        valid_inspection,
+        [
+            ("auth_user", 8),
+            ("auth_user_groups", 1),
+            ("django_migrations", 1),
+            ("django_session", 1),
+        ],
+    )
+)
+assert module._database_structure_preservation_projection(
+    portable_source,
+    portable_upgraded,
+    portable_target_low,
+)["destinations"]["final_target"]["preserved"] is False
+
+portable_target_missing = validated_inspection(
+    with_sequence_marks(
+        valid_inspection,
+        [
+            ("auth_user_groups", 1),
+            ("django_migrations", 1),
+            ("django_session", 1),
+        ],
+    )
+)
+assert module._database_structure_preservation_projection(
+    portable_source,
+    portable_upgraded,
+    portable_target_missing,
+)["destinations"]["final_target"]["preserved"] is False
+
+portable_upgraded_low = validated_inspection(
+    with_sequence_marks(
+        valid_inspection,
+        [
+            ("auth_user", 9),
+            ("auth_user_groups", 69),
+            ("django_migrations", 81),
+            ("django_session", 91),
+        ],
+    )
+)
+assert module._database_structure_preservation_projection(
+    portable_source,
+    portable_upgraded_low,
+    portable_target,
+)["destinations"]["upgraded_source"]["preserved"] is False
+
+lower_sequence_report = deepcopy(valid_inspection)
+lower_sequence_report["inspection"]["sqlite_sequence"]["high_water_marks"][0][
+    "sequence"
+] = 6
+lower_sequence = validated_inspection(lower_sequence_report)
+assert module._database_structure_preservation_projection(
+    source_structure,
+    lower_sequence,
+    lower_sequence,
+)["preserved"] is False
+
+missing_sequence_report = deepcopy(valid_inspection)
+missing_sequence_report["inspection"]["sqlite_sequence"] = {
+    "present": True,
+    "count": 0,
+    "high_water_marks": [],
+}
+missing_sequence = validated_inspection(missing_sequence_report)
+assert module._database_structure_preservation_projection(
+    source_structure,
+    missing_sequence,
+    missing_sequence,
+)["preserved"] is False
+
+changed_sql_report = deepcopy(valid_inspection)
+changed_schema = changed_sql_report["inspection"]["sqlite_schema"]
+changed_schema["objects"][0]["sql"] += " STRICT"
+changed_schema["sha256"] = module._sqlite_schema_inventory_sha256(changed_schema)
+changed_sql = validated_inspection(changed_sql_report)
+assert module._database_structure_preservation_projection(
+    source_structure,
+    changed_sql,
+    changed_sql,
+)["preserved"] is False
+
+
+sql_identity = ("table", "fixture_table", "fixture_table")
+exact_sql_change_report = deepcopy(valid_inspection)
+exact_sql_inventory = exact_sql_change_report["inspection"]["sqlite_schema"]
+exact_sql_inventory["objects"][0]["sql"] += " STRICT"
+exact_sql_inventory["sha256"] = module._sqlite_schema_inventory_sha256(
+    exact_sql_inventory
+)
+exact_sql_change = validated_inspection(exact_sql_change_report)
+module.SQL_CHANGE_EXCEPTIONS = {
+    sql_identity: {
+        "source_sql_sha256": module._sql_sha256(
+            source_structure.schema_objects[sql_identity]
+        ),
+        "destination_sql_sha256": module._sql_sha256(
+            exact_sql_change.schema_objects[sql_identity]
+        ),
+        "reason": "fixture exact SQL transition",
+    }
+}
+assert module._database_structure_preservation_projection(
+    source_structure,
+    exact_sql_change,
+    exact_sql_change,
+)["preserved"] is True
+
+tampered_exact_report = deepcopy(exact_sql_change_report)
+tampered_exact_inventory = tampered_exact_report["inspection"]["sqlite_schema"]
+tampered_exact_inventory["objects"][0]["sql"] += " WITHOUT ROWID"
+tampered_exact_inventory["sha256"] = module._sqlite_schema_inventory_sha256(
+    tampered_exact_inventory
+)
+tampered_exact = validated_inspection(tampered_exact_report)
+assert module._database_structure_preservation_projection(
+    source_structure,
+    tampered_exact,
+    tampered_exact,
+)["preserved"] is False
+
+module.SQL_CHANGE_EXCEPTIONS = {}
+module.MISSING_OBJECT_EXCEPTIONS = {sql_identity: {
+    "source_sql_sha256": module._sql_sha256(
+        source_structure.schema_objects[sql_identity]
+    ),
+    "reason": "fixture exception must be consumed",
+}}
+assert module._database_structure_preservation_projection(
+    source_structure,
+    source_structure,
+    source_structure,
+)["preserved"] is False
+module.MISSING_OBJECT_EXCEPTIONS = {}
+
+
+source_custom_column_report = deepcopy(valid_inspection)
+source_columns = source_custom_column_report["inspection"]["table_structures"]
+source_columns["tables"][0]["column_count"] = 2
+source_columns["tables"][0]["columns"].append(
+    {
+        "cid": 1,
+        "name": "custom_column",
+        "type": "TEXT",
+        "notnull": 0,
+        "default": None,
+        "primary_key": 0,
+        "hidden": 0,
+    }
+)
+source_columns["sha256"] = module._table_structure_sha256(source_columns)
+source_custom_column = validated_inspection(source_custom_column_report)
+assert module._database_structure_preservation_projection(
+    source_custom_column,
+    source_structure,
+    source_structure,
+)["preserved"] is False
+
+
+cid_only_report = deepcopy(valid_inspection)
+cid_only_structures = cid_only_report["inspection"]["table_structures"]
+cid_only_structures["tables"][0]["columns"][0]["cid"] = 7
+cid_only_structures["sha256"] = module._table_structure_sha256(cid_only_structures)
+cid_only = validated_inspection(cid_only_report)
+cid_projection = module._database_structure_preservation_projection(
+    source_structure,
+    cid_only,
+    cid_only,
+)
+assert cid_projection["preserved"] is True
+for destination_name in ("upgraded_source", "final_target"):
+    assert cid_projection["destinations"][destination_name][
+        "column_cid_diagnostics"
+    ] == [
+        {
+            "table": "fixture_table",
+            "column": "id",
+            "source": 0,
+            "destination": 7,
+        }
+    ]
+
+for attribute, changed_value in (
+    ("type", "TEXT"),
+    ("notnull", 1),
+    ("default", "0"),
+    ("primary_key", 0),
+    ("hidden", 1),
+):
+    semantic_change_report = deepcopy(valid_inspection)
+    semantic_structures = semantic_change_report["inspection"]["table_structures"]
+    semantic_structures["tables"][0]["columns"][0][attribute] = changed_value
+    semantic_structures["sha256"] = module._table_structure_sha256(
+        semantic_structures
+    )
+    semantic_change = validated_inspection(semantic_change_report)
+    assert module._database_structure_preservation_projection(
+        source_structure,
+        semantic_change,
+        semantic_change,
+    )["preserved"] is False
+
+
+unique_source_report = deepcopy(valid_inspection)
+unique_schema = unique_source_report["inspection"]["sqlite_schema"]
+unique_schema["objects"][0]["sql"] = (
+    "CREATE TABLE fixture_table (id INTEGER PRIMARY KEY, value TEXT, "
+    "UNIQUE(id, value))"
+)
+unique_schema["sha256"] = module._sqlite_schema_inventory_sha256(unique_schema)
+unique_structures = unique_source_report["inspection"]["table_structures"]
+unique_structures["tables"][0]["columns"].append(
+    {
+        "cid": 1,
+        "name": "value",
+        "type": "TEXT",
+        "notnull": 0,
+        "default": None,
+        "primary_key": 0,
+        "hidden": 0,
+    }
+)
+unique_structures["tables"][0]["column_count"] = 2
+unique_structures["tables"][0]["unique_constraints"] = [
+    {
+        "columns": [
+            {"cid": 0, "name": "id", "descending": 0, "collation": "BINARY"},
+            {
+                "cid": 1,
+                "name": "value",
+                "descending": 0,
+                "collation": "BINARY",
+            },
+        ],
+        "partial": 0,
+    }
+]
+unique_structures["sha256"] = module._table_structure_sha256(unique_structures)
+unique_source = validated_inspection(unique_source_report)
+
+unique_cid_only_report = deepcopy(unique_source_report)
+unique_cid_only_constraints = unique_cid_only_report["inspection"][
+    "table_structures"
+]
+unique_cid_only_constraints["tables"][0]["unique_constraints"][0]["columns"][
+    0
+]["cid"] = 7
+unique_cid_only_constraints["tables"][0]["unique_constraints"][0]["columns"][
+    1
+]["cid"] = 8
+unique_cid_only_constraints["sha256"] = module._table_structure_sha256(
+    unique_cid_only_constraints
+)
+unique_cid_only = validated_inspection(unique_cid_only_report)
+assert module._database_structure_preservation_projection(
+    unique_source,
+    unique_cid_only,
+    unique_cid_only,
+)["preserved"] is True
+
+for mutation in ("name", "order", "descending", "collation", "partial", "missing"):
+    unique_mutation_report = deepcopy(unique_source_report)
+    mutation_structures = unique_mutation_report["inspection"]["table_structures"]
+    constraint = mutation_structures["tables"][0]["unique_constraints"][0]
+    if mutation == "name":
+        constraint["columns"][1]["name"] = "changed_value"
+    elif mutation == "order":
+        constraint["columns"].reverse()
+    elif mutation == "descending":
+        constraint["columns"][1]["descending"] = 1
+    elif mutation == "collation":
+        constraint["columns"][1]["collation"] = "NOCASE"
+    elif mutation == "partial":
+        constraint["partial"] = 1
+    else:
+        mutation_structures["tables"][0]["unique_constraints"] = []
+    mutation_structures["sha256"] = module._table_structure_sha256(
+        mutation_structures
+    )
+    unique_mutation = validated_inspection(unique_mutation_report)
+    assert module._database_structure_preservation_projection(
+        unique_source,
+        unique_mutation,
+        unique_mutation,
+    )["preserved"] is False
+
+rowid_unique_report = deepcopy(unique_source_report)
+rowid_structures = rowid_unique_report["inspection"]["table_structures"]
+rowid_structures["tables"][0]["unique_constraints"][0]["columns"] = [
+    {"cid": -1, "name": None, "descending": 0, "collation": "BINARY"}
+]
+rowid_structures["sha256"] = module._table_structure_sha256(rowid_structures)
+rowid_unique = validated_inspection(rowid_unique_report)
+expression_unique_report = deepcopy(rowid_unique_report)
+expression_structures = expression_unique_report["inspection"]["table_structures"]
+expression_structures["tables"][0]["unique_constraints"][0]["columns"][0][
+    "cid"
+] = -2
+expression_structures["sha256"] = module._table_structure_sha256(
+    expression_structures
+)
+expression_unique = validated_inspection(expression_unique_report)
+assert module._database_structure_preservation_projection(
+    rowid_unique,
+    expression_unique,
+    expression_unique,
+)["preserved"] is False
 
 
 def validation_report() -> dict[str, object]:
@@ -480,6 +1029,12 @@ class StubRunner:
             write_json(Path(argv[-1]), migration_state(SOURCE_APPLIED, SOURCE_LEAVES))
         elif stage == "source_schema_ready_state":
             write_json(Path(argv[-1]), migration_state(TARGET_APPLIED, TARGET_LEAVES))
+        elif stage == "upgraded_source_inspected":
+            expected = argv[argv.index("--expected-sha256") + 1]
+            write_json(
+                argument_after(argv, "--output"),
+                inspection_report(expected, TARGET_APPLIED),
+            )
         elif stage == "dataset_exported":
             output = Path(argv[argv.index("export_site_data") + 1])
             output.mkdir()
