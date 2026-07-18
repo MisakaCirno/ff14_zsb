@@ -14,9 +14,7 @@
 .message-detail-hero {
   min-width: 0;
   padding: clamp(var(--app-space-4), 3vw, var(--app-space-6));
-  background:
-    linear-gradient(125deg, var(--app-color-primary-soft), transparent 52%),
-    var(--app-color-surface);
+  background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
   border-radius: var(--app-radius-xl);
   box-shadow: var(--app-shadow-sm);
@@ -224,9 +222,7 @@
 }
 
 .message-summary--unread {
-  background:
-    linear-gradient(90deg, var(--app-color-primary-soft), transparent 44%),
-    var(--app-color-surface);
+  background: var(--app-color-primary-soft);
   border-left: 0.3rem solid var(--app-color-primary);
 }
 

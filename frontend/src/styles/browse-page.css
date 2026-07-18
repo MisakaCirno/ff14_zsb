@@ -62,9 +62,7 @@
   position: relative;
   overflow: hidden;
   padding: var(--app-space-5);
-  background:
-    linear-gradient(120deg, var(--app-color-primary-soft), transparent 48%),
-    var(--app-color-surface);
+  background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
   border-radius: var(--app-radius-xl);
   box-shadow: var(--app-shadow-sm);
@@ -169,13 +167,14 @@
 
 .browse-toolbar {
   position: sticky;
-  top: 0;
+  top: var(--app-space-2);
   z-index: var(--app-z-sticky, 20);
   min-width: 0;
-  padding-block: var(--app-space-2);
-  background: color-mix(in srgb, var(--app-color-surface) 94%, transparent);
-  border-bottom: 1px solid var(--app-color-border);
-  backdrop-filter: blur(0.75rem);
+  padding: var(--app-space-2) var(--app-space-3);
+  background: var(--app-color-surface);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-lg);
+  box-shadow: var(--app-shadow-sm);
 }
 
 .browse-toolbar__topline,
@@ -278,12 +277,30 @@
   position: absolute;
   top: calc(100% + var(--app-space-2));
   right: 0;
-  width: min(31rem, calc(100vw - 2rem));
+  width: min(34rem, calc(100vw - 2rem));
   padding: var(--app-space-4);
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
   border-radius: var(--app-radius-lg);
   box-shadow: var(--app-shadow-lg, var(--app-shadow-hover));
+}
+
+.browse-filter-panel__surface .browse-toolbar__controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-3);
+  align-items: stretch;
+}
+
+.browse-filter-panel__surface .browse-toolbar__switches {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.browse-filter-panel__surface .browse-toolbar__sort,
+.browse-filter-panel__surface .browse-toolbar__sort .btn,
+.browse-filter-panel__surface .browse-toolbar__modes {
+  width: 100%;
 }
 
 .browse-toolbar__sort .btn,
@@ -432,8 +449,8 @@
     padding: var(--app-space-3);
   }
 
-  .browse-toolbar__controls {
-    display: grid;
+  .browse-filter-panel__surface .browse-toolbar__controls,
+  .browse-filter-panel__surface .browse-toolbar__switches {
     grid-template-columns: 1fr;
   }
 

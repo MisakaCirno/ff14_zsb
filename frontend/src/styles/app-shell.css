@@ -58,7 +58,7 @@
   width: 2.15rem;
   height: 2.15rem;
   place-items: center;
-  background: var(--app-gradient-preview);
+  background: var(--app-color-primary);
   color: var(--app-color-shell-text);
   border: 1px solid var(--app-color-border);
   border-radius: var(--app-radius-lg);

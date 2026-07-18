@@ -30,9 +30,7 @@
 .auth-card__header {
   padding: clamp(var(--app-space-5), 5vw, var(--app-space-6));
   text-align: center;
-  background:
-    radial-gradient(circle at 50% 0%, var(--app-color-primary-soft), transparent 62%),
-    var(--app-color-surface-muted);
+  background: var(--app-color-surface-muted);
   border-bottom: 1px solid var(--app-color-border);
 }
 
@@ -246,9 +244,7 @@
   align-items: center;
   justify-content: space-between;
   padding: clamp(var(--app-space-4), 3vw, var(--app-space-6));
-  background:
-    linear-gradient(125deg, var(--app-color-primary-soft), transparent 52%),
-    var(--app-color-surface);
+  background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
   border-radius: var(--app-radius-xl);
   box-shadow: var(--app-shadow-sm);

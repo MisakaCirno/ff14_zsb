@@ -22,17 +22,19 @@
     {% if detail.content_warning %}data-content-warning="{{ detail.content_warning.key }}"{% endif %}>
     <header class="share-detail-hero">
         <div class="share-detail-hero__identity">
-            <p class="share-detail-hero__eyebrow">战术板分享</p>
-            <div class="share-detail-badges" role="list" aria-label="分享状态">
-                {% for badge in detail.badges %}
-                <span
-                    class="share-detail-badge share-detail-badge--{{ badge.tone }}"
-                    data-share-badge="{{ badge.key }}"
-                    role="listitem">
-                    <i class="{{ badge.icon }}" aria-hidden="true"></i>
-                    {{ badge.label }}
-                </span>
-                {% endfor %}
+            <div class="share-detail-hero__meta-line">
+                <p class="share-detail-hero__eyebrow">战术板分享</p>
+                <div class="share-detail-badges" role="list" aria-label="分享状态">
+                    {% for badge in detail.badges %}
+                    <span
+                        class="share-detail-badge share-detail-badge--{{ badge.tone }}"
+                        data-share-badge="{{ badge.key }}"
+                        role="listitem">
+                        <i class="{{ badge.icon }}" aria-hidden="true"></i>
+                        {{ badge.label }}
+                    </span>
+                    {% endfor %}
+                </div>
             </div>
             <h1 class="share-detail-hero__title" id="share-detail-title">{{ share.title }}</h1>
             <div class="share-detail-author">

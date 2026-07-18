@@ -13,9 +13,7 @@
   gap: var(--app-space-5);
   min-width: 0;
   padding: var(--app-space-6);
-  background:
-    linear-gradient(125deg, var(--app-color-primary-soft), transparent 46%),
-    var(--app-color-surface);
+  background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
   border-radius: var(--app-radius-xl);
   box-shadow: var(--app-shadow-sm);

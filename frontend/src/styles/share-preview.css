@@ -1,6 +1,6 @@
 .share-preview {
   overflow: hidden;
-  background: var(--app-gradient-preview);
+  background: var(--app-color-surface-muted);
 }
 
 .share-preview__link {
@@ -45,7 +45,7 @@
       rgba(255, 255, 255, 0.22) 45%,
       transparent 60%
     ),
-    var(--app-gradient-preview);
+    var(--app-color-surface-muted);
   background-size: 250% 100%, 100% 100%;
 }
 

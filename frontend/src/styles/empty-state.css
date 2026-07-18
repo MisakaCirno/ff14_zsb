@@ -1,10 +1,6 @@
 .empty-state {
   border: 1px dashed var(--app-color-border);
-  background: linear-gradient(
-    180deg,
-    var(--app-color-surface) 0%,
-    var(--app-color-surface-muted) 100%
-  );
+  background: var(--app-color-surface-muted);
   box-shadow: var(--app-shadow-sm);
 }
 
