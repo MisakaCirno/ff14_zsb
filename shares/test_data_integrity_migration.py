@@ -1,4 +1,4 @@
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.recorder import MigrationRecorder
 from django.test import TransactionTestCase
@@ -221,15 +221,47 @@ class DataIntegrityConstraintMigrationTests(TransactionTestCase):
         User = self.apps.get_model('auth', 'User')
         UserProfile = self.apps.get_model('shares', 'UserProfile')
         Share = self.apps.get_model('shares', 'Share')
+        Report = self.apps.get_model('shares', 'Report')
         Collection = self.apps.get_model('shares', 'Collection')
         CollectionItem = self.apps.get_model('shares', 'CollectionItem')
 
         user = User.objects.create(username='integrity-invalid-user')
+        moderator = User.objects.create(username='integrity-invalid-moderator')
+        reporter = User.objects.create(username='integrity-invalid-reporter')
+        now = timezone.now()
         invalid_profile = UserProfile.objects.create(
             user_id=user.pk,
             nickname='保持不变的非法来源记录',
             bio='迁移必须先失败，不能猜测修复',
             home_feed_mode='unsupported-mode',
+        )
+        invalid_enums = Share.objects.create(
+            share_id='bad-enums',
+            title='invalid enum and counters',
+            strategy_code='[stgy:bad-enums]',
+            author_id=user.pk,
+            category='unknown-category',
+            visibility='unknown-visibility',
+            status='unknown-status',
+            views=-1,
+            copies=-2,
+        )
+        pending_with_review = Share.objects.create(
+            share_id='bad-pending-review',
+            title='pending with review metadata',
+            strategy_code='[stgy:bad-pending-review]',
+            author_id=user.pk,
+            status='pending',
+            reviewed_at=now,
+            reviewed_by_id=moderator.pk,
+        )
+        reviewer_without_time = Share.objects.create(
+            share_id='bad-reviewer-time',
+            title='reviewer without review time',
+            strategy_code='[stgy:bad-reviewer-time]',
+            author_id=user.pk,
+            status='approved',
+            reviewed_by_id=moderator.pk,
         )
         first_share = Share.objects.create(
             share_id='badslot1',
@@ -257,22 +289,100 @@ class DataIntegrityConstraintMigrationTests(TransactionTestCase):
             share_id=second_share.pk,
             order=7,
         )
+        invalid_status_report = Report.objects.create(
+            share_id=invalid_enums.pk,
+            reporter_id=reporter.pk,
+            reason='invalid report status',
+            status='unknown-status',
+            resolved_at=now,
+        )
+        pending_with_resolution = Report.objects.create(
+            share_id=pending_with_review.pk,
+            reporter_id=reporter.pk,
+            reason='pending report with resolution data',
+            status='pending',
+            resolved_at=now,
+            resolved_by_id=moderator.pk,
+            resolution_reason='must remain unchanged after failed preflight',
+        )
+        finished_without_time = Report.objects.create(
+            share_id=reviewer_without_time.pk,
+            reporter_id=reporter.pk,
+            reason='finished report missing resolution time',
+            status='dismissed',
+        )
+        Report.objects.create(
+            share_id=first_share.pk,
+            reporter_id=reporter.pk,
+            reason='duplicate pending report one',
+            status='pending',
+        )
+        duplicate_pending_two = Report.objects.create(
+            share_id=first_share.pk,
+            reporter_id=reporter.pk,
+            reason='duplicate pending report two',
+            status='pending',
+        )
         expected = self._snapshot_fixture(self.apps)
 
         def repair_for_leaf_cleanup():
             UserProfile.objects.filter(pk=invalid_profile.pk).update(
                 home_feed_mode='paginated',
             )
+            Share.objects.filter(pk=invalid_enums.pk).update(
+                category='combat',
+                visibility='public',
+                status='approved',
+                views=0,
+                copies=0,
+            )
+            Share.objects.filter(pk=pending_with_review.pk).update(
+                reviewed_at=None,
+                reviewed_by_id=None,
+            )
+            Share.objects.filter(pk=reviewer_without_time.pk).update(
+                reviewed_at=now,
+            )
+            Report.objects.filter(pk=invalid_status_report.pk).update(
+                status='dismissed',
+            )
+            Report.objects.filter(pk=pending_with_resolution.pk).update(
+                resolved_at=None,
+                resolved_by_id=None,
+                resolution_reason='',
+            )
+            Report.objects.filter(pk=finished_without_time.pk).update(
+                resolved_at=now,
+            )
+            Report.objects.filter(pk=duplicate_pending_two.pk).update(
+                status='dismissed',
+                resolved_at=now,
+            )
             CollectionItem.objects.filter(pk=second_item.pk).update(order=8)
 
         self.addCleanup(repair_for_leaf_cleanup)
 
         executor = MigrationExecutor(connection)
-        with self.assertRaisesRegex(
-            RuntimeError,
-            'invalid profile feed mode: 1.*duplicate collection order slots: 1',
-        ):
+        with self.assertRaises(RuntimeError) as raised:
             executor.migrate([self.migrate_to])
+
+        message = str(raised.exception)
+        for violation in (
+            'invalid profile feed mode: 1',
+            'invalid share category: 1',
+            'invalid share visibility: 1',
+            'invalid share status: 1',
+            'negative share counters: 1',
+            'pending shares with review metadata: 1',
+            'reviewer without review time: 1',
+            'invalid report status: 1',
+            'pending reports with resolution data: 1',
+            'finished reports without resolution time: 1',
+            'duplicate pending reports: 1',
+            'duplicate collection order slots: 1',
+        ):
+            with self.subTest(violation=violation):
+                self.assertIn(violation, message)
 
         self.assertFalse(
             MigrationRecorder.Migration.objects.filter(
@@ -296,3 +406,92 @@ class DataIntegrityConstraintMigrationTests(TransactionTestCase):
             )
         self.assertNotIn('profile_feed_mode_valid', profile_constraints)
         self.assertNotIn('collection_order_unique', item_constraints)
+
+    def test_database_constraints_reject_each_invalid_write_atomically(self):
+        self._create_valid_fixture()
+        executor = MigrationExecutor(connection)
+        executor.migrate([self.migrate_to])
+        apps = executor.loader.project_state([self.migrate_to]).apps
+
+        UserProfile = apps.get_model('shares', 'UserProfile')
+        Share = apps.get_model('shares', 'Share')
+        Report = apps.get_model('shares', 'Report')
+        CollectionItem = apps.get_model('shares', 'CollectionItem')
+        author_profile = UserProfile.objects.get(
+            user__username='integrity-migration-author',
+        )
+        approved = Share.objects.get(share_id='valid001')
+        pending = Share.objects.get(share_id='valid002')
+        pending_report = Report.objects.get(status='pending')
+        resolved_report = Report.objects.get(status='resolved')
+        first_item = CollectionItem.objects.get(order=0)
+        collection_id = first_item.collection_id
+        extra_share = Share.objects.create(
+            share_id='valid003',
+            title='constraint-only extra share',
+            strategy_code='[stgy:constraint-only]',
+            author_id=approved.author_id,
+            category='combat',
+            visibility='public',
+            status='approved',
+        )
+        expected = self._snapshot_fixture(apps)
+
+        invalid_writes = {
+            'profile feed mode': lambda: UserProfile.objects.filter(
+                pk=author_profile.pk,
+            ).update(home_feed_mode='unsupported-mode'),
+            'share category': lambda: Share.objects.filter(pk=approved.pk).update(
+                category='unsupported-category',
+            ),
+            'share visibility': lambda: Share.objects.filter(pk=approved.pk).update(
+                visibility='unsupported-visibility',
+            ),
+            'share status': lambda: Share.objects.filter(pk=approved.pk).update(
+                status='unsupported-status',
+            ),
+            'negative views': lambda: Share.objects.filter(pk=approved.pk).update(
+                views=-1,
+            ),
+            'negative copies': lambda: Share.objects.filter(pk=approved.pk).update(
+                copies=-1,
+            ),
+            'pending review metadata': lambda: Share.objects.filter(
+                pk=pending.pk,
+            ).update(reviewed_at=timezone.now()),
+            'reviewer without review time': lambda: Share.objects.filter(
+                pk=approved.pk,
+            ).update(reviewed_at=None),
+            'report status': lambda: Report.objects.filter(
+                pk=resolved_report.pk,
+            ).update(status='unsupported-status'),
+            'pending report resolution data': lambda: Report.objects.filter(
+                pk=pending_report.pk,
+            ).update(resolution_reason='not allowed while pending'),
+            'finished report without time': lambda: Report.objects.filter(
+                pk=resolved_report.pk,
+            ).update(resolved_at=None),
+            'duplicate pending report': lambda: Report.objects.create(
+                share_id=pending_report.share_id,
+                reporter_id=pending_report.reporter_id,
+                reason='second pending report',
+                status='pending',
+            ),
+            'duplicate collection share': lambda: CollectionItem.objects.create(
+                collection_id=collection_id,
+                share_id=first_item.share_id,
+                order=99,
+            ),
+            'duplicate collection order': lambda: CollectionItem.objects.create(
+                collection_id=collection_id,
+                share_id=extra_share.pk,
+                order=first_item.order,
+            ),
+        }
+        for label, invalid_write in invalid_writes.items():
+            with self.subTest(constraint=label):
+                with self.assertRaises(IntegrityError):
+                    with transaction.atomic():
+                        invalid_write()
+
+        self.assertEqual(self._snapshot_fixture(apps), expected)
