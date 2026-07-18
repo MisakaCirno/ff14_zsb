@@ -38,43 +38,38 @@
     </aside>
     {% endif %}
 
-    <section class="browse-overview" aria-label="分享列表概览">
-        <div class="browse-overview__count">
-            <span class="browse-overview__icon" aria-hidden="true"><i class="bi bi-collection"></i></span>
-            <span>共有 <strong>{{ shares.paginator.count }}</strong> 个分享</span>
-            {% if shares.has_other_pages and feed_mode == 'paginated' %}
-            <span class="browse-overview__page">第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页</span>
-            {% elif shares.has_other_pages %}
-            <span class="browse-overview__page">瀑布浏览</span>
-            {% endif %}
-        </div>
-        <p class="browse-overview__note">
-            <i class="bi bi-info-circle" aria-hidden="true"></i>
-            <span>内容由用户上传，仅供参考与交流，不代表本站立场</span>
-        </p>
-    </section>
-
     <section class="browse-toolbar" aria-labelledby="browse-toolbar-title" data-browse-toolbar>
         <h2 class="visually-hidden" id="browse-toolbar-title">浏览筛选与排序</h2>
-        <div class="browse-toolbar__layout">
-            <nav class="browse-toolbar__categories btn-group" aria-label="分享分类">
+        <div class="browse-toolbar__topline">
+            <nav class="browse-toolbar__categories" aria-label="分享分类">
                 <a href="{% querystring category=None feed=feed_mode page=None partial=None continuation=None %}"
-                   class="btn btn-outline-primary {% if not current_category %}active{% endif %}"
+                   class="browse-category-chip{% if not current_category %} active{% endif %}"
                    {% if not current_category %}aria-current="true"{% endif %}>
+                    <i class="bi bi-compass" aria-hidden="true"></i>
                     全部
                 </a>
                 <a href="{% querystring category='entertainment' feed=feed_mode page=None partial=None continuation=None %}"
-                   class="btn btn-outline-success {% if current_category == 'entertainment' %}active{% endif %}"
+                   class="browse-category-chip{% if current_category == 'entertainment' %} active{% endif %}"
                    {% if current_category == 'entertainment' %}aria-current="true"{% endif %}>
+                    <i class="bi bi-palette" aria-hidden="true"></i>
                     娱乐
                 </a>
                 <a href="{% querystring category='combat' feed=feed_mode page=None partial=None continuation=None %}"
-                   class="btn btn-outline-danger {% if current_category == 'combat' %}active{% endif %}"
+                   class="browse-category-chip{% if current_category == 'combat' %} active{% endif %}"
                    {% if current_category == 'combat' %}aria-current="true"{% endif %}>
+                    <i class="bi bi-shield-shaded" aria-hidden="true"></i>
                     战斗
                 </a>
             </nav>
 
+            <div class="browse-toolbar__summary">
+                <span class="browse-toolbar__count">{{ shares.paginator.count }} 份分享</span>
+                <details class="browse-filter-panel">
+                    <summary class="browse-filter-panel__trigger">
+                        <i class="bi bi-sliders" aria-hidden="true"></i>
+                        <span>筛选</span>
+                    </summary>
+                    <div class="browse-filter-panel__surface">
             <div class="browse-toolbar__controls">
                 <form method="get" action="{{ request.path }}" class="browse-toolbar__switches" aria-label="内容可见性筛选">
                     {% if search_query %}
@@ -135,12 +130,20 @@
                     </form>
                 </div>
             </div>
+                    </div>
+                </details>
+            </div>
         </div>
     </section>
 
+    <p class="browse-community-note">
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
+        <span>内容由用户上传，仅供参考与交流，不代表本站立场</span>
+    </p>
+
     <section id="app" class="browse-results" aria-labelledby="browse-results-title" data-browse-results>
         <h2 class="visually-hidden" id="browse-results-title">分享列表</h2>
-        <div id="share-grid" class="browse-grid row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4" data-infinite-scroll-region>
+        <div id="share-grid" class="browse-grid row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 row-cols-xxl-6 g-3" data-infinite-scroll-region>
             {% if feed_mode == 'infinite' %}
             {% include 'shares/includes/share_cards_page.html' %}
             {% else %}
