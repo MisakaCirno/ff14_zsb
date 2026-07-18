@@ -3,16 +3,6 @@
 from django.db import migrations, models
 
 
-def move_default_profiles_to_waterfall(apps, schema_editor):
-    UserProfile = apps.get_model('shares', 'UserProfile')
-    UserProfile.objects.filter(home_feed_mode='paginated').update(home_feed_mode='infinite')
-
-
-def move_waterfall_profiles_to_paginated(apps, schema_editor):
-    UserProfile = apps.get_model('shares', 'UserProfile')
-    UserProfile.objects.filter(home_feed_mode='infinite').update(home_feed_mode='paginated')
-
-
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -20,6 +10,9 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # Change the default for profiles created from this point onward only.
+        # Existing rows may already contain an explicit user preference, so a
+        # default change must never rewrite either supported value.
         migrations.AlterField(
             model_name='userprofile',
             name='home_feed_mode',
@@ -30,5 +23,4 @@ class Migration(migrations.Migration):
                 verbose_name='主页浏览模式'
             ),
         ),
-        migrations.RunPython(move_default_profiles_to_waterfall, move_waterfall_profiles_to_paginated),
     ]
