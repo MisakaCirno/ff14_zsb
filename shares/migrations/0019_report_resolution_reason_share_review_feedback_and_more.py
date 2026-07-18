@@ -2,7 +2,37 @@
 
 from django.conf import settings
 from django.db import migrations, models
+from django.db.migrations.exceptions import IrreversibleError
 import django.db.models.deletion
+
+
+def guard_moderation_data_before_reverse(apps, schema_editor):
+    """Refuse to drop moderation data introduced by this migration."""
+    database_alias = schema_editor.connection.alias
+    SiteMessage = apps.get_model('shares', 'SiteMessage')
+    Report = apps.get_model('shares', 'Report')
+    Share = apps.get_model('shares', 'Share')
+
+    if SiteMessage.objects.using(database_alias).exists():
+        raise IrreversibleError(
+            'Cannot reverse migration 0019 while SiteMessage rows exist.'
+        )
+    if Report.objects.using(database_alias).exclude(resolution_reason='').exists():
+        raise IrreversibleError(
+            'Cannot reverse migration 0019 while Report.resolution_reason data exists.'
+        )
+    if Share.objects.using(database_alias).exclude(review_feedback='').exists():
+        raise IrreversibleError(
+            'Cannot reverse migration 0019 while Share.review_feedback data exists.'
+        )
+    if Share.objects.using(database_alias).filter(reviewed_at__isnull=False).exists():
+        raise IrreversibleError(
+            'Cannot reverse migration 0019 while Share.reviewed_at data exists.'
+        )
+    if Share.objects.using(database_alias).filter(reviewed_by__isnull=False).exists():
+        raise IrreversibleError(
+            'Cannot reverse migration 0019 while Share.reviewed_by data exists.'
+        )
 
 
 class Migration(migrations.Migration):
@@ -55,5 +85,11 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
                 'indexes': [models.Index(fields=['recipient', 'read_at', '-created_at'], name='shares_site_recipie_ea589e_idx')],
             },
+        ),
+        # Reverse operations run in reverse order, so this guard executes before
+        # any table or field introduced above can be removed.
+        migrations.RunPython(
+            migrations.RunPython.noop,
+            guard_moderation_data_before_reverse,
         ),
     ]
