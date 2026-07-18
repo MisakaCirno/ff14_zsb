@@ -11,51 +11,56 @@ def validate_existing_data(apps, schema_editor):
     Share = apps.get_model('shares', 'Share')
     Report = apps.get_model('shares', 'Report')
     CollectionItem = apps.get_model('shares', 'CollectionItem')
+    database = schema_editor.connection.alias
+    profiles = UserProfile.objects.using(database)
+    shares = Share.objects.using(database)
+    reports = Report.objects.using(database)
+    collection_items = CollectionItem.objects.using(database)
 
     violations = {
-        'invalid profile feed mode': UserProfile.objects.exclude(
+        'invalid profile feed mode': profiles.exclude(
             home_feed_mode__in=['paginated', 'infinite'],
         ).count(),
-        'invalid share category': Share.objects.exclude(
+        'invalid share category': shares.exclude(
             category__in=['entertainment', 'combat'],
         ).count(),
-        'invalid share visibility': Share.objects.exclude(
+        'invalid share visibility': shares.exclude(
             visibility__in=['public', 'unlisted', 'private'],
         ).count(),
-        'invalid share status': Share.objects.exclude(
+        'invalid share status': shares.exclude(
             status__in=['pending', 'approved', 'rejected'],
         ).count(),
-        'negative share counters': Share.objects.filter(
+        'negative share counters': shares.filter(
             Q(views__lt=0) | Q(copies__lt=0),
         ).count(),
-        'pending shares with review metadata': Share.objects.filter(
+        'pending shares with review metadata': shares.filter(
             status='pending',
         ).filter(
             Q(reviewed_at__isnull=False) | Q(reviewed_by__isnull=False),
         ).count(),
-        'reviewer without review time': Share.objects.filter(
+        'reviewer without review time': shares.filter(
             reviewed_by__isnull=False,
             reviewed_at__isnull=True,
         ).count(),
-        'invalid report status': Report.objects.exclude(
+        'invalid report status': reports.exclude(
             status__in=['pending', 'resolved', 'dismissed'],
         ).count(),
-        'pending reports with resolution data': Report.objects.filter(
+        'pending reports with resolution data': reports.filter(
             status='pending',
         ).filter(
             Q(resolved_at__isnull=False)
             | Q(resolved_by__isnull=False)
             | ~Q(resolution_reason='')
         ).count(),
-        'finished reports without resolution time': Report.objects.exclude(
+        'finished reports without resolution time': reports.exclude(
             status='pending',
         ).filter(resolved_at__isnull=True).count(),
-        'duplicate pending reports': Report.objects.filter(
+        'duplicate pending reports': reports.filter(
             status='pending',
         ).values('share_id', 'reporter_id').annotate(
             row_count=Count('id'),
         ).filter(row_count__gt=1).count(),
-        'duplicate collection order slots': CollectionItem.objects.values(
+        'duplicate collection order slots': collection_items.values(
             'collection_id', 'order',
         ).annotate(
             row_count=Count('id'),
