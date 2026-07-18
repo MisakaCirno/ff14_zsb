@@ -210,18 +210,42 @@ PRIVATE_DACL_STATUS = (
 )
 PROPOSAL_ENTRYPOINT = "ops/migration/Propose-ProductionCopyPolicy.py"
 REHEARSAL_ENTRYPOINT = "ops/migration/Rehearse-ProductionCopy.py"
-PENDING_MIGRATION = ("shares", "0025_add_collection_owner_index")
+SOURCE_MIGRATION = ("shares", "0018_default_home_feed_waterfall")
+PENDING_MIGRATIONS = (
+    ("shares", "0019_report_resolution_reason_share_review_feedback_and_more"),
+    ("shares", "0020_replace_ckeditor_field"),
+    ("shares", "0021_add_data_integrity_constraints"),
+    ("shares", "0022_add_share_restrictions"),
+    ("shares", "0023_userprofile_integrity"),
+    ("shares", "0024_widen_site_message_titles"),
+    ("shares", "0025_add_collection_owner_index"),
+)
+LEGACY_TABLES = (
+    "auth_group",
+    "auth_group_permissions",
+    "auth_user",
+    "auth_user_groups",
+    "shares_announcement",
+    "shares_collection",
+    "shares_collectionitem",
+    "shares_report",
+    "shares_share",
+    "shares_share_favorites",
+    "shares_share_likes",
+    "shares_sharelog",
+    "shares_userprofile",
+)
 EXPECTED_ENTITY_COUNTS = {
     "groups": 1,
-    "users": 3,
-    "user_profiles": 3,
+    "users": 4,
+    "user_profiles": 4,
     "shares": 1,
     "collections": 1,
     "collection_items": 1,
     "reports": 1,
     "share_logs": 1,
     "announcements": 1,
-    "site_messages": 1,
+    "site_messages": 0,
     "admin_log_entries": 1,
 }
 
@@ -369,6 +393,120 @@ def applied_migrations(database: Path) -> set[tuple[str, str]]:
         connection.close()
 
 
+def legacy_table_snapshot(database: Path) -> dict[str, dict[str, Any]]:
+    """Capture every column and value owned by the deployed 0018 schema."""
+    connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        snapshot: dict[str, dict[str, Any]] = {}
+        for table in LEGACY_TABLES:
+            columns = tuple(
+                str(row[1])
+                for row in connection.execute(f'PRAGMA table_info("{table}")')
+            )
+            assert columns, table
+            quoted_columns = ", ".join(f'"{column}"' for column in columns)
+            rows = tuple(
+                tuple(row)
+                for row in connection.execute(
+                    f'SELECT {quoted_columns} FROM "{table}" ORDER BY "id"'
+                )
+            )
+            snapshot[table] = {"columns": columns, "rows": rows}
+        return snapshot
+    finally:
+        connection.close()
+
+
+def assert_legacy_table_snapshot_preserved(
+    database: Path,
+    expected: dict[str, dict[str, Any]],
+) -> None:
+    """Prove all pre-existing 0018 rows retain every old field and relation."""
+    connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        for table, table_snapshot in expected.items():
+            columns = table_snapshot["columns"]
+            expected_rows = table_snapshot["rows"]
+            quoted_columns = ", ".join(f'"{column}"' for column in columns)
+            actual_rows = set(
+                tuple(row)
+                for row in connection.execute(
+                    f'SELECT {quoted_columns} FROM "{table}"'
+                )
+            )
+            missing = [row for row in expected_rows if row not in actual_rows]
+            assert not missing, (table, missing)
+    finally:
+        connection.close()
+
+
+def assert_expected_migration_outcome(database: Path) -> None:
+    """Verify the only permitted additions and derivations after 0018."""
+    connection = sqlite3.connect(database.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        profiles = {
+            username: (nickname, bio, mode)
+            for username, nickname, bio, mode in connection.execute(
+                """
+                SELECT auth_user.username, shares_userprofile.nickname,
+                       shares_userprofile.bio, shares_userprofile.home_feed_mode
+                FROM auth_user
+                JOIN shares_userprofile
+                  ON shares_userprofile.user_id = auth_user.id
+                ORDER BY auth_user.username
+                """
+            )
+        }
+        assert profiles == {
+            "e2e-admin": (
+                "E2E Admin",
+                "Migration profile for e2e-admin",
+                "paginated",
+            ),
+            "e2e-author": (
+                "E2E Author",
+                "Migration profile for e2e-author",
+                "infinite",
+            ),
+            "e2e-missing-profile": ("", "", "infinite"),
+            "e2e-reader": (
+                "E2E Reader",
+                "Migration profile for e2e-reader",
+                "paginated",
+            ),
+        }
+        missing_profile_times = connection.execute(
+            """
+            SELECT shares_userprofile.created_at, shares_userprofile.updated_at,
+                   auth_user.date_joined
+            FROM auth_user
+            JOIN shares_userprofile
+              ON shares_userprofile.user_id = auth_user.id
+            WHERE auth_user.username = 'e2e-missing-profile'
+            """
+        ).fetchone()
+        assert missing_profile_times is not None
+        assert missing_profile_times[0] == missing_profile_times[1]
+        assert missing_profile_times[0] == missing_profile_times[2]
+        restriction = connection.execute(
+            """
+            SELECT restriction_state, restriction_reason, restricted_at,
+                   restricted_by_id, review_feedback, reviewed_at, reviewed_by_id
+            FROM shares_share WHERE share_id = '2a3b4c5d'
+            """
+        ).fetchone()
+        assert restriction == ("clear", "", None, None, "", None, None)
+        resolution_reason = connection.execute(
+            "SELECT resolution_reason FROM shares_report"
+        ).fetchone()
+        assert resolution_reason == ("",)
+        assert connection.execute(
+            "SELECT COUNT(*) FROM shares_sitemessage"
+        ).fetchone() == (0,)
+    finally:
+        connection.close()
+
+
 def assert_artifact_reference(run_root: Path, reference: dict[str, Any]) -> Path:
     assert set(reference) == {"path", "size", "sha256"}
     relative = Path(reference["path"])
@@ -494,8 +632,8 @@ run_command(
     env=setup_env,
 )
 run_command(
-    [*manage, "migrate", "shares", "0024", "--noinput", "--verbosity", "0"],
-    label="source rollback to shares 0024",
+    [*manage, "migrate", "shares", "0018", "--noinput", "--verbosity", "0"],
+    label="source rollback to deployed shares 0018",
     cwd=repository,
     env=setup_env,
 )
@@ -507,35 +645,54 @@ import os
 import django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "ffxivshare.settings")
 django.setup()
-from django.contrib.admin.models import CHANGE, LogEntry
-from django.contrib.auth.models import Group, Permission, User
-from django.contrib.contenttypes.models import ContentType
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
-from shares.models import (
-    Announcement,
-    Collection,
-    CollectionItem,
-    Report,
-    Share,
-    ShareLog,
-    SiteMessage,
-    UserProfile,
-)
 
-admin = User.objects.create_superuser(
+executor = MigrationExecutor(connection)
+historical_targets = [
+    node for node in executor.loader.graph.leaf_nodes() if node[0] != "shares"
+]
+historical_targets.append(("shares", "0018_default_home_feed_waterfall"))
+historical_apps = executor.loader.project_state(historical_targets).apps
+LogEntry = historical_apps.get_model("admin", "LogEntry")
+Group = historical_apps.get_model("auth", "Group")
+Permission = historical_apps.get_model("auth", "Permission")
+User = historical_apps.get_model("auth", "User")
+ContentType = historical_apps.get_model("contenttypes", "ContentType")
+Announcement = historical_apps.get_model("shares", "Announcement")
+Collection = historical_apps.get_model("shares", "Collection")
+CollectionItem = historical_apps.get_model("shares", "CollectionItem")
+Report = historical_apps.get_model("shares", "Report")
+Share = historical_apps.get_model("shares", "Share")
+ShareLog = historical_apps.get_model("shares", "ShareLog")
+UserProfile = historical_apps.get_model("shares", "UserProfile")
+
+admin = User.objects.create(
     username="e2e-admin",
     email="admin@example.invalid",
-    password="e2e-admin-password",
+    password="!e2e-unusable",
+    is_staff=True,
+    is_superuser=True,
+    is_active=True,
 )
-author = User.objects.create_user(
+author = User.objects.create(
     username="e2e-author",
     email="author@example.invalid",
-    password="e2e-author-password",
+    password="!e2e-unusable",
+    is_active=True,
 )
-reader = User.objects.create_user(
+reader = User.objects.create(
     username="e2e-reader",
     email="reader@example.invalid",
-    password="e2e-reader-password",
+    password="!e2e-unusable",
+    is_active=True,
+)
+User.objects.create(
+    username="e2e-missing-profile",
+    email="missing-profile@example.invalid",
+    password="!e2e-unusable",
+    is_active=True,
 )
 for user, nickname, mode in (
     (admin, "E2E Admin", "paginated"),
@@ -569,11 +726,6 @@ share = Share.objects.create(
     category="combat",
     visibility="public",
     status="approved",
-    review_feedback="Approved by the migration fixture moderator.",
-    reviewed_at=now,
-    reviewed_by=admin,
-    restriction_state="clear",
-    restriction_reason="",
     is_spoiler=True,
     is_nsfw=False,
     is_original=True,
@@ -589,18 +741,6 @@ report = Report.objects.create(
     status="dismissed",
     resolved_at=now,
     resolved_by=admin,
-    resolution_reason="Reviewed and dismissed without an active restriction.",
-)
-SiteMessage.objects.create(
-    recipient=author,
-    sender=admin,
-    message_type="report_dismissed",
-    title="E2E moderation notice " + ("x" * 210),
-    content="The representative report was reviewed and dismissed.",
-    related_share=share,
-    related_report=report,
-    metadata={"fixture": "production-copy-e2e", "tags": ["review", "migration"]},
-    read_at=now,
 )
 Announcement.objects.create(
     title="E2E migration announcement",
@@ -625,19 +765,18 @@ LogEntry.objects.create(
     content_type=ContentType.objects.get_for_model(Share),
     object_id=str(share.pk),
     object_repr=share.title,
-    action_flag=CHANGE,
+    action_flag=2,
     change_message=json.dumps(
         [{"changed": {"fields": ["status", "review_feedback"]}}],
         separators=(",", ":"),
     ),
 )
-assert User.objects.count() == 3
+assert User.objects.count() == 4
 assert UserProfile.objects.count() == 3
 assert Share.objects.count() == 1
 assert share.likes.count() == 2
 assert share.favorites.count() == 1
 assert Report.objects.count() == 1
-assert SiteMessage.objects.count() == 1
 assert Collection.objects.count() == 1
 assert CollectionItem.objects.count() == 1
 assert ShareLog.objects.count() == 1
@@ -661,8 +800,9 @@ run_command(
 )
 
 source_applied = applied_migrations(source_database)
-assert ("shares", "0024_widen_site_message_titles") in source_applied
-assert PENDING_MIGRATION not in source_applied
+assert SOURCE_MIGRATION in source_applied
+assert not set(PENDING_MIGRATIONS).intersection(source_applied)
+legacy_snapshot = legacy_table_snapshot(source_database)
 assert_no_sidecars(source_database)
 
 source_backup = backup_directory / "production.sqlite3"
@@ -850,6 +990,18 @@ frozen_handoff = assert_artifact_reference(
     proposal["body"]["evidence"]["source_handoff_manifest"],
 )
 assert file_hash(frozen_handoff) == file_hash(source_handoff_manifest)
+frozen_source_inspection = assert_artifact_reference(
+    proposal_root,
+    proposal["body"]["evidence"]["source_snapshot_inspection"],
+)
+source_inspection = load_json(frozen_source_inspection)
+source_sqlite_schema_sha256 = source_inspection["inspection"]["sqlite_schema"][
+    "sha256"
+]
+assert (
+    proposal["body"]["policy_projection"]["source_sqlite_schema_sha256"]
+    == source_sqlite_schema_sha256
+)
 proposal_stages = [event["stage"] for event in read_ledger(proposal_root)]
 assert proposal_stages.index("source_handoff_verified") < proposal_stages.index(
     "policy_proposal_body_created"
@@ -860,7 +1012,7 @@ assert proposal_stages.index(
 assert proposal_stages.index("source_handoff_final_verified") < proposal_stages.index(
     "source_final_verified"
 )
-assert PENDING_MIGRATION in {
+assert set(PENDING_MIGRATIONS) == {
     tuple(node)
     for node in proposal["body"]["review_requirements"]["pending_migration_nodes"]
 }
@@ -932,7 +1084,10 @@ run_command(
         "--reviewer",
         reviewer,
         "--notes",
-        "Reviewed shares/0025 AddIndex as lossless for this synthetic E2E source.",
+        (
+            "Reviewed the complete shares/0019 through shares/0025 plan as "
+            "lossless for this deployed-0018 synthetic E2E source."
+        ),
         "--output",
         str(review_path),
         "--confirm-lossless-reviewed",
@@ -946,7 +1101,9 @@ review = load_json(review_path)
 review_sha256 = file_hash(review_path)
 assert review["conclusion"] == "lossless"
 assert review["proposal_sha256"] == proposal_sha256
-assert PENDING_MIGRATION in {tuple(node) for node in review["migrations_reviewed"]}
+assert set(PENDING_MIGRATIONS) == {
+    tuple(node) for node in review["migrations_reviewed"]
+}
 
 policy_path = proposal_root / "approval" / "approved-policy.json"
 run_command(
@@ -979,6 +1136,7 @@ assert policy["approved"] is True
 assert policy["lossless_reviewed"] is True
 assert policy["proposal_sha256"] == proposal_sha256
 assert policy["review_record_sha256"] == review_sha256
+assert policy["source_sqlite_schema_sha256"] == source_sqlite_schema_sha256
 approval_before_rehearsals = {
     path: protected_snapshot(path)
     for path in (proposal_path, review_path, policy_path)
@@ -1163,10 +1321,15 @@ def run_approved_rehearsal(name: str, media_snapshot_id: str) -> dict[str, str]:
     assert_entity_counts(source_export_manifest)
     assert_entity_counts(final_export_manifest)
     assert source_export_manifest["entities"] == final_export_manifest["entities"]
+    target_database = run_root / "target" / "ffxivshare.sqlite3"
+    assert_legacy_table_snapshot_preserved(target_database, legacy_snapshot)
+    assert_expected_migration_outcome(target_database)
     final_state = load_json(
         run_root / "evidence" / "final-target-migration-state.json"
     )
-    assert PENDING_MIGRATION in {tuple(node) for node in final_state["applied"]}
+    assert set(PENDING_MIGRATIONS).issubset(
+        {tuple(node) for node in final_state["applied"]}
+    )
 
     final_target_manifest = load_json(
         run_root / "artifacts" / "target-media-manifest-final.json"
