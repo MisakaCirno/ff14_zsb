@@ -16,6 +16,24 @@ from uuid import uuid4
 
 REPORT_FORMAT = "ffxivshare-sqlite-snapshot-inspection"
 REPORT_FORMAT_VERSION = 1
+SCHEMA_INVENTORY_FORMAT = "ffxivshare-sqlite-schema-inventory"
+SCHEMA_INVENTORY_FORMAT_VERSION = 1
+SCHEMA_OBJECT_TYPES = ("index", "table", "trigger", "view")
+SCHEMA_INTERNAL_NAME_PREFIX = "sqlite_"
+SCHEMA_INVENTORY_KEYS = frozenset(
+    {
+        "format",
+        "format_version",
+        "schema",
+        "included_object_types",
+        "excluded_objects",
+        "normalization",
+        "object_count",
+        "objects",
+        "sha256",
+    }
+)
+SCHEMA_OBJECT_KEYS = frozenset({"type", "name", "tbl_name", "sql"})
 SQLITE_HEADER = b"SQLite format 3\x00"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 REPARSE_POINT_ATTRIBUTE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
@@ -198,6 +216,160 @@ def _quoted_identifier(name: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
+def _canonical_json_sha256(value: Any) -> str:
+    serialized = json.dumps(
+        value,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _schema_inventory_projection(inventory: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: inventory[key]
+        for key in (
+            "format",
+            "format_version",
+            "schema",
+            "included_object_types",
+            "excluded_objects",
+            "normalization",
+            "object_count",
+            "objects",
+        )
+    }
+
+
+def _schema_object_sort_key(item: dict[str, Any]) -> tuple[Any, ...]:
+    sql = item["sql"]
+    return (
+        item["type"],
+        item["name"],
+        item["tbl_name"],
+        sql is not None,
+        "" if sql is None else sql,
+    )
+
+
+def _validate_schema_inventory(inventory: dict[str, Any]) -> None:
+    if not isinstance(inventory, dict) or set(inventory) != SCHEMA_INVENTORY_KEYS:
+        raise InspectionError("SQLite schema inventory has an invalid structure.")
+    if (
+        inventory["format"] != SCHEMA_INVENTORY_FORMAT
+        or inventory["format_version"] != SCHEMA_INVENTORY_FORMAT_VERSION
+        or inventory["schema"] != "main"
+        or inventory["included_object_types"] != list(SCHEMA_OBJECT_TYPES)
+        or inventory["excluded_objects"]
+        != {
+            "name_prefix": SCHEMA_INTERNAL_NAME_PREFIX,
+            "comparison": "case-sensitive Unicode code-point prefix match",
+            "reason": "SQLite-reserved internal and automatically generated objects",
+        }
+        or inventory["normalization"]
+        != {
+            "object_order": ["type", "name", "tbl_name", "sql (NULL first)"],
+            "string_order": "Unicode code-point order",
+            "sql": "verbatim sqlite_schema.sql with NULL preserved",
+            "digest": "SHA-256 of canonical UTF-8 JSON excluding sha256",
+            "canonical_json": "sorted object keys; no insignificant whitespace",
+        }
+    ):
+        raise InspectionError("SQLite schema inventory metadata is invalid.")
+
+    objects = inventory["objects"]
+    object_count = inventory["object_count"]
+    if (
+        not isinstance(objects, list)
+        or not isinstance(object_count, int)
+        or isinstance(object_count, bool)
+        or object_count != len(objects)
+    ):
+        raise InspectionError("SQLite schema inventory count is invalid.")
+
+    seen: set[tuple[str, str, str]] = set()
+    for item in objects:
+        if not isinstance(item, dict) or set(item) != SCHEMA_OBJECT_KEYS:
+            raise InspectionError("SQLite schema inventory object is invalid.")
+        object_type = item["type"]
+        name = item["name"]
+        table_name = item["tbl_name"]
+        sql = item["sql"]
+        if (
+            object_type not in SCHEMA_OBJECT_TYPES
+            or not isinstance(name, str)
+            or not name
+            or name.startswith(SCHEMA_INTERNAL_NAME_PREFIX)
+            or not isinstance(table_name, str)
+            or not table_name
+            or not isinstance(sql, str)
+            or not sql
+        ):
+            raise InspectionError("SQLite schema inventory object value is invalid.")
+        identity = (object_type, name, table_name)
+        if identity in seen:
+            raise InspectionError("SQLite schema inventory contains duplicate objects.")
+        seen.add(identity)
+
+    if objects != sorted(objects, key=_schema_object_sort_key):
+        raise InspectionError("SQLite schema inventory is not canonically ordered.")
+    digest = inventory["sha256"]
+    if (
+        not isinstance(digest, str)
+        or SHA256_PATTERN.fullmatch(digest) is None
+        or digest != _canonical_json_sha256(_schema_inventory_projection(inventory))
+    ):
+        raise InspectionError("SQLite schema inventory SHA256 is invalid.")
+
+
+def _sqlite_schema_inventory(connection: sqlite3.Connection) -> dict[str, Any]:
+    objects = []
+    for object_type, name, table_name, sql in connection.execute(
+        "SELECT type, name, tbl_name, sql FROM main.sqlite_schema "
+        "WHERE type IN ('table', 'index', 'trigger', 'view')"
+    ):
+        # SQLite reserves this prefix for its internal tables and automatically
+        # generated objects (for example sqlite_sequence and sqlite_autoindex_*).
+        # Keep those out of the human review surface; sqlite_sequence values are
+        # recorded separately by _sqlite_sequence().
+        if name.startswith(SCHEMA_INTERNAL_NAME_PREFIX):
+            continue
+        objects.append(
+            {
+                "type": object_type,
+                "name": name,
+                "tbl_name": table_name,
+                "sql": sql,
+            }
+        )
+    objects.sort(key=_schema_object_sort_key)
+    inventory = {
+        "format": SCHEMA_INVENTORY_FORMAT,
+        "format_version": SCHEMA_INVENTORY_FORMAT_VERSION,
+        "schema": "main",
+        "included_object_types": list(SCHEMA_OBJECT_TYPES),
+        "excluded_objects": {
+            "name_prefix": SCHEMA_INTERNAL_NAME_PREFIX,
+            "comparison": "case-sensitive Unicode code-point prefix match",
+            "reason": "SQLite-reserved internal and automatically generated objects",
+        },
+        "normalization": {
+            "object_order": ["type", "name", "tbl_name", "sql (NULL first)"],
+            "string_order": "Unicode code-point order",
+            "sql": "verbatim sqlite_schema.sql with NULL preserved",
+            "digest": "SHA-256 of canonical UTF-8 JSON excluding sha256",
+            "canonical_json": "sorted object keys; no insignificant whitespace",
+        },
+        "object_count": len(objects),
+        "objects": objects,
+    }
+    inventory["sha256"] = _canonical_json_sha256(inventory)
+    _validate_schema_inventory(inventory)
+    return inventory
+
+
 def _table_inventory(connection: sqlite3.Connection) -> list[dict[str, Any]]:
     names = [
         row[0]
@@ -305,6 +477,7 @@ def _inspect_database(database: Path, header: dict[str, Any]) -> dict[str, Any]:
             "user_version": user_version,
             "page_count": page_count,
             "tables": tables,
+            "sqlite_schema": _sqlite_schema_inventory(connection),
             "django_migrations": _django_migrations(connection, table_names),
             "sqlite_sequence": _sqlite_sequence(connection, table_names),
         }

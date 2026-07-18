@@ -115,6 +115,9 @@ foreach ($requiredText in @(
     'PRAGMA main.foreign_key_check',
     'sha256_before',
     'sha256_after',
+    'SCHEMA_INVENTORY_FORMAT',
+    '_validate_schema_inventory',
+    'main.sqlite_schema',
     'django_migrations',
     'sqlite_sequence'
 )) {
@@ -129,6 +132,8 @@ $temporaryRoot = Join-Path `
 $fixtureScript = Join-Path $temporaryRoot 'create_fixture.py'
 $validDatabase = Join-Path $temporaryRoot 'valid.sqlite3'
 $invalidForeignKeyDatabase = Join-Path $temporaryRoot 'invalid-fk.sqlite3'
+$sameSchemaDatabase = Join-Path $temporaryRoot 'same-schema.sqlite3'
+$schemaDriftDatabase = Join-Path $temporaryRoot 'schema-drift.sqlite3'
 $hardlinkSourceDatabase = Join-Path $temporaryRoot 'hardlink-source.sqlite3'
 $hardlinkAliasDatabase = Join-Path $temporaryRoot 'hardlink-alias.sqlite3'
 
@@ -138,6 +143,8 @@ import sys
 
 path = sys.argv[1]
 invalid_fk = sys.argv[2] == "invalid-fk"
+schema_drift = sys.argv[2] == "schema-drift"
+data_variant = sys.argv[2] == "data-variant"
 connection = sqlite3.connect(path)
 try:
     connection.execute("PRAGMA user_version=25")
@@ -151,16 +158,36 @@ try:
         ("shares", "0025_add_collection_owner_index", "2026-07-16T00:00:00Z"),
     )
     connection.execute(
-        "CREATE TABLE parent (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT NOT NULL)"
+        "CREATE TABLE parent ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "label TEXT NOT NULL, external_id TEXT NOT NULL UNIQUE)"
     )
     connection.execute(
         "CREATE TABLE child ("
         "id INTEGER PRIMARY KEY AUTOINCREMENT, "
         "parent_id INTEGER NOT NULL REFERENCES parent(id))"
     )
-    connection.execute("INSERT INTO parent(label) VALUES (?)", ("safe",))
+    connection.execute(
+        "INSERT INTO parent(label, external_id) VALUES (?, ?)",
+        (
+            "different-row" if data_variant else "safe",
+            "fixture-2" if data_variant else "fixture-1",
+        ),
+    )
     parent_id = 999 if invalid_fk else 1
     connection.execute("INSERT INTO child(parent_id) VALUES (?)", (parent_id,))
+    connection.execute(
+        "CREATE INDEX child_parent_custom_idx ON child(parent_id)"
+    )
+    view_columns = "label, id" if schema_drift else "id, label"
+    connection.execute(
+        f"CREATE VIEW parent_labels AS SELECT {view_columns} FROM parent"
+    )
+    connection.execute(
+        "CREATE TRIGGER parent_label_guard "
+        "BEFORE UPDATE OF label ON parent BEGIN "
+        "SELECT RAISE(ABORT, 'label required') WHERE NEW.label = ''; END"
+    )
     connection.commit()
 finally:
     connection.close()
@@ -179,6 +206,14 @@ try {
         -FilePath $PythonExecutable `
         -Arguments @($fixtureScript, $invalidForeignKeyDatabase, 'invalid-fk') `
         -Description 'Invalid foreign-key SQLite fixture creation'
+    Invoke-NativeChecked `
+        -FilePath $PythonExecutable `
+        -Arguments @($fixtureScript, $sameSchemaDatabase, 'data-variant') `
+        -Description 'Same-schema SQLite fixture creation'
+    Invoke-NativeChecked `
+        -FilePath $PythonExecutable `
+        -Arguments @($fixtureScript, $schemaDriftDatabase, 'schema-drift') `
+        -Description 'Schema-drift SQLite fixture creation'
     Invoke-NativeChecked `
         -FilePath $PythonExecutable `
         -Arguments @($fixtureScript, $hardlinkSourceDatabase, 'valid') `
@@ -241,6 +276,149 @@ try {
     Assert-True `
         -Condition ($report.inspection.sqlite_sequence.count -ge 1) `
         -Message 'Inspection report did not inventory sqlite_sequence.'
+
+    $schemaInventory = $report.inspection.sqlite_schema
+    Assert-True `
+        -Condition ($schemaInventory.format -eq 'ffxivshare-sqlite-schema-inventory') `
+        -Message 'Inspection report has an unexpected schema inventory format.'
+    Assert-True `
+        -Condition ($schemaInventory.format_version -eq 1) `
+        -Message 'Inspection report has an unexpected schema inventory version.'
+    Assert-True `
+        -Condition ($schemaInventory.schema -eq 'main') `
+        -Message 'Inspection report did not identify the main schema.'
+    Assert-True `
+        -Condition ($schemaInventory.sha256 -match '^[0-9a-f]{64}$') `
+        -Message 'Inspection report has an invalid schema inventory digest.'
+    Assert-True `
+        -Condition ($schemaInventory.object_count -eq @($schemaInventory.objects).Count) `
+        -Message 'Inspection report has an inconsistent schema object count.'
+    Assert-True `
+        -Condition ($schemaInventory.object_count -eq 6) `
+        -Message 'Schema inventory did not contain the complete non-internal fixture schema.'
+    Assert-True `
+        -Condition ($schemaInventory.excluded_objects.name_prefix -ceq 'sqlite_') `
+        -Message 'Inspection report does not declare its internal-object exclusion.'
+
+    $schemaObjects = @($schemaInventory.objects)
+    foreach ($expectedObject in @(
+        @{ type = 'index'; name = 'child_parent_custom_idx'; table = 'child' },
+        @{ type = 'table'; name = 'parent'; table = 'parent' },
+        @{ type = 'trigger'; name = 'parent_label_guard'; table = 'parent' },
+        @{ type = 'view'; name = 'parent_labels'; table = 'parent_labels' }
+    )) {
+        $matches = @($schemaObjects | Where-Object {
+            $_.type -ceq $expectedObject.type -and
+            $_.name -ceq $expectedObject.name -and
+            $_.tbl_name -ceq $expectedObject.table -and
+            $_.sql -is [string] -and $_.sql.Length -gt 0
+        })
+        Assert-True `
+            -Condition ($matches.Count -eq 1) `
+            -Message "Schema inventory omitted $($expectedObject.type) $($expectedObject.name)."
+    }
+    $internalSchemaObjects = @($schemaObjects | Where-Object {
+        $_.name.StartsWith('sqlite_', [System.StringComparison]::Ordinal)
+    })
+    Assert-True `
+        -Condition ($internalSchemaObjects.Count -eq 0) `
+        -Message 'Schema inventory exposed a reserved SQLite internal object.'
+    Assert-True `
+        -Condition (@($schemaObjects | Where-Object { $_.name -eq 'sqlite_autoindex_parent_1' }).Count -eq 0) `
+        -Message 'Schema inventory did not exclude an automatic SQLite index.'
+
+    $schemaValidationScript = Join-Path $temporaryRoot 'validate_schema_inventory.py'
+    $schemaValidationSource = @'
+from copy import deepcopy
+import importlib.util
+import json
+import sys
+
+spec = importlib.util.spec_from_file_location("snapshot_inspector", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+with open(sys.argv[2], "r", encoding="utf-8") as stream:
+    inventory = json.load(stream)["inspection"]["sqlite_schema"]
+
+module._validate_schema_inventory(inventory)
+
+mutations = []
+unknown_key = deepcopy(inventory)
+unknown_key["unexpected"] = True
+mutations.append(unknown_key)
+missing_sql = deepcopy(inventory)
+del missing_sql["objects"][0]["sql"]
+mutations.append(missing_sql)
+changed_sql = deepcopy(inventory)
+changed_sql["objects"][-1]["sql"] += " "
+mutations.append(changed_sql)
+bad_digest = deepcopy(inventory)
+bad_digest["sha256"] = "0" * 64
+mutations.append(bad_digest)
+reversed_objects = deepcopy(inventory)
+reversed_objects["objects"].reverse()
+mutations.append(reversed_objects)
+
+for candidate in mutations:
+    try:
+        module._validate_schema_inventory(candidate)
+    except module.InspectionError:
+        continue
+    raise SystemExit("malformed schema inventory passed strict validation")
+'@
+    [System.IO.File]::WriteAllText(
+        $schemaValidationScript,
+        $schemaValidationSource,
+        $utf8WithoutBom
+    )
+    Invoke-NativeChecked `
+        -FilePath $PythonExecutable `
+        -Arguments @($schemaValidationScript, $inspectorPath, $successOutput) `
+        -Description 'Strict schema inventory validation contract'
+
+    $sameSchemaHash = (
+        Get-FileHash -LiteralPath $sameSchemaDatabase -Algorithm SHA256
+    ).Hash.ToLowerInvariant()
+    Assert-True `
+        -Condition ($sameSchemaHash -ne $validHashBefore) `
+        -Message 'Same-schema fixture must have different database content.'
+    $sameSchemaOutput = Join-Path $temporaryRoot 'same-schema-report.json'
+    $sameSchemaExit = Invoke-Inspector `
+        -Database $sameSchemaDatabase `
+        -ExpectedSha256 $sameSchemaHash `
+        -Output $sameSchemaOutput `
+        -LogPath (Join-Path $temporaryRoot 'same-schema.log')
+    Assert-True `
+        -Condition ($sameSchemaExit -eq 0) `
+        -Message 'Same-schema snapshot inspection must succeed.'
+    $sameSchemaReport = Get-Content -LiteralPath $sameSchemaOutput -Raw | ConvertFrom-Json
+    Assert-True `
+        -Condition ($sameSchemaReport.inspection.sqlite_schema.sha256 -eq $schemaInventory.sha256) `
+        -Message 'Business row changes must not change the schema inventory digest.'
+
+    $schemaDriftHash = (
+        Get-FileHash -LiteralPath $schemaDriftDatabase -Algorithm SHA256
+    ).Hash.ToLowerInvariant()
+    $schemaDriftOutput = Join-Path $temporaryRoot 'schema-drift-report.json'
+    $schemaDriftExit = Invoke-Inspector `
+        -Database $schemaDriftDatabase `
+        -ExpectedSha256 $schemaDriftHash `
+        -Output $schemaDriftOutput `
+        -LogPath (Join-Path $temporaryRoot 'schema-drift.log')
+    Assert-True `
+        -Condition ($schemaDriftExit -eq 0) `
+        -Message 'Schema-drift snapshot inspection must succeed for human review.'
+    $schemaDriftReport = Get-Content -LiteralPath $schemaDriftOutput -Raw | ConvertFrom-Json
+    Assert-True `
+        -Condition ($schemaDriftReport.inspection.sqlite_schema.sha256 -ne $schemaInventory.sha256) `
+        -Message 'A changed custom view must change the schema inventory digest.'
+    $driftedView = @($schemaDriftReport.inspection.sqlite_schema.objects | Where-Object {
+        $_.type -eq 'view' -and $_.name -eq 'parent_labels'
+    })
+    Assert-True `
+        -Condition ($driftedView.Count -eq 1 -and $driftedView[0].sql.Contains('SELECT label, id')) `
+        -Message 'Schema-drift SQL was not exposed for human review.'
 
     $parentTable = @($report.inspection.tables | Where-Object { $_.name -eq 'parent' })
     $childTable = @($report.inspection.tables | Where-Object { $_.name -eq 'child' })
