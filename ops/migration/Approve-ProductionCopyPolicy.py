@@ -41,6 +41,22 @@ ZERO_SHA256 = "0" * 64
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 MIGRATION_PART_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+SQLITE_SCHEMA_INVENTORY_KEYS = frozenset(
+    {
+        "format",
+        "format_version",
+        "schema",
+        "included_object_types",
+        "excluded_objects",
+        "normalization",
+        "object_count",
+        "objects",
+        "sha256",
+    }
+)
+SQLITE_SCHEMA_OBJECT_KEYS = frozenset({"type", "name", "tbl_name", "sql"})
+SQLITE_SCHEMA_OBJECT_TYPES = ("index", "table", "trigger", "view")
+SQLITE_SCHEMA_INTERNAL_PREFIX = "sqlite_"
 UTC_TIMESTAMP_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$"
 )
@@ -95,6 +111,7 @@ PROJECTION_KEYS = {
     "source_database_sha256",
     "source_media_manifest_sha256",
     "source_media_snapshot_id",
+    "source_sqlite_schema_sha256",
     "source_applied_migrations_sha256",
     "migration_runtime_sha256",
     "runtime_fingerprint_sha256",
@@ -353,6 +370,114 @@ def _canonical_json_bytes(value: Any) -> bytes:
 
 def _canonical_json_sha256(value: Any) -> str:
     return sha256(_canonical_json_bytes(value)).hexdigest()
+
+
+def _sqlite_schema_inventory_projection(inventory: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: inventory[key]
+        for key in (
+            "format",
+            "format_version",
+            "schema",
+            "included_object_types",
+            "excluded_objects",
+            "normalization",
+            "object_count",
+            "objects",
+        )
+    }
+
+
+def _sqlite_schema_inventory_sha256(inventory: dict[str, Any]) -> str:
+    serialized = json.dumps(
+        _sqlite_schema_inventory_projection(inventory),
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _sqlite_schema_object_sort_key(item: dict[str, Any]) -> tuple[Any, ...]:
+    sql = item["sql"]
+    return (
+        item["type"],
+        item["name"],
+        item["tbl_name"],
+        sql is not None,
+        "" if sql is None else sql,
+    )
+
+
+def _validate_sqlite_schema_inventory(value: Any) -> str:
+    if not isinstance(value, dict) or set(value) != SQLITE_SCHEMA_INVENTORY_KEYS:
+        raise ApprovalError("SQLite schema inventory has an invalid exact shape.")
+    if (
+        value["format"] != "ffxivshare-sqlite-schema-inventory"
+        or value["format_version"] != 1
+        or value["schema"] != "main"
+        or value["included_object_types"] != list(SQLITE_SCHEMA_OBJECT_TYPES)
+        or value["excluded_objects"]
+        != {
+            "name_prefix": SQLITE_SCHEMA_INTERNAL_PREFIX,
+            "comparison": "case-sensitive Unicode code-point prefix match",
+            "reason": "SQLite-reserved internal and automatically generated objects",
+        }
+        or value["normalization"]
+        != {
+            "object_order": ["type", "name", "tbl_name", "sql (NULL first)"],
+            "string_order": "Unicode code-point order",
+            "sql": "verbatim sqlite_schema.sql with NULL preserved",
+            "digest": "SHA-256 of canonical UTF-8 JSON excluding sha256",
+            "canonical_json": "sorted object keys; no insignificant whitespace",
+        }
+    ):
+        raise ApprovalError("SQLite schema inventory metadata is invalid.")
+    objects = value["objects"]
+    object_count = value["object_count"]
+    if (
+        not isinstance(objects, list)
+        or not isinstance(object_count, int)
+        or isinstance(object_count, bool)
+        or object_count != len(objects)
+    ):
+        raise ApprovalError("SQLite schema inventory count is invalid.")
+
+    seen: set[tuple[str, str, str]] = set()
+    for item in objects:
+        if not isinstance(item, dict) or set(item) != SQLITE_SCHEMA_OBJECT_KEYS:
+            raise ApprovalError("SQLite schema inventory object is invalid.")
+        object_type = item["type"]
+        name = item["name"]
+        table_name = item["tbl_name"]
+        sql = item["sql"]
+        if (
+            object_type not in SQLITE_SCHEMA_OBJECT_TYPES
+            or not isinstance(name, str)
+            or not name
+            or name.startswith(SQLITE_SCHEMA_INTERNAL_PREFIX)
+            or not isinstance(table_name, str)
+            or not table_name
+            or not isinstance(sql, str)
+            or not sql
+        ):
+            raise ApprovalError("SQLite schema inventory object value is invalid.")
+        identity = (object_type, name, table_name)
+        if identity in seen:
+            raise ApprovalError("SQLite schema inventory contains duplicate objects.")
+        seen.add(identity)
+    if objects != sorted(objects, key=_sqlite_schema_object_sort_key):
+        raise ApprovalError("SQLite schema inventory object order is not canonical.")
+
+    digest = value["sha256"]
+    if (
+        not isinstance(digest, str)
+        or SHA256_PATTERN.fullmatch(digest) is None
+        or digest != _sqlite_schema_inventory_sha256(value)
+    ):
+        raise ApprovalError("SQLite schema inventory SHA-256 is invalid.")
+    return digest
 
 
 def _load_json(
@@ -619,6 +744,7 @@ def _validate_projection(value: Any) -> dict[str, Any]:
         "source_database_sha256",
         "source_media_manifest_sha256",
         "source_applied_migrations_sha256",
+        "source_sqlite_schema_sha256",
         "migration_runtime_sha256",
         "runtime_fingerprint_sha256",
         "execution_bundle_sha256",
@@ -1503,6 +1629,9 @@ def _validate_evidence(
         inspected_nodes, label="inspected migrations", allow_empty=False
     ) != state["applied"]:
         raise ApprovalError("Inspection and migration-state applied nodes disagree.")
+    schema_sha256 = _validate_sqlite_schema_inventory(checks.get("sqlite_schema"))
+    if schema_sha256 != projection["source_sqlite_schema_sha256"]:
+        raise ApprovalError("Inspection SQLite schema digest differs from the proposal.")
 
     media = _load_json(
         snapshots["source_media_manifest"],
@@ -2111,7 +2240,7 @@ def _policy_for_binding(binding: BindingValidation) -> dict[str, Any]:
 
 def _validate_policy(value: Any, *, binding: BindingValidation) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != POLICY_KEYS:
-        raise ApprovalError("Approved policy has an invalid exact 31-field shape.")
+        raise ApprovalError("Approved policy has an invalid exact 32-field shape.")
     projection = {key: value[key] for key in PROJECTION_KEYS}
     _validate_projection(projection)
     if projection != binding.projection:

@@ -229,6 +229,7 @@ def approved_policy(
         "source_leaf_nodes": [["shares", "0001_initial"]],
         "source_media_manifest_sha256": digest,
         "source_media_snapshot_id": "bootstrap-source-snapshot",
+        "source_sqlite_schema_sha256": digest,
         "target_leaf_nodes": [["shares", "0002_target"]],
     }
 

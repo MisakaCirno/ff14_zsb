@@ -570,6 +570,7 @@ def _compare_semantic_projections(
             f"Rehearsal semantic projections differ: {rendered}."
         )
     matched_projections = {
+        "source_sqlite_schema_sha256": first["source_sqlite_schema_sha256"],
         "entity_inventory_sha256": approval_core._canonical_json_sha256(
             first["final_target_dataset"]["entities"]
         ),
@@ -1788,7 +1789,7 @@ def _validate_run(
         stage="source_inspected",
         expected_path="evidence/source-inspection.json",
     )
-    source_inspection, source_applied = _call_validator(
+    source_inspection, source_applied, source_sqlite_schema_sha256 = _call_validator(
         "source snapshot inspection",
         rehearsal_core._validate_inspection_report,
         source_inspection_snapshot.path,
@@ -1798,6 +1799,14 @@ def _validate_run(
         approval_core._canonical_json_sha256(source_applied)
         == policy["source_applied_migrations_sha256"],
         f"{label} source inspection migration projection differs from policy.",
+    )
+    _require(
+        source_sqlite_schema_sha256 == policy["source_sqlite_schema_sha256"]
+        and events["source_inspected"]["details"].get(
+            "source_sqlite_schema_sha256"
+        )
+        == source_sqlite_schema_sha256,
+        f"{label} source inspection SQLite schema digest differs from policy or ledger.",
     )
 
     migration_states: dict[str, dict[str, Any]] = {}
@@ -2004,7 +2013,7 @@ def _validate_run(
     )
     target_backup_sha256 = candidate.get("backup_sha256")
     _sha256_value(target_backup_sha256, label="target backup sha256")
-    target_inspection, target_applied = _call_validator(
+    target_inspection, target_applied, _target_sqlite_schema_sha256 = _call_validator(
         "target snapshot inspection",
         rehearsal_core._validate_inspection_report,
         target_inspection_snapshot.path,
@@ -2244,6 +2253,7 @@ def _validate_run(
         ),
     }
     semantic_projection = {
+        "source_sqlite_schema_sha256": source_sqlite_schema_sha256,
         "source_backup_set": {
             name: source_private[name] for name in ("database", "checksum", "metadata")
         },
@@ -2639,6 +2649,7 @@ def verify_rehearsal_pair(config: PairVerificationConfig) -> Path:
         "source_applied_migrations_sha256": policy[
             "source_applied_migrations_sha256"
         ],
+        "source_sqlite_schema_sha256": policy["source_sqlite_schema_sha256"],
         "migration_plan_sha256": policy["migration_plan_sha256"],
         "migration_runtime_sha256": policy["migration_runtime_sha256"],
         "runtime_fingerprint_sha256": policy["runtime_fingerprint_sha256"],

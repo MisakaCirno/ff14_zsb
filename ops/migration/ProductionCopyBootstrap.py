@@ -120,6 +120,7 @@ APPROVED_POLICY_KEYS = {
     "source_leaf_nodes",
     "source_media_manifest_sha256",
     "source_media_snapshot_id",
+    "source_sqlite_schema_sha256",
     "target_leaf_nodes",
 }
 
@@ -533,6 +534,7 @@ def _load_approved_policy(
         "source_applied_migrations_sha256",
         "source_database_sha256",
         "source_media_manifest_sha256",
+        "source_sqlite_schema_sha256",
     ):
         _validate_sha256(value[name], label=name)
     for name in (

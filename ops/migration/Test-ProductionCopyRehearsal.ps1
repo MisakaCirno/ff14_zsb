@@ -69,6 +69,7 @@ New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
 $fixtureSource = @'
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import replace
 from hashlib import sha256
 import importlib.util
@@ -199,6 +200,49 @@ def migration_state(applied: list[list[str]], leaves: list[list[str]]) -> dict[s
     }
 
 
+def sqlite_schema_inventory() -> dict[str, object]:
+    inventory = {
+        "format": "ffxivshare-sqlite-schema-inventory",
+        "format_version": 1,
+        "schema": "main",
+        "included_object_types": ["index", "table", "trigger", "view"],
+        "excluded_objects": {
+            "name_prefix": "sqlite_",
+            "comparison": "case-sensitive Unicode code-point prefix match",
+            "reason": "SQLite-reserved internal and automatically generated objects",
+        },
+        "normalization": {
+            "object_order": ["type", "name", "tbl_name", "sql (NULL first)"],
+            "string_order": "Unicode code-point order",
+            "sql": "verbatim sqlite_schema.sql with NULL preserved",
+            "digest": "SHA-256 of canonical UTF-8 JSON excluding sha256",
+            "canonical_json": "sorted object keys; no insignificant whitespace",
+        },
+        "object_count": 1,
+        "objects": [
+            {
+                "type": "table",
+                "name": "fixture_table",
+                "tbl_name": "fixture_table",
+                "sql": "CREATE TABLE fixture_table (id INTEGER PRIMARY KEY)",
+            }
+        ],
+    }
+    inventory["sha256"] = sha256(
+        json.dumps(
+            inventory,
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return inventory
+
+
+SOURCE_SQLITE_SCHEMA_SHA256 = sqlite_schema_inventory()["sha256"]
+
+
 def inspection_report(digest: str, applied: list[list[str]]) -> dict[str, object]:
     return {
         "format": "ffxivshare-sqlite-snapshot-inspection",
@@ -213,6 +257,7 @@ def inspection_report(digest: str, applied: list[list[str]]) -> dict[str, object
             "query_only": True,
             "integrity_check": "ok",
             "foreign_key_check": {"status": "ok", "violations": 0},
+            "sqlite_schema": sqlite_schema_inventory(),
             "django_migrations": {
                 "present": True,
                 "applied": [
@@ -222,6 +267,45 @@ def inspection_report(digest: str, applied: list[list[str]]) -> dict[str, object
             },
         },
     }
+
+
+inspection_contract_path = test_root / "inspection-contract.json"
+valid_inspection = inspection_report("9" * 64, SOURCE_APPLIED)
+write_json(inspection_contract_path, valid_inspection)
+_report, _applied, schema_sha256 = module._validate_inspection_report(
+    inspection_contract_path,
+    expected_sha256="9" * 64,
+)
+assert _applied == SOURCE_APPLIED
+assert schema_sha256 == SOURCE_SQLITE_SCHEMA_SHA256
+
+for mutation in ("extra_key", "metadata", "order", "digest"):
+    candidate = deepcopy(valid_inspection)
+    inventory = candidate["inspection"]["sqlite_schema"]
+    if mutation == "extra_key":
+        inventory["unexpected"] = True
+    elif mutation == "metadata":
+        inventory["normalization"]["sql"] = "normalized"
+    elif mutation == "order":
+        second = deepcopy(inventory["objects"][0])
+        second["name"] = "aaa_table"
+        second["tbl_name"] = "aaa_table"
+        second["sql"] = "CREATE TABLE aaa_table (id INTEGER PRIMARY KEY)"
+        inventory["objects"].append(second)
+        inventory["object_count"] = 2
+        inventory["sha256"] = module._sqlite_schema_inventory_sha256(inventory)
+    else:
+        inventory["sha256"] = "0" * 64
+    write_json(inspection_contract_path, candidate)
+    try:
+        module._validate_inspection_report(
+            inspection_contract_path,
+            expected_sha256="9" * 64,
+        )
+    except module.RehearsalError:
+        pass
+    else:
+        raise AssertionError(f"Malformed SQLite schema inventory passed: {mutation}")
 
 
 def validation_report() -> dict[str, object]:
@@ -598,6 +682,7 @@ def build_case(name: str, *, bad_plan: bool = False, bad_bundle: bool = False):
         "source_media_manifest_sha256": file_hash(source_media_manifest),
         "source_media_snapshot_id": "source-fixture",
         "source_applied_migrations_sha256": module._canonical_json_sha256(SOURCE_APPLIED),
+        "source_sqlite_schema_sha256": SOURCE_SQLITE_SCHEMA_SHA256,
         "migration_runtime_sha256": MIGRATION_RUNTIME_SHA256,
         "runtime_fingerprint_sha256": RUNTIME_FINGERPRINT_SHA256,
         "execution_bundle_sha256": (

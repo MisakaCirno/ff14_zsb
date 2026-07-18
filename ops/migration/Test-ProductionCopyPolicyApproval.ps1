@@ -128,6 +128,17 @@ def digest_value(value: Any) -> str:
     return sha256(encoded(value)).hexdigest()
 
 
+def compact_digest_value(value: Any) -> str:
+    raw = json.dumps(
+        value,
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return sha256(raw).hexdigest()
+
+
 def write_json(path: Path, value: Any, *, canonical: bool = True) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     if canonical:
@@ -172,7 +183,7 @@ MANDATORY = (
     "shares/__init__.py",
 )
 SOURCE_NODE = ["shares", "0024_widen_site_message_titles"]
-TARGET_NODE = ["shares", "0025_add_share_browse_indexes"]
+TARGET_NODE = ["shares", "0025_add_collection_owner_index"]
 SOURCE_DATABASE_SHA256 = "1" * 64
 MIGRATION_RUNTIME_SHA256 = "4" * 64
 IDENTITY = "operator_asserted_not_cryptographically_verified"
@@ -499,7 +510,10 @@ def build_fixture(
     )
 
     migration_plan_path = run_root / "logs" / "06-proposal_migration_plan.stdout.txt"
-    write_bytes(migration_plan_path, b"Planned operations:\n  shares.0025 AddIndex\n")
+    write_bytes(
+        migration_plan_path,
+        b"Planned operations:\n  shares.0025_add_collection_owner_index AddIndex\n",
+    )
     runtime_projection = {"fixture": "isolated-runtime", "version": 1}
     runtime_path = run_root / "evidence" / "proposal-runtime-fingerprint.json"
     runtime_sha256 = digest_value(runtime_projection)
@@ -552,7 +566,7 @@ def build_fixture(
         [
             {
                 "node": TARGET_NODE,
-                "module": "shares.migrations.0025_add_share_browse_indexes",
+                "module": "shares.migrations.0025_add_collection_owner_index",
                 "dependencies": [SOURCE_NODE],
                 "replaces": [],
                 "operations": [
@@ -599,6 +613,38 @@ def build_fixture(
         },
     )
     inspection_path = run_root / "evidence" / "proposal-source-inspection.json"
+    schema_inventory = {
+        "format": "ffxivshare-sqlite-schema-inventory",
+        "format_version": 1,
+        "schema": "main",
+        "included_object_types": ["index", "table", "trigger", "view"],
+        "excluded_objects": {
+            "name_prefix": "sqlite_",
+            "comparison": "case-sensitive Unicode code-point prefix match",
+            "reason": "SQLite-reserved internal and automatically generated objects",
+        },
+        "normalization": {
+            "object_order": ["type", "name", "tbl_name", "sql (NULL first)"],
+            "string_order": "Unicode code-point order",
+            "sql": "verbatim sqlite_schema.sql with NULL preserved",
+            "digest": "SHA-256 of canonical UTF-8 JSON excluding sha256",
+            "canonical_json": "sorted object keys; no insignificant whitespace",
+        },
+        "object_count": 1,
+        "objects": [
+            {
+                "type": "table",
+                "name": "django_migrations",
+                "tbl_name": "django_migrations",
+                "sql": (
+                    "CREATE TABLE django_migrations "
+                    "(id integer PRIMARY KEY, app varchar(255), name varchar(255))"
+                ),
+            }
+        ],
+    }
+    schema_inventory_sha256 = compact_digest_value(schema_inventory)
+    schema_inventory["sha256"] = schema_inventory_sha256
     write_json(
         inspection_path,
         {
@@ -618,6 +664,7 @@ def build_fixture(
                 "query_only": True,
                 "integrity_check": "ok",
                 "foreign_key_check": {"status": "ok", "violations": 0},
+                "sqlite_schema": schema_inventory,
                 "django_migrations": {
                     "present": True,
                     "applied": [
@@ -717,6 +764,7 @@ def build_fixture(
         "source_media_manifest_sha256": media_sha256,
         "source_media_snapshot_id": "fixture-media",
         "source_applied_migrations_sha256": digest_value([SOURCE_NODE]),
+        "source_sqlite_schema_sha256": schema_inventory_sha256,
         "migration_runtime_sha256": MIGRATION_RUNTIME_SHA256,
         "runtime_fingerprint_sha256": runtime_sha256,
         "execution_bundle_sha256": bundle_sha256,
@@ -1163,7 +1211,8 @@ approved = json.loads(approved_raw.decode("utf-8"))
 assert set(approved) == {
     "format", "format_version", "policy_id", "source_database_sha256",
     "source_media_manifest_sha256", "source_media_snapshot_id",
-    "source_applied_migrations_sha256", "migration_runtime_sha256",
+    "source_applied_migrations_sha256", "source_sqlite_schema_sha256",
+    "migration_runtime_sha256",
     "runtime_fingerprint_sha256", "execution_bundle_sha256",
     "source_leaf_nodes", "target_leaf_nodes", "migration_plan_sha256",
     "approved", "approved_at", "lossless_reviewed", "proposal_id",

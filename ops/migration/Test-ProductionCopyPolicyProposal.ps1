@@ -965,6 +965,10 @@ if include_slow:
     assert PENDING_NODE not in state_applied
     projection = body["policy_projection"]
     assert projection["source_database_sha256"] == file_hash(source_backup)
+    source_inspection = load_json(evidence_paths["source_snapshot_inspection"])
+    assert projection["source_sqlite_schema_sha256"] == (
+        source_inspection["inspection"]["sqlite_schema"]["sha256"]
+    )
     assert projection["source_leaf_nodes"] != projection["target_leaf_nodes"]
 
     events = verify_ledger(slow_root, proposal)

@@ -27,6 +27,22 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 POLICY_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 SNAPSHOT_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 MIGRATION_PART_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
+SQLITE_SCHEMA_INVENTORY_KEYS = frozenset(
+    {
+        "format",
+        "format_version",
+        "schema",
+        "included_object_types",
+        "excluded_objects",
+        "normalization",
+        "object_count",
+        "objects",
+        "sha256",
+    }
+)
+SQLITE_SCHEMA_OBJECT_KEYS = frozenset({"type", "name", "tbl_name", "sql"})
+SQLITE_SCHEMA_OBJECT_TYPES = ("index", "table", "trigger", "view")
+SQLITE_SCHEMA_INTERNAL_PREFIX = "sqlite_"
 UTC_TIMESTAMP_PATTERN = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$"
 )
@@ -1311,6 +1327,7 @@ def _load_policy(path: Path) -> dict[str, Any]:
         "source_leaf_nodes",
         "source_media_manifest_sha256",
         "source_media_snapshot_id",
+        "source_sqlite_schema_sha256",
         "target_leaf_nodes",
     }
     if not isinstance(value, dict) or set(value) != expected_keys:
@@ -1342,6 +1359,7 @@ def _load_policy(path: Path) -> dict[str, Any]:
         "source_applied_migrations_sha256",
         "source_database_sha256",
         "source_media_manifest_sha256",
+        "source_sqlite_schema_sha256",
     ):
         if not isinstance(value[name], str) or SHA256_PATTERN.fullmatch(value[name]) is None:
             raise RehearsalBlocked(f"policy_{name}_invalid")
@@ -1409,16 +1427,126 @@ def _validate_backup_report(path: Path) -> dict[str, Any]:
     return report
 
 
+def _sqlite_schema_inventory_projection(inventory: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: inventory[key]
+        for key in (
+            "format",
+            "format_version",
+            "schema",
+            "included_object_types",
+            "excluded_objects",
+            "normalization",
+            "object_count",
+            "objects",
+        )
+    }
+
+
+def _sqlite_schema_inventory_sha256(inventory: dict[str, Any]) -> str:
+    serialized = json.dumps(
+        _sqlite_schema_inventory_projection(inventory),
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _sqlite_schema_object_sort_key(item: dict[str, Any]) -> tuple[Any, ...]:
+    sql = item["sql"]
+    return (
+        item["type"],
+        item["name"],
+        item["tbl_name"],
+        sql is not None,
+        "" if sql is None else sql,
+    )
+
+
+def _validate_sqlite_schema_inventory(value: Any) -> str:
+    if not isinstance(value, dict) or set(value) != SQLITE_SCHEMA_INVENTORY_KEYS:
+        raise RehearsalError("snapshot_sqlite_schema_inventory_invalid")
+    if (
+        value["format"] != "ffxivshare-sqlite-schema-inventory"
+        or value["format_version"] != 1
+        or value["schema"] != "main"
+        or value["included_object_types"] != list(SQLITE_SCHEMA_OBJECT_TYPES)
+        or value["excluded_objects"]
+        != {
+            "name_prefix": SQLITE_SCHEMA_INTERNAL_PREFIX,
+            "comparison": "case-sensitive Unicode code-point prefix match",
+            "reason": "SQLite-reserved internal and automatically generated objects",
+        }
+        or value["normalization"]
+        != {
+            "object_order": ["type", "name", "tbl_name", "sql (NULL first)"],
+            "string_order": "Unicode code-point order",
+            "sql": "verbatim sqlite_schema.sql with NULL preserved",
+            "digest": "SHA-256 of canonical UTF-8 JSON excluding sha256",
+            "canonical_json": "sorted object keys; no insignificant whitespace",
+        }
+    ):
+        raise RehearsalError("snapshot_sqlite_schema_metadata_invalid")
+
+    objects = value["objects"]
+    object_count = value["object_count"]
+    if (
+        not isinstance(objects, list)
+        or not isinstance(object_count, int)
+        or isinstance(object_count, bool)
+        or object_count != len(objects)
+    ):
+        raise RehearsalError("snapshot_sqlite_schema_count_invalid")
+
+    seen: set[tuple[str, str, str]] = set()
+    for item in objects:
+        if not isinstance(item, dict) or set(item) != SQLITE_SCHEMA_OBJECT_KEYS:
+            raise RehearsalError("snapshot_sqlite_schema_object_invalid")
+        object_type = item["type"]
+        name = item["name"]
+        table_name = item["tbl_name"]
+        sql = item["sql"]
+        if (
+            object_type not in SQLITE_SCHEMA_OBJECT_TYPES
+            or not isinstance(name, str)
+            or not name
+            or name.startswith(SQLITE_SCHEMA_INTERNAL_PREFIX)
+            or not isinstance(table_name, str)
+            or not table_name
+            or not isinstance(sql, str)
+            or not sql
+        ):
+            raise RehearsalError("snapshot_sqlite_schema_object_value_invalid")
+        identity = (object_type, name, table_name)
+        if identity in seen:
+            raise RehearsalError("snapshot_sqlite_schema_duplicate_object")
+        seen.add(identity)
+    if objects != sorted(objects, key=_sqlite_schema_object_sort_key):
+        raise RehearsalError("snapshot_sqlite_schema_not_canonical")
+
+    digest = value["sha256"]
+    if (
+        not isinstance(digest, str)
+        or SHA256_PATTERN.fullmatch(digest) is None
+        or digest != _sqlite_schema_inventory_sha256(value)
+    ):
+        raise RehearsalError("snapshot_sqlite_schema_sha256_invalid")
+    return digest
+
+
 def _validate_inspection_report(
     path: Path,
     *,
     expected_sha256: str,
-) -> tuple[dict[str, Any], list[list[str]]]:
+) -> tuple[dict[str, Any], list[list[str]], str]:
     report = _load_json(path, maximum_size=32 * 1024 * 1024)
     database = report.get("database") if isinstance(report, dict) else None
     inspection = report.get("inspection") if isinstance(report, dict) else None
     migrations = inspection.get("django_migrations") if isinstance(inspection, dict) else None
     foreign_keys = inspection.get("foreign_key_check") if isinstance(inspection, dict) else None
+    sqlite_schema = inspection.get("sqlite_schema") if isinstance(inspection, dict) else None
     if (
         not isinstance(report, dict)
         or report.get("format") != "ffxivshare-sqlite-snapshot-inspection"
@@ -1453,7 +1581,8 @@ def _validate_inspection_report(
     canonical = [list(node) for node in sorted({tuple(node) for node in applied})]
     if canonical != sorted(applied) or len(canonical) != len(applied):
         raise RehearsalError("snapshot_migration_projection_not_canonical")
-    return report, canonical
+    schema_sha256 = _validate_sqlite_schema_inventory(sqlite_schema)
+    return report, canonical, schema_sha256
 
 
 def _validate_migration_state(path: Path) -> dict[str, Any]:
@@ -4840,14 +4969,19 @@ class Rehearsal:
             expected_identity=private_source_identity,
             issue_prefix="private_source",
         )
-        _inspection, inspected_applied = _validate_inspection_report(
-            source_inspection,
-            expected_sha256=self.source_expected_sha256,
+        _inspection, inspected_applied, source_sqlite_schema_sha256 = (
+            _validate_inspection_report(
+                source_inspection,
+                expected_sha256=self.source_expected_sha256,
+            )
         )
+        if source_sqlite_schema_sha256 != policy["source_sqlite_schema_sha256"]:
+            raise RehearsalBlocked("policy_source_sqlite_schema_sha256_mismatch")
         self._record_artifact(
             "source_inspected",
             source_inspection,
             applied_migration_count=len(inspected_applied),
+            source_sqlite_schema_sha256=source_sqlite_schema_sha256,
         )
 
         copied_size, copied_digest = _copy_stable(
@@ -5192,9 +5326,11 @@ class Rehearsal:
             ],
             env=base_env,
         )
-        _validate_inspection_report(
-            target_inspection,
-            expected_sha256=target_backup_sha256,
+        _target_inspection, _target_applied, _target_sqlite_schema_sha256 = (
+            _validate_inspection_report(
+                target_inspection,
+                expected_sha256=target_backup_sha256,
+            )
         )
         self._record_artifact(
             "target_snapshot_verified",

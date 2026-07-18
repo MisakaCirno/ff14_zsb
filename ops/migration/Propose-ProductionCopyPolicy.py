@@ -736,9 +736,11 @@ def _execute_proposal(
         ],
         env=base_env,
     )
-    _inspection, inspected_applied = core._validate_inspection_report(
-        inspection_path,
-        expected_sha256=source_sha256,
+    _inspection, inspected_applied, source_sqlite_schema_sha256 = (
+        core._validate_inspection_report(
+            inspection_path,
+            expected_sha256=source_sha256,
+        )
     )
     work_database = config.run_root / "work" / "proposal-source.sqlite3"
     core._copy_stable(private_database, work_database)
@@ -856,6 +858,7 @@ def _execute_proposal(
         "source_media_manifest_sha256": media_sha256,
         "source_media_snapshot_id": media_snapshot_id,
         "source_applied_migrations_sha256": core._canonical_json_sha256(state["applied"]),
+        "source_sqlite_schema_sha256": source_sqlite_schema_sha256,
         "migration_runtime_sha256": state["migration_runtime_sha256"],
         "runtime_fingerprint_sha256": runtime["fingerprint_sha256"],
         "execution_bundle_sha256": context["bundle_sha256"],

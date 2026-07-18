@@ -97,6 +97,16 @@ module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
+inspector_path = verifier_path.with_name("Inspect-SQLiteSnapshot.py")
+inspector_spec = importlib.util.spec_from_file_location(
+    "ffxivshare_schema_inspector_contract",
+    inspector_path,
+)
+assert inspector_spec is not None and inspector_spec.loader is not None
+inspector = importlib.util.module_from_spec(inspector_spec)
+sys.modules[inspector_spec.name] = inspector
+inspector_spec.loader.exec_module(inspector)
+
 
 def expect_failure(action, contains: str | None = None) -> None:
     try:
@@ -357,6 +367,56 @@ schema_projection = module._sqlite_schema_projection(
 )
 assert {row["type"] for row in schema_projection} == {"index", "table"}
 
+schema_connection = sqlite3.connect(
+    database_path.resolve().as_uri() + "?mode=ro&immutable=1",
+    uri=True,
+)
+try:
+    schema_inventory = inspector._sqlite_schema_inventory(schema_connection)
+finally:
+    schema_connection.close()
+schema_sha256 = schema_inventory["sha256"]
+assert module.rehearsal_core._validate_sqlite_schema_inventory(
+    deepcopy(schema_inventory)
+) == schema_sha256
+assert module.approval_core._validate_sqlite_schema_inventory(
+    deepcopy(schema_inventory)
+) == schema_sha256
+
+schema_mutations = []
+extra_key = deepcopy(schema_inventory)
+extra_key["unexpected"] = True
+schema_mutations.append(extra_key)
+bad_metadata = deepcopy(schema_inventory)
+bad_metadata["normalization"]["sql"] = "normalized"
+schema_mutations.append(bad_metadata)
+bad_order = deepcopy(schema_inventory)
+bad_order["objects"].reverse()
+bad_order["sha256"] = inspector._canonical_json_sha256(
+    inspector._schema_inventory_projection(bad_order)
+)
+schema_mutations.append(bad_order)
+bad_digest = deepcopy(schema_inventory)
+bad_digest["sha256"] = "0" * 64
+schema_mutations.append(bad_digest)
+for candidate in schema_mutations:
+    for validator, error_type in (
+        (
+            module.rehearsal_core._validate_sqlite_schema_inventory,
+            module.rehearsal_core.RehearsalError,
+        ),
+        (
+            module.approval_core._validate_sqlite_schema_inventory,
+            module.approval_core.ApprovalError,
+        ),
+    ):
+        try:
+            validator(deepcopy(candidate))
+        except error_type:
+            pass
+        else:
+            raise AssertionError("Malformed schema inventory passed a consumer validator")
+
 backup_report_path = backup_root / "verification.json"
 backup_report = {
     "artifact": {
@@ -508,6 +568,7 @@ assert module._media_projection(
 semantic_projection = {
     "approved_policy_sha256": "1" * 64,
     "source_handoff_sha256": "2" * 64,
+    "source_sqlite_schema_sha256": "5" * 64,
     "final_target_dataset": {
         "entities": {
             "shares": {
@@ -536,6 +597,7 @@ assert comparison["semantic_projection_sha256"] == sha256(
     canonical(semantic_projection)
 ).hexdigest()
 assert set(comparison["matched_projections"]) == {
+    "source_sqlite_schema_sha256",
     "entity_inventory_sha256",
     "media_inventory_sha256",
     "applied_migrations_sha256",
@@ -545,6 +607,7 @@ assert set(comparison["matched_projections"]) == {
 for mismatched_key in (
     "approved_policy_sha256",
     "source_handoff_sha256",
+    "source_sqlite_schema_sha256",
     "final_target_dataset",
     "final_target_media",
     "migration_states",
