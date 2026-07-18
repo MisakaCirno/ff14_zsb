@@ -277,7 +277,7 @@
   position: absolute;
   top: calc(100% + var(--app-space-2));
   right: 0;
-  width: min(34rem, calc(100vw - 2rem));
+  width: min(31rem, calc(100vw - 2rem));
   padding: var(--app-space-4);
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
@@ -285,16 +285,47 @@
   box-shadow: var(--app-shadow-lg, var(--app-shadow-hover));
 }
 
+.browse-filter-panel__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--app-space-3);
+  align-items: center;
+  padding-bottom: var(--app-space-3);
+  border-bottom: 1px solid var(--app-color-border);
+}
+
+.browse-filter-panel__icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  color: var(--app-color-primary);
+  background: var(--app-color-primary-soft);
+  border-radius: var(--app-radius-md);
+}
+
+.browse-filter-panel__header h3 {
+  margin: 0;
+  font-size: var(--app-text-base);
+  font-weight: var(--app-font-semibold);
+}
+
+.browse-filter-panel__header p {
+  margin: var(--app-space-1) 0 0;
+  color: var(--app-color-text-muted);
+  font-size: var(--app-text-xs);
+}
+
 .browse-filter-panel__surface .browse-toolbar__controls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--app-space-3);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--app-space-4);
   align-items: stretch;
+  margin-top: var(--app-space-4);
 }
 
 .browse-filter-panel__surface .browse-toolbar__switches {
-  grid-column: 1 / -1;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .browse-filter-panel__surface .browse-toolbar__sort,
@@ -315,31 +346,46 @@
 
 .browse-toolbar__switches {
   display: grid;
-  gap: var(--app-space-2);
+  gap: 0;
   align-items: center;
   min-width: 0;
-  min-height: 2.75rem;
+  min-height: 0;
   padding: 0;
   background: transparent;
-  border: 0;
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-lg);
+  overflow: hidden;
 }
 
 .browse-content-policy {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  gap: var(--app-space-3);
+  align-items: center;
   min-width: 0;
   margin: 0;
   padding: var(--app-space-3);
-  background: var(--app-color-surface-muted);
-  border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-md);
+  background: var(--app-color-surface);
+  border: 0;
+  border-radius: 0;
+}
+
+.browse-content-policy + .browse-content-policy {
+  border-top: 1px solid var(--app-color-border);
 }
 
 .browse-content-policy legend {
   float: none;
   width: auto;
-  margin: 0 0 var(--app-space-2);
-  color: var(--app-color-text-muted);
-  font-size: var(--app-text-xs);
+  margin: 0;
+  color: var(--app-color-text);
+  font-size: var(--app-text-sm);
   font-weight: var(--app-font-semibold);
+}
+
+.browse-content-policy legend i {
+  margin-right: var(--app-space-1);
+  color: var(--app-color-text-muted);
 }
 
 .browse-content-policy__options {
@@ -350,12 +396,41 @@
 
 .browse-content-policy__options .btn {
   min-width: 0;
+  min-height: 2.25rem;
   padding: var(--app-space-1) var(--app-space-2);
   overflow: hidden;
   font-size: var(--app-text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
   border-radius: var(--app-radius-md);
+}
+
+.browse-advanced-secondary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-3);
+  padding-top: var(--app-space-4);
+  border-top: 1px solid var(--app-color-border);
+}
+
+.browse-advanced-setting {
+  display: grid;
+  gap: var(--app-space-2);
+  align-content: start;
+  min-width: 0;
+}
+
+.browse-advanced-setting__label {
+  display: flex;
+  gap: var(--app-space-2);
+  align-items: center;
+  color: var(--app-color-text-muted);
+  font-size: var(--app-text-xs);
+  font-weight: var(--app-font-semibold);
+}
+
+.browse-advanced-setting .browse-toolbar__sort .btn {
+  justify-content: space-between;
 }
 
 .browse-toolbar__sort,
@@ -477,9 +552,13 @@
     padding: var(--app-space-3);
   }
 
-  .browse-filter-panel__surface .browse-toolbar__controls,
-  .browse-filter-panel__surface .browse-toolbar__switches {
+  .browse-content-policy,
+  .browse-advanced-secondary {
     grid-template-columns: 1fr;
+  }
+
+  .browse-content-policy {
+    gap: var(--app-space-2);
   }
 
   .browse-toolbar__sort .dropdown-menu {

@@ -1819,16 +1819,21 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('aria-label="敏感内容显示方式"', source)
         self.assertIn('aria-label="剧透内容显示方式"', source)
         self.assertIn('aria-label="令人不适内容显示方式"', source)
+        self.assertIn('<span>高级</span>', source)
+        self.assertIn('id="browse-advanced-title">高级浏览</h3>', source)
+        self.assertNotIn('<span>筛选</span>', source)
         for field in ('spoiler', 'nsfw'):
             for value in ('hide', 'mask', 'show'):
                 self.assertIn(
                     f'name="{field}" id="{field}-{value}" value="{value}"',
                     source,
                 )
-        self.assertIn('aria-label="浏览模式"', source)
+        self.assertIn('aria-labelledby="browse-mode-label"', source)
         self.assertIn('aria-pressed="{% if feed_mode ==', source)
         self.assertIn("@import './browse-page.css';", main_styles)
         self.assertIn('.browse-toolbar__controls', browse_styles)
+        self.assertIn('.browse-filter-panel__header', browse_styles)
+        self.assertIn('.browse-advanced-secondary', browse_styles)
         self.assertIn('min-width: 0;', browse_styles)
         self.assertIn('@media (max-width: 575.98px)', browse_styles)
 
