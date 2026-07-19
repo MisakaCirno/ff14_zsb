@@ -20,6 +20,8 @@
 
 - 圆角只有两档：按钮、输入框、导航项、筛选项和徽章统一使用 `--app-radius-control`（8px），卡片、面板和浮层统一使用 `--app-radius-surface`（12px）。只有宽高相等且必须呈正圆的图标、关闭按钮和提示点可以使用 `--app-radius-circle`。
 - 禁止把普通链接、按钮、导航项或状态徽章做成胶囊；Bootstrap 的 `rounded-pill` 也被映射到 8px 控件圆角。
+- 禁止用 `calc()` 派生 11px 等中间圆角；包括 Bootstrap 的卡片、弹窗和下拉菜单内圆角在内，都直接映射到 8px 或 12px。
+- 内容预览、预览元信息、吸顶工具栏和全局通知必须依次使用 `--app-z-preview-meta`、`--app-z-content-overlay`、`--app-z-sticky` 和 `--app-z-floating-message`；业务组件不自行争抢全局层级。
 - 阴影只有三级：普通容器 `--app-shadow-surface`、悬浮内容 `--app-shadow-floating`、对话框 `--app-shadow-dialog`。
 - 颜色只能在 `tokens.css` 中写原始色值；业务样式必须引用语义令牌。
 - 不使用装饰性渐变。加载状态使用纯色脉冲，状态差异通过语义色、边框和文字表达。

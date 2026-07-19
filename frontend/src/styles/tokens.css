@@ -121,6 +121,7 @@
   --app-ease-standard: ease;
   --app-z-content-overlay: 20;
   --app-z-preview-meta: 15;
+  --app-z-sticky: 30;
   --app-z-floating-message: 1100;
 }
 

@@ -20,8 +20,7 @@
   pointer-events: none;
   content: '';
   border: 2px solid var(--app-color-image-focus-inner);
-  border-radius: calc(var(--app-radius-surface) - var(--app-space-1))
-    calc(var(--app-radius-surface) - var(--app-space-1)) 0 0;
+  border-radius: var(--app-radius-control) var(--app-radius-control) 0 0;
   box-shadow: 0 0 0 0.1875rem var(--app-color-image-focus-outer);
 }
 

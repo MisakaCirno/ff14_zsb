@@ -300,9 +300,7 @@
 .card {
   --bs-card-border-color: var(--app-color-border);
   --bs-card-border-radius: var(--app-radius-surface);
-  --bs-card-inner-border-radius: calc(
-    var(--app-radius-surface) - var(--bs-card-border-width)
-  );
+  --bs-card-inner-border-radius: var(--app-radius-surface);
 }
 
 .badge {
@@ -351,9 +349,7 @@
 .modal {
   --bs-modal-border-color: var(--app-color-border);
   --bs-modal-border-radius: var(--app-radius-surface);
-  --bs-modal-inner-border-radius: calc(
-    var(--app-radius-surface) - var(--bs-modal-border-width)
-  );
+  --bs-modal-inner-border-radius: var(--app-radius-surface);
   --bs-modal-box-shadow: var(--app-shadow-dialog);
 }
 
@@ -362,9 +358,7 @@
   --bs-dropdown-bg: var(--app-color-surface);
   --bs-dropdown-border-color: var(--app-color-control-border);
   --bs-dropdown-border-radius: var(--app-radius-control);
-  --bs-dropdown-inner-border-radius: calc(
-    var(--app-radius-control) - var(--bs-dropdown-border-width)
-  );
+  --bs-dropdown-inner-border-radius: var(--app-radius-control);
   --bs-dropdown-box-shadow: var(--app-shadow-floating);
   --bs-dropdown-link-color: var(--app-color-text);
   --bs-dropdown-link-hover-color: var(--app-color-primary-hover);
@@ -375,12 +369,26 @@
   --bs-dropdown-header-color: var(--app-color-text-muted);
 }
 
+.accordion {
+  --bs-accordion-border-radius: var(--app-radius-surface);
+  --bs-accordion-inner-border-radius: var(--app-radius-surface);
+}
+
 .form-control,
 .form-select,
 .form-check-input {
   color: var(--app-color-text);
   background-color: var(--app-color-surface);
   border-color: var(--app-color-control-border);
+}
+
+.form-check-input[type='checkbox'],
+.form-switch .form-check-input {
+  border-radius: var(--app-radius-control);
+}
+
+.form-check-input[type='radio'] {
+  border-radius: var(--app-radius-circle);
 }
 
 .form-control::placeholder {

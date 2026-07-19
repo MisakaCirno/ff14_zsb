@@ -1017,8 +1017,26 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             '--bs-border-radius: var(--app-radius-control);',
             '--bs-border-radius-lg: var(--app-radius-surface);',
             '--bs-border-radius-pill: var(--app-radius-control);',
+            '--bs-card-inner-border-radius: var(--app-radius-surface);',
+            '--bs-modal-inner-border-radius: var(--app-radius-surface);',
+            '--bs-dropdown-inner-border-radius: var(--app-radius-control);',
+            '--bs-accordion-inner-border-radius: var(--app-radius-surface);',
         ):
             self.assertIn(bootstrap_radius, adapter_source)
+
+        for form_radius_contract in (
+            ".form-check-input[type='checkbox']",
+            '.form-switch .form-check-input {',
+            ".form-check-input[type='radio'] {",
+            'border-radius: var(--app-radius-control);',
+            'border-radius: var(--app-radius-circle);',
+        ):
+            self.assertIn(form_radius_contract, adapter_source)
+
+        tokens_source = self.read_frontend('styles/tokens.css')
+        browse_source = self.read_frontend('styles/browse-page.css')
+        self.assertIn('--app-z-sticky: 30;', tokens_source)
+        self.assertIn('z-index: var(--app-z-sticky);', browse_source)
 
         self.assertIn('class="ui-page-header ui-page-header--icon', page_header_source)
         self.assertIn('class="ui-page-title"', page_header_source)

@@ -108,6 +108,11 @@ for (const fileName of styleFiles) {
 
     checkedRadiusDeclarations += 1;
     const value = radiusMatch[1].replace(/\s*!important\s*$/, "").trim();
+    if (value.includes("calc(")) {
+      failures.push(
+        `${location}: derived radius values are not allowed: ${value}`,
+      );
+    }
     const withoutAllowedTokens = value
       .replace(
         /var\(--app-radius-(?:control|surface|circle)\)/g,
