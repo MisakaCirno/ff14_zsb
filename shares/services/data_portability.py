@@ -2,18 +2,14 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, time, timedelta
-from decimal import Decimal
+from datetime import UTC, datetime
 from hashlib import sha256
 import json
-import math
 import os
 from pathlib import Path
-import re
 import shutil
-from types import MappingProxyType
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from django.apps import apps
 from django.core import serializers
@@ -21,17 +17,43 @@ from django.db import connection, models, transaction
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.models import Max
-from django.utils.encoding import is_protected_type
-from django.utils.functional import Promise
 from django.utils import timezone
 
-
-DATASET_FORMAT = 'ffxivshare-jsonl'
-DATASET_VERSION = 3
-SUPPORTED_DATASET_VERSIONS = frozenset({1, 2, DATASET_VERSION})
-MANIFEST_FILENAME = 'manifest.json'
-VALIDATION_REPORT_FILENAME = 'validation-report.json'
-IMPORT_REPORT_FILENAME = 'import-report.json'
+from .data_portability_codec import (
+    _current_v3_model_schema_signature,
+    _format_v3_datetime,
+    _serialize_queryset,
+    _v3_record,
+    _write_v3_record,
+)
+from .data_portability_schema import (
+    DATASET_FORMAT,
+    DATASET_VERSION,
+    ENTITY_BY_NAME,
+    ENTITY_FIELDS_BY_VERSION,
+    ENTITY_SPECS,
+    ENTITY_SPECS_BY_VERSION,
+    IMPORT_REPORT_FILENAME,
+    MANIFEST_FILENAME,
+    SUPPORTED_DATASET_VERSIONS,
+    VALIDATION_REPORT_FILENAME,
+    V1_ENTITY_FIELDS,
+    V1_ENTITY_SPECS,
+    V2_ENTITY_FIELDS,
+    V2_ENTITY_SPECS,
+    V3_CODEC,
+    V3_ENTITY_FIELDS,
+    V3_ENTITY_SPECS,
+    V3_MODEL_SCHEMA_SIGNATURE,
+    V3_NATURAL_KEY_PROTOCOL,
+    V3_SESSION_PROJECTION_POLICY,
+    DataPortabilityError,
+    EntitySpec,
+    _entity_by_name_for_version,
+    _entity_specs_for_version,
+    _schema_fingerprint,
+    _V3_DATETIME_PATTERN,
+)
 
 V1_SHARE_LOG_ACTIONS = frozenset({
     'create',
@@ -47,279 +69,12 @@ V1_SHARE_LOG_ACTIONS = frozenset({
 HISTORICAL_REPORT_REASON_FALLBACK = '历史举报下架记录未保存处理说明'
 HISTORICAL_REVIEW_REASON_FALLBACK = '历史审核拒绝记录未保存原因'
 HISTORICAL_PRIVATE_REASON_FALLBACK = '历史私密状态来源待人工确认'
-V3_CODEC = 'canonical-jsonl-utc-microseconds'
-V3_SESSION_PROJECTION_POLICY = 'force_logout_at_cutover'
-V3_MODEL_SCHEMA_SIGNATURE = (
-    '9b91a3b943d2986115508db51c216d94040053ec2c8e19b900acd2e0ddfdd685'
-)
-V3_NATURAL_KEY_PROTOCOL = MappingProxyType({
-    'auth.group': ('name',),
-    'auth.permission': ('codename', 'content_type.app_label', 'content_type.model'),
-    'auth.user': ('username',),
-    'contenttypes.contenttype': ('app_label', 'model'),
-})
 SQLITE_INTERNAL_TABLES = frozenset({
     'sqlite_sequence',
     'sqlite_stat1',
     'sqlite_stat4',
 })
 POSTGRES_IMPORT_LOCK_KEYS = (0x46584653, 0x524D3139)
-_V3_DATETIME_PATTERN = re.compile(
-    r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$'
-)
-
-
-@dataclass(frozen=True)
-class EntitySpec:
-    name: str
-    model_label: str
-    filename: str
-
-    @property
-    def model(self):
-        return apps.get_model(self.model_label)
-
-
-V1_ENTITY_SPECS = (
-    EntitySpec('groups', 'auth.Group', 'groups.jsonl'),
-    EntitySpec('users', 'auth.User', 'users.jsonl'),
-    EntitySpec('user_profiles', 'shares.UserProfile', 'user_profiles.jsonl'),
-    EntitySpec('shares', 'shares.Share', 'shares.jsonl'),
-    EntitySpec('collections', 'shares.Collection', 'collections.jsonl'),
-    EntitySpec('collection_items', 'shares.CollectionItem', 'collection_items.jsonl'),
-    EntitySpec('reports', 'shares.Report', 'reports.jsonl'),
-    EntitySpec('share_logs', 'shares.ShareLog', 'share_logs.jsonl'),
-    EntitySpec('announcements', 'shares.Announcement', 'announcements.jsonl'),
-    EntitySpec('site_messages', 'shares.SiteMessage', 'site_messages.jsonl'),
-)
-V2_ENTITY_SPECS = V1_ENTITY_SPECS
-V3_ENTITY_SPECS = (
-    *V2_ENTITY_SPECS,
-    EntitySpec(
-        'admin_log_entries',
-        'admin.LogEntry',
-        'admin_log_entries.jsonl',
-    ),
-)
-ENTITY_SPECS_BY_VERSION = MappingProxyType({
-    1: V1_ENTITY_SPECS,
-    2: V2_ENTITY_SPECS,
-    3: V3_ENTITY_SPECS,
-})
-ENTITY_SPECS = ENTITY_SPECS_BY_VERSION[DATASET_VERSION]
-ENTITY_BY_NAME = {spec.name: spec for spec in ENTITY_SPECS}
-
-# Dataset schemas are public migration contracts, not projections of whichever
-# Django models happen to be installed when an import runs.  Keep every v1
-# entity explicit so later model fields cannot silently become required by the
-# historical validator or enter the v1 database digest.
-V1_ENTITY_FIELDS = MappingProxyType({
-    'groups': frozenset({
-        'name',
-        'permissions',
-    }),
-    'users': frozenset({
-        'password',
-        'last_login',
-        'is_superuser',
-        'username',
-        'first_name',
-        'last_name',
-        'email',
-        'is_staff',
-        'is_active',
-        'date_joined',
-        'groups',
-        'user_permissions',
-    }),
-    'user_profiles': frozenset({
-        'user',
-        'nickname',
-        'bio',
-        'home_feed_mode',
-        'created_at',
-        'updated_at',
-    }),
-    'shares': frozenset({
-        'share_id',
-        'title',
-        'strategy_code',
-        'description',
-        'author',
-        'created_at',
-        'updated_at',
-        'category',
-        'visibility',
-        'status',
-        'review_feedback',
-        'reviewed_at',
-        'reviewed_by',
-        'is_spoiler',
-        'is_nsfw',
-        'is_original',
-        'views',
-        'copies',
-        'likes',
-        'favorites',
-    }),
-    'collections': frozenset({
-        'title',
-        'description',
-        'author',
-        'created_at',
-        'updated_at',
-        'is_public',
-    }),
-    'collection_items': frozenset({
-        'collection',
-        'share',
-        'order',
-        'added_at',
-    }),
-    'reports': frozenset({
-        'share',
-        'reporter',
-        'reason',
-        'created_at',
-        'status',
-        'resolved_at',
-        'resolved_by',
-        'resolution_reason',
-    }),
-    'share_logs': frozenset({
-        'share',
-        'user',
-        'action',
-        'details',
-        'created_at',
-    }),
-    'announcements': frozenset({
-        'title',
-        'content',
-        'is_active',
-        'created_at',
-        'updated_at',
-    }),
-    'site_messages': frozenset({
-        'recipient',
-        'sender',
-        'message_type',
-        'title',
-        'content',
-        'related_share',
-        'related_report',
-        'metadata',
-        'created_at',
-        'read_at',
-        'archived_at',
-    }),
-})
-
-# v2 added persistent moderation restrictions to Share.  It remains a frozen
-# historical wire contract: future Django model fields must require a dataset
-# version bump instead of silently changing v2 validation or digests.
-V2_ENTITY_FIELDS = MappingProxyType({
-    **V1_ENTITY_FIELDS,
-    'shares': frozenset({
-        *V1_ENTITY_FIELDS['shares'],
-        'restriction_state',
-        'restriction_reason',
-        'restricted_at',
-        'restricted_by',
-    }),
-})
-V3_ENTITY_FIELDS = MappingProxyType({
-    **V2_ENTITY_FIELDS,
-    'admin_log_entries': frozenset({
-        'action_time',
-        'user',
-        'content_type',
-        'object_id',
-        'object_repr',
-        'action_flag',
-        'change_message',
-    }),
-})
-ENTITY_FIELDS_BY_VERSION = MappingProxyType({
-    1: V1_ENTITY_FIELDS,
-    2: V2_ENTITY_FIELDS,
-    3: V3_ENTITY_FIELDS,
-})
-
-for frozen_version, frozen_specs in ENTITY_SPECS_BY_VERSION.items():
-    frozen_entity_names = frozenset(spec.name for spec in frozen_specs)
-    if frozenset(ENTITY_FIELDS_BY_VERSION[frozen_version]) != frozen_entity_names:
-        raise RuntimeError(
-            f'The frozen v{frozen_version} schema must cover every portable entity.'
-        )
-
-
-def _entity_specs_for_version(dataset_version: int) -> tuple[EntitySpec, ...]:
-    try:
-        return ENTITY_SPECS_BY_VERSION[dataset_version]
-    except KeyError as exc:
-        raise DataPortabilityError(
-            f'No entity projection for dataset version {dataset_version}.'
-        ) from exc
-
-
-def _entity_by_name_for_version(dataset_version: int) -> dict[str, EntitySpec]:
-    return {
-        spec.name: spec
-        for spec in _entity_specs_for_version(dataset_version)
-    }
-
-
-def _schema_fingerprint(dataset_version: int) -> str:
-    specs = _entity_specs_for_version(dataset_version)
-    payload = {
-        'format': DATASET_FORMAT,
-        'format_version': dataset_version,
-        'codec': V3_CODEC if dataset_version == 3 else 'django-jsonl-legacy',
-        'entities': [
-            {
-                'name': spec.name,
-                'model': spec.model_label.lower(),
-                'file': spec.filename,
-                'fields': sorted(ENTITY_FIELDS_BY_VERSION[dataset_version][spec.name]),
-            }
-            for spec in specs
-        ],
-    }
-    if dataset_version == 3:
-        payload['semantic_contract'] = {
-            'model_schema_signature': V3_MODEL_SCHEMA_SIGNATURE,
-            'datetime': 'utc-with-exactly-six-microseconds',
-            'foreign_keys': 'natural-key-when-available-otherwise-primary-key',
-            'json': 'utf8-sorted-keys-no-nonfinite-numbers',
-            'many_to_many': 'auto-through-natural-keys-canonical-sort',
-            'natural_keys': {
-                model_label: list(fields)
-                for model_label, fields in V3_NATURAL_KEY_PROTOCOL.items()
-            },
-            'sessions': {
-                'policy': V3_SESSION_PROJECTION_POLICY,
-                'serialized': False,
-                'source_evidence': [
-                    'row_count',
-                    'unexpired_count',
-                    'latest_expiry',
-                ],
-                'target_required_row_count': 0,
-            },
-        }
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(',', ':'),
-        sort_keys=True,
-    ).encode('utf-8')
-    return sha256(encoded).hexdigest()
-
-
-class DataPortabilityError(RuntimeError):
-    pass
-
 
 @dataclass
 class ParsedRecord:
@@ -396,263 +151,6 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     finally:
         if temporary.exists():
             temporary.unlink()
-
-
-def _serialize_queryset(queryset, stream, *, fields: set[str] | None = None) -> None:
-    options: dict[str, Any] = {
-        'stream': stream,
-        'use_natural_foreign_keys': True,
-    }
-    if fields is not None:
-        options['fields'] = fields
-    serializers.serialize(
-        'jsonl',
-        queryset.iterator(chunk_size=1000),
-        **options,
-    )
-
-
-def _format_v3_datetime(value: datetime) -> str:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).strftime('%Y-%m-%dT%H:%M:%S.%fZ')
-
-
-def _canonical_v3_value(value: Any) -> Any:
-    if isinstance(value, datetime):
-        return _format_v3_datetime(value)
-    if isinstance(value, date):
-        return value.isoformat()
-    if isinstance(value, time):
-        if value.tzinfo is not None:
-            raise DataPortabilityError('v3 cannot encode timezone-aware time values.')
-        return value.strftime('%H:%M:%S.%f')
-    if isinstance(value, timedelta):
-        return str(value)
-    if isinstance(value, (Decimal, UUID, Promise)):
-        return str(value)
-    if isinstance(value, float) and not math.isfinite(value):
-        raise DataPortabilityError('v3 cannot encode non-finite floating-point values.')
-    if isinstance(value, dict):
-        return {
-            str(key): _canonical_v3_value(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple)):
-        return [_canonical_v3_value(item) for item in value]
-    return value
-
-
-def _v3_schema_value(value: Any) -> Any:
-    if value is None or isinstance(value, (bool, int, str)):
-        return value
-    if isinstance(value, (Decimal, UUID)):
-        return str(value)
-    if isinstance(value, (list, tuple)):
-        return [_v3_schema_value(item) for item in value]
-    raise RuntimeError(
-        f'Unsupported value in the frozen v3 model schema: {value!r}'
-    )
-
-
-def _v3_callable_name(value: Any) -> str | None:
-    if value is None:
-        return None
-    module = getattr(value, '__module__', value.__class__.__module__)
-    name = getattr(
-        value,
-        '__qualname__',
-        getattr(value, '__name__', value.__class__.__qualname__),
-    )
-    return f'{module}.{name}'
-
-
-def _v3_model_field_semantics(model_field) -> dict[str, Any]:
-    relation_kind = None
-    if model_field.many_to_many:
-        relation_kind = 'many_to_many'
-    elif model_field.one_to_one:
-        relation_kind = 'one_to_one'
-    elif model_field.many_to_one:
-        relation_kind = 'many_to_one'
-
-    relation = None
-    if relation_kind is not None:
-        related_model = model_field.remote_field.model
-        relation = {
-            'kind': relation_kind,
-            'target_model': related_model._meta.label_lower,
-            'target_field': (
-                related_model._meta.pk.name
-                if model_field.many_to_many
-                else model_field.target_field.name
-            ),
-            'db_constraint': bool(getattr(model_field, 'db_constraint', True)),
-            'on_delete': _v3_callable_name(
-                getattr(model_field.remote_field, 'on_delete', None)
-            ),
-            'reference_encoding': (
-                f'natural:{related_model._meta.label_lower}'
-                if related_model._meta.label_lower in V3_NATURAL_KEY_PROTOCOL
-                else 'primary_key'
-            ),
-        }
-        if model_field.many_to_many:
-            through = model_field.remote_field.through
-            relation.update({
-                'through_auto_created': bool(through._meta.auto_created),
-                'through_table': through._meta.db_table,
-                'through_source_field': model_field.m2m_field_name(),
-                'through_target_field': model_field.m2m_reverse_field_name(),
-            })
-
-    choices = sorted(
-        (_v3_schema_value(choice[0]) for choice in model_field.flatchoices),
-        key=_v3_sort_key,
-    )
-    return {
-        'name': model_field.name,
-        'column': model_field.column,
-        'internal_type': model_field.get_internal_type(),
-        'primary_key': bool(model_field.primary_key),
-        'null': bool(model_field.null),
-        'blank': bool(model_field.blank),
-        'unique': bool(model_field.unique),
-        'db_index': bool(model_field.db_index),
-        'db_collation': getattr(model_field, 'db_collation', None),
-        'serialize': bool(model_field.serialize),
-        'max_length': model_field.max_length,
-        'max_digits': getattr(model_field, 'max_digits', None),
-        'decimal_places': getattr(model_field, 'decimal_places', None),
-        'choices': choices,
-        'json_encoder': _v3_callable_name(getattr(model_field, 'encoder', None)),
-        'json_decoder': _v3_callable_name(getattr(model_field, 'decoder', None)),
-        'relation': relation,
-    }
-
-
-def _current_v3_model_schema_signature() -> str:
-    payload = []
-    for spec in V3_ENTITY_SPECS:
-        model = spec.model
-        frozen_fields = V3_ENTITY_FIELDS[spec.name]
-        payload.append({
-            'entity': spec.name,
-            'model': model._meta.label_lower,
-            'table': model._meta.db_table,
-            'primary_key': _v3_model_field_semantics(model._meta.pk),
-            'fields': [
-                _v3_model_field_semantics(model._meta.get_field(field_name))
-                for field_name in sorted(frozen_fields)
-            ],
-        })
-    encoded = json.dumps(
-        payload,
-        ensure_ascii=False,
-        allow_nan=False,
-        separators=(',', ':'),
-        sort_keys=True,
-    ).encode('utf-8')
-    return sha256(encoded).hexdigest()
-
-
-def _v3_sort_key(value: Any) -> str:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        allow_nan=False,
-        separators=(',', ':'),
-        sort_keys=True,
-    )
-
-
-def _v3_related_reference(related_model, related) -> Any:
-    model_label = related_model._meta.label_lower
-    if model_label == 'auth.user':
-        value = [related.username]
-    elif model_label == 'auth.group':
-        value = [related.name]
-    elif model_label == 'contenttypes.contenttype':
-        value = [related.app_label, related.model]
-    elif model_label == 'auth.permission':
-        value = [
-            related.codename,
-            related.content_type.app_label,
-            related.content_type.model,
-        ]
-    else:
-        value = related.pk
-    return _canonical_v3_value(value)
-
-
-def _v3_field_value(obj, model_field):
-    if model_field.is_relation and (
-        model_field.many_to_one or model_field.one_to_one
-    ):
-        related_pk = getattr(obj, model_field.attname)
-        if related_pk is None:
-            return None
-        related_model = model_field.remote_field.model
-        related = getattr(obj, model_field.name)
-        return _v3_related_reference(related_model, related)
-
-    value = model_field.value_from_object(obj)
-    if not is_protected_type(value) and not isinstance(
-        value,
-        (dict, list, tuple, Decimal, UUID, Promise),
-    ):
-        value = model_field.value_to_string(obj)
-    return _canonical_v3_value(value)
-
-
-def _v3_record(spec: EntitySpec, obj, fields: set[str]) -> dict[str, Any]:
-    model = spec.model
-    field_map = {
-        model_field.name: model_field
-        for model_field in model._meta.local_fields
-        if not model_field.primary_key
-    }
-    m2m_map = {
-        model_field.name: model_field
-        for model_field in model._meta.local_many_to_many
-        if model_field.remote_field.through._meta.auto_created
-    }
-    serialized_fields: dict[str, Any] = {}
-    for field_name in sorted(fields):
-        if field_name in field_map:
-            serialized_fields[field_name] = _v3_field_value(
-                obj,
-                field_map[field_name],
-            )
-            continue
-        try:
-            model_field = m2m_map[field_name]
-        except KeyError as exc:
-            raise DataPortabilityError(
-                f'Frozen v3 field {spec.name}.{field_name} no longer exists.'
-            ) from exc
-        related_model = model_field.remote_field.model
-        values = []
-        for related in getattr(obj, field_name).all().iterator(chunk_size=1000):
-            values.append(_v3_related_reference(related_model, related))
-        serialized_fields[field_name] = sorted(values, key=_v3_sort_key)
-
-    return {
-        'model': spec.model_label.lower(),
-        'pk': _canonical_v3_value(obj.pk),
-        'fields': serialized_fields,
-    }
-
-
-def _write_v3_record(stream, record: dict[str, Any]) -> None:
-    stream.write(json.dumps(
-        record,
-        ensure_ascii=False,
-        allow_nan=False,
-        separators=(',', ':'),
-        sort_keys=True,
-    ))
-    stream.write('\n')
 
 
 def _serialize_v3_queryset(queryset, stream, *, spec: EntitySpec) -> None:
