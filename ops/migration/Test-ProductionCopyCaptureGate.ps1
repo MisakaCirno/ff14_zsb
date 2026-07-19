@@ -54,6 +54,43 @@ if ($env:OS -ne 'Windows_NT') {
     throw 'Production-copy capture-gate contracts require Windows NTFS and DACL APIs.'
 }
 
+$captureWrapper = Join-Path $RepositoryRoot 'ops\migration\Invoke-LegacyProductionCapture.ps1'
+Assert-Contract `
+    -Condition (Test-Path -LiteralPath $captureWrapper -PathType Leaf) `
+    -Message 'Legacy production capture wrapper is missing.'
+$parseTokens = $null
+$parseErrors = $null
+[System.Management.Automation.Language.Parser]::ParseFile(
+    $captureWrapper,
+    [ref]$parseTokens,
+    [ref]$parseErrors
+) | Out-Null
+Assert-Contract `
+    -Condition ($parseErrors.Count -eq 0) `
+    -Message 'Legacy production capture wrapper has PowerShell syntax errors.'
+$wrapperSource = Get-Content -LiteralPath $captureWrapper -Raw -Encoding utf8
+$trustedToolSources = [ordered]@{
+    'ProductionCopyCaptureGate.py' = Join-Path $RepositoryRoot 'ops\migration\ProductionCopyCaptureGate.py'
+    'ProductionCopyHandoff.py' = Join-Path $RepositoryRoot 'ops\migration\ProductionCopyHandoff.py'
+    'Verify-SQLiteBackupSet.py' = Join-Path $RepositoryRoot 'ops\migration\Verify-SQLiteBackupSet.py'
+    'database_backup.py' = Join-Path $RepositoryRoot 'shares\services\database_backup.py'
+}
+foreach ($trustedTool in $trustedToolSources.GetEnumerator()) {
+    $trustedHash = (
+        Get-FileHash -LiteralPath $trustedTool.Value -Algorithm SHA256
+    ).Hash.ToLowerInvariant()
+    $trustedBinding = "'$($trustedTool.Key)' = '$trustedHash'"
+    Assert-Contract `
+        -Condition $wrapperSource.Contains($trustedBinding) `
+        -Message "Legacy production capture wrapper has a stale digest for $($trustedTool.Key)."
+}
+Assert-Contract `
+    -Condition $wrapperSource.Contains("source_modified = `$false") `
+    -Message 'Legacy production capture wrapper must report that the source was not modified.'
+Assert-Contract `
+    -Condition $wrapperSource.Contains("cutover_authorized = `$false") `
+    -Message 'Legacy production capture wrapper must not grant cutover authority.'
+
 if ([string]::IsNullOrWhiteSpace($RunParent)) {
     $localApplicationData = [Environment]::GetFolderPath(
         [Environment+SpecialFolder]::LocalApplicationData

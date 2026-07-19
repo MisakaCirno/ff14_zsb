@@ -70,6 +70,18 @@ $PairVerification = Join-Path $PairVerificationParent 'production-20260717-pair.
 
 先在旧应用环境使用 SQLite Backup API 的 `backup_database` 创建在线数据库备份三件套；旧部署没有该命令时，使用下方四文件捕获门禁。两种入口生成完全相同的三件套契约；不要直接复制活动数据库，也不要更新旧部署来取得命令。记录来源主机、UTC 时点、应用版本、数据库摘要、四个捕获工具摘要和操作员，并取得与该时点一致的离线媒体或存储快照。若跨数据库与媒体的一致性必须短暂冻结写入，应使用另行批准并记录的 R19 取样窗口；它不等于 R20 的最终停写或切换窗口。然后逐字节复制数据库三件套与媒体快照到演练机。媒体清单必须针对离线媒体源生成：
 
+为减少旧 Windows 服务器上的人工操作，受控制品可以把 `Invoke-LegacyProductionCapture.ps1` 放在包根目录，并把下文列出的四个受审文件单独放进同级 `Tools` 子目录。包装脚本内置四个可信摘要，创建新的私有 CaptureRoot，并固定执行同一组 `preflight`→`capture` 门禁；它不会导入 Django、更新旧仓库、修改源数据库、停止服务或授权切换。已知旧部署可以在 PowerShell 中执行：
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+cd C:\FFXIVShare-R19-CaptureBundle
+.\Invoke-LegacyProductionCapture.ps1 `
+  -ApplicationVersion '244c32734e9fab5af05bf544a654615eeab31404' `
+  -ConfirmReadOnlyOnlineSnapshot
+```
+
+CaptureBundle 和 CaptureParent 必须分别是盘符根目录的直接子目录，默认使用 `C:\FFXIVShare-R19-CaptureBundle` 与 `C:\FFXIVShare-R19-Capture`；这是完整祖先链 ACL 门禁的一部分，不能从桌面、下载目录或仓库内运行。默认源仓库为 `C:\Users\Administrator\Desktop\srv\ff14_zsb`，默认源数据库为其下的 `db.sqlite3`，默认 Python 为其 `venv\Scripts\python.exe`。若实际路径不同，显式传入 `-ProductionRepositoryRoot`、`-SourceDatabase` 或 `-ProductionPython`。每次执行会生成新的 UTC CaptureId；成功输出使用私有 DACL，但为了避免在生产机传播只读 ACL，它会在复制到离线演练机后才按下文封存。失败现场禁止补文件或续跑，改用新的 `-CaptureId` 从头执行。
+
 ```powershell
 & $Python -E -s -B -X utf8 `
   "$Repo\ops\migration\MediaManifest.py" build `
