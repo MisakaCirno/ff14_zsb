@@ -160,7 +160,7 @@ class LegacyHomeFeedModeMigrationTests(TransactionTestCase):
 
 class AppliedHomeFeedModeMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0018_default_home_feed_waterfall')
-    migrate_to = ('shares', '0027_classify_legacy_private_shares')
+    migrate_to = ('shares', '0028_normalize_announcement_column_order')
 
     def setUp(self):
         super().setUp()

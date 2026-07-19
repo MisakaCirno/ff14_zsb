@@ -65,6 +65,11 @@ TABLE_UNIQUE_COLUMN_KEYS = frozenset(
     {"cid", "name", "descending", "collation"}
 )
 SQL_CHANGE_EXCEPTIONS = {
+    ("table", "shares_announcement", "shares_announcement"): {
+        "source_sql_sha256": "06df08da99c615e35e4bc39efd2289ac1a013adec30c9fe6ba02dc9ca6cb824e",
+        "destination_sql_sha256": "b65c6c81de68ffba94e81548351680a8f7debd2d12497a55970329f14bbc697b",
+        "reason": "0028 normalizes the historical announcement content column order",
+    },
     ("table", "shares_collectionitem", "shares_collectionitem"): {
         "source_sql_sha256": "0dea4fbafc2cd03c57ae5f3ceecafb95b61ae0c22de0160fd3883c5d245fb5ec",
         "destination_sql_sha256": "140870626a45265777ac1b093442a476b865e52faed90c9e28c7d0c8a16f8606",

@@ -293,8 +293,8 @@ $ProposalTerminal = Get-Content -LiteralPath $ProposalLedger |
 - `source_leaf_nodes`、`target_leaf_nodes` 和 pending migration 节点符合预期；
 - migration 的 Python/SQL 操作不会删除、截断、覆盖、合并或静默重写用户数据；
 - 对字段缩窄、类型变化、唯一约束和数据迁移有逐记录保留证明；任何无法证明无损的操作都停止审批；
-- 允许变化的五张表 `shares_collectionitem`、`shares_report`、`shares_share`、`shares_sharelog`、`shares_userprofile` 必须分别匹配冻结代码中的精确 source/destination SQL SHA-256 对；只允许一个精确旧唯一索引移除、20 个精确对象新增，以及 `shares_report.reporter_id`、`shares_sharelog.user_id` 两个精确 `notnull 1→0` 变化；
-- 所有声明例外必须在升级源库和最终目标中分别被完整消费；任何未消费例外、额外对象、未知 SQL 或其它列属性变化都阻断。即使哈希门禁通过，审阅人仍须逐项记录五张表 SQL 转换为何无损；
+- 允许变化的六张表 `shares_announcement`、`shares_collectionitem`、`shares_report`、`shares_share`、`shares_sharelog`、`shares_userprofile` 必须分别匹配冻结代码中的精确 source/destination SQL SHA-256 对；其中公告表只规范化 `content` 的物理列顺序并保护 AUTOINCREMENT 高水位。只允许一个精确旧唯一索引移除、20 个精确对象新增，以及 `shares_report.reporter_id`、`shares_sharelog.user_id` 两个精确 `notnull 1→0` 变化；
+- 所有声明例外必须在升级源库和最终目标中分别被完整消费；任何未消费例外、额外对象、未知 SQL 或其它列属性变化都阻断。即使哈希门禁通过，审阅人仍须逐项记录六张表 SQL 转换为何无损；
 - `migration_plan_sha256`、`migration_runtime_sha256`、`runtime_fingerprint_sha256`、`execution_bundle_sha256` 均来自本次 Proposal；
 - handoff 中的来源主机、UTC、操作员、release application version、数据库三件套、源媒体、两个目标副本和五范围逐节点 DACL/owner 清单符合本次受控工单；
 - 源数据库、三件套、媒体和 ACL 在 Proposal 完成后仍与 handoff 一致，`source_handoff_final_verified.content_verified=true`；
