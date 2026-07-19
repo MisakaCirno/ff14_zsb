@@ -8,10 +8,28 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.http import HttpResponse
 from django.urls import include, path, re_path
+from django.views.decorators.http import require_safe
 
 from . import health
 
 
+class RendererResponseTooLarge(Exception):
+    pass
+
+
+def _renderer_response(upstream, *, status, include_body=True):
+    content = b''
+    if include_body:
+        content = upstream.read(settings.RENDERER_PROXY_MAX_BYTES + 1)
+        if len(content) > settings.RENDERER_PROXY_MAX_BYTES:
+            raise RendererResponseTooLarge
+    content_type = upstream.headers.get('Content-Type') or 'application/octet-stream'
+    response = HttpResponse(content, status=status, content_type=content_type)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@require_safe
 def proxy_view(request, path):
     """Forward development-only renderer requests without losing URL boundaries."""
     if path.startswith('board/'):
@@ -26,27 +44,34 @@ def proxy_view(request, path):
         target_url += '?' + request.META.get('QUERY_STRING')
 
     try:
-        req = urllib.request.Request(target_url)
+        req = urllib.request.Request(target_url, method=request.method)
         for header in ['HTTP_USER_AGENT', 'HTTP_ACCEPT']:
             if header in request.META:
                 key = header[5:].replace('_', '-').title()
                 req.add_header(key, request.META[header])
 
-        with urllib.request.urlopen(req) as response:
-            content = response.read()
-            return HttpResponse(
-                content,
+        with urllib.request.urlopen(
+            req,
+            timeout=settings.RENDERER_PROXY_TIMEOUT_SECONDS,
+        ) as response:
+            return _renderer_response(
+                response,
                 status=response.status,
-                content_type=response.headers.get('Content-Type'),
+                include_body=request.method != 'HEAD',
             )
     except urllib.error.HTTPError as error:
-        return HttpResponse(
-            error.read(),
-            status=error.code,
-            content_type=error.headers.get('Content-Type'),
-        )
-    except Exception as error:
-        return HttpResponse(f'Proxy Error: {error}', status=500)
+        try:
+            return _renderer_response(
+                error,
+                status=error.code,
+                include_body=request.method != 'HEAD',
+            )
+        except RendererResponseTooLarge:
+            return HttpResponse('Renderer response exceeded the size limit.', status=502)
+    except RendererResponseTooLarge:
+        return HttpResponse('Renderer response exceeded the size limit.', status=502)
+    except Exception:
+        return HttpResponse('Renderer proxy request failed.', status=502)
 
 # 自定义管理后台标题
 admin.site.site_header = '粘鼠板儿管理后台'
