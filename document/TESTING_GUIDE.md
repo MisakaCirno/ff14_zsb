@@ -26,6 +26,25 @@ powershell -ExecutionPolicy Bypass -File .\verify.ps1
 .\verify.ps1 -Profile Release
 ```
 
+`Release` 会在合成生产副本演练之外启动隔离的临时 Django 站点，并运行 Playwright/Chromium 与 axe。首次在本机运行前安装浏览器：
+
+```powershell
+Push-Location frontend
+npx.cmd playwright install chromium
+Pop-Location
+```
+
+只运行浏览器回归时使用：
+
+```powershell
+.\ops\testing\Test-BrowserFlows.ps1 `
+    -RepositoryRoot . `
+    -PythonExecutable .\venv\Scripts\python.exe `
+    -NpmExecutable npm.cmd
+```
+
+脚本只使用系统临时目录内的新 SQLite 和媒体目录，随机监听回环端口，并在结束后清理进程和数据。当前自动化覆盖敏感内容三态、详情弹层与焦点恢复、登录安全回跳、桌面核心页 WCAG A/AA、390px 移动端横向溢出和页面运行时异常。自动化无障碍扫描只能发现部分问题，仍需保留键盘、读屏和人工视觉验收。
+
 前端行为测试和颜色对比度也可单独运行：
 
 ```powershell

@@ -68,6 +68,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ops\nginx\Test-NginxCo
 
 Waitress 冒烟使用临时环境文件、临时 SQLite 和随机回环端口，结束后必须没有残留进程、监听端口或临时目录。`verify.ps1 -Profile Full` 和 `-Profile Release` 会在 Windows 上执行这些契约；默认 `Fast` 档位跳过重量级迁移契约和真实 Waitress 进程冒烟，`-SkipTests` 则进一步跳过 Django 测试。
 
+`Release` 还会运行隔离的 Playwright/Chromium 核心流程和 axe 无障碍扫描；CI 会安装匹配版本的 Chromium，本机首次运行需在 `frontend` 目录执行 `npx playwright install chromium`。浏览器测试创建全新的临时数据库，不得改为指向本地日常库或线上副本。
+
+生产安全边界：
+
+- `CSP_REPORT_ONLY=True` 是观察期默认值。检查真实 HTTPS 页面和日志没有 CSP 违规后，才能改为 `False` 强制执行；切换必须作为独立发布并保留回滚。
+- 当前默认 Django cache 是进程内存，限流计数不会跨进程或跨实例共享。保持单个 Waitress 应用进程；扩容前配置共享 cache，并确认 `manage.py check --deploy` 不再出现 `shares.W001`。
+- `static/app/assets/` 是 Vite 内容哈希资源，Nginx 示例为其发送一年 `immutable` 缓存；其余 `/static/` 只缓存一小时，`/media/` 不得照搬永久缓存。
+- 开发态 `/n/` 代理有超时和响应大小上限，但生产不使用它；真实 `/n/` 仍由现有 Nginx/独立渲染器提供。
+
 ## 安装 WinSW 服务
 
 仓库不下载也不提交 WinSW 二进制。由运维人员从 [WinSW 官方 `v2.12.0` release](https://github.com/winsw/winsw/releases/tag/v2.12.0) 获取 `WinSW-x64.exe`，通过独立可信渠道记录预期 SHA256，再把二进制放到临时 staging 目录。不要把“刚对同一个未知文件计算出的哈希”当作可信预期值。

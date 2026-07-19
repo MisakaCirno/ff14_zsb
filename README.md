@@ -1,110 +1,107 @@
 # 粘鼠板儿
 
-**该项目绝大部分内容由AI生成，暂未进行完全的内容审查**
-**请根据情况谨慎使用该项目，避免造成意料之外的损失**
+面向《最终幻想 XIV》玩家的战术板分享站。用户可以发布、搜索、收藏和整理战术板代码，也可以通过公开、仅链接可见和私有三种可见性控制内容。主站包含审核、举报、站内信、合集、站点动态，以及剧透／令人不适内容的隐藏、遮挡、显示三态浏览策略。
 
-> ✅ **项目状态**: 已完成初始化并成功运行！
-> 🆕 **最新更新**: 用户系统功能扩展完成（昵称设置、密码修改）
+项目已进入可持续维护阶段。当前主站采用 Django 5.2 LTS、SQLite（可切换 PostgreSQL）、Vite、TypeScript、HTMX 和 Bootstrap。这个技术路线与网站的服务端渲染、渐进增强和中等规模社区业务相匹配，暂不需要重写为前后端分离架构。
 
-## 项目简介
+“小抄儿”是独立功能，不属于本轮主站重构范围。`static/overlay/`、`static/viewer*` 和 `sb_renderer/` 的现有行为及生产 `/n/` 路由必须保持兼容。
 
-当前项目为便于玩家互相分享自己战术板配置的交流平台，游戏内可以把配置导出成类似`[stgy:a0+k-wvprSQA8rHpf1cY9Fk5R6ZNO5n7lvBSj9+rmE3OpbNbquadZFNuf34LKtB6Vvu+VwRuRlBjVWYHUviSUm70CoiZFyhI4mL2zvz2dqd2H+n24dmIzgMnUiI7BIEsAjEu6Yw8QNW73V4PV9for2+LXvcEt7lWK15eZwHDQojZm4juqzJiypDd5BkvBnZNs5j2tK]`的分享代码，其他人可以使用代码导入。
+## 本地启动（Windows）
 
-我们的平台作为分享战术板使用，用户可以创建一个战术板分享，输入标题、战术板代码等项，创建成一个链接，访问这个链接就可以获取到代码以及查看预览。
+要求 Python 3.11、Node.js 22 和 PowerShell。以下命令均在仓库根目录执行：
 
-平台也有用户系统，用户可以增删改查自己的分享，也可以列出和查看其他人的公开分享。
+```powershell
+py -3.11 -m venv venv
+venv\Scripts\python.exe -m pip install -r requirements.txt
+npm.cmd ci --prefix frontend
 
-## ✨ 核心功能
-
-### 分享管理
-- 📝 创建战术板分享
-- 👁️ 预览战术板配置
-- 🔗 生成分享链接
-- 📱 生成二维码
-- ✏️ 编辑/删除自己的分享
-- 🔒 公开/私有分享控制
-
-### 用户系统
-- 👤 用户注册和登录
-- 🎭 **设置个性化昵称**
-- 📝 **编辑个人简介**
-- 🔑 **修改密码功能**
-- 📊 查看账户信息
-- 💼 我的分享管理
-
-### 社区功能
-- 🏠 瀑布流分享广场
-- 👥 **昵称显示系统**（设置后其他人看到昵称）
-- 📈 浏览量统计
-- 🔍 分享浏览
-
-## 快速开始
-
-### 访问地址
-- **主页**: http://127.0.0.1:8000/
-- **个人资料**: http://127.0.0.1:8000/profile/edit/
-- **修改密码**: http://127.0.0.1:8000/profile/password/
-- **管理后台**: http://127.0.0.1:8000/admin/
-
-### 创建管理员账户
-
-项目不提供默认管理员凭据。首次使用管理后台前，请在目标环境中交互创建超级用户：
-
-```bash
-python manage.py createsuperuser
+Copy-Item .env.sample .env
+venv\Scripts\python.exe -B manage.py migrate
+npm.cmd --prefix frontend run build
+venv\Scripts\python.exe -B manage.py runserver
 ```
 
-按命令提示输入管理员用户名和强密码，不要把密码写入代码、文档或版本库。忘记密码时使用 `python manage.py changepassword <管理员用户名>` 交互重置。
+访问 <http://127.0.0.1:8000/>。Windows 的 `cmd.exe` 不支持 `source venv/bin/activate`；本项目也不要求激活虚拟环境，直接调用 `venv\Scripts\python.exe` 最稳定。
 
-### 启动服务器
-```bash
-# 激活虚拟环境
-.\venv\Scripts\Activate.ps1
+前端监听构建可在另一个终端运行：
 
-# 安装并构建主站前端
-npm ci --prefix frontend
-npm --prefix frontend run build
-
-# 启动开发服务器
-python manage.py runserver
+```powershell
+npm.cmd --prefix frontend run dev
 ```
 
-## 📚 文档
+如需管理后台，交互创建本地管理员，不要把密码写进代码或文档：
 
-- 📖 **详细启动指南**: [STARTUP_GUIDE.md](STARTUP_GUIDE.md)
-- 🏭 **Windows 生产服务**: [document/WINDOWS_PRODUCTION.md](document/WINDOWS_PRODUCTION.md)
-- 🆕 **用户系统更新说明**: [USER_SYSTEM_UPDATE.md](USER_SYSTEM_UPDATE.md)
-- 🎛️ **管理后台使用指南**: [ADMIN_GUIDE.md](ADMIN_GUIDE.md)
-
-## 目标功能
-1. 主页面为广场，其有瀑布流的分享详情卡片列表
-1. 有导航栏，其中包括主页、个人信息和单独的创建新分享按钮
-1. 使用分享按钮呼出模态窗口，其可让用户将战术板配置分享代码等信息输入并提交成新的分享
-2. 创建完成后将用户转置该代码的分享页面
-1. 详情页包含用户反馈、链接和预览图，并可基于预览图合成带当前链接二维码的分享图片
-
-## 技术细节
-
-### 预览
-预览使用现有的库，其在当前目录下，使用方式类似于
-```html
-<style>
-    iframe {
-        width: 1024px;
-        height: 768px;
-        border: none;
-    }
-</style>
-
-<iframe src="./static/viewer/embed.html#[stgy:a0+k-wvprSQA8rHpf1cY9Fk5R6ZNO5n7lvBSj9+rmE3OpbNbquadZFNuf34LKtB6Vvu+VwRuRlBjVWYHUviSUm70CoiZFyhI4mL2zvz2dqd2H+n24dmIzgMnUiI7BIEsAjEu6Yw8QNW73V4PV9for2+LXvcEt7lWK15eZwHDQojZm4juqzJiypDd5BkvBnZNs5j2tK]"></iframe>
+```powershell
+venv\Scripts\python.exe -B manage.py createsuperuser
 ```
 
-### 技术栈
-- 后端使用Django 5.2 LTS实现，SQLite数据库
-- 前端使用 Vite、TypeScript、HTMX 和 Bootstrap
-- 短链接使用应用内生成的8位分享ID
-- 使用虚拟环境
+## 验证
 
-## 📄 致谢
+日常开发使用 Fast 档位。它仍会执行完整 Django 测试、前端行为测试、类型检查、设计系统和基础运维契约，只跳过耗时的生产副本演练与真实服务进程检查：
 
-本项目引用了 [Ennea/ffxiv-strategy-board-viewer](https://github.com/Ennea/ffxiv-strategy-board-viewer) 实现战术板相关的部分。
+```powershell
+.\verify.ps1
+```
+
+合并或候选发布前使用：
+
+```powershell
+.\verify.ps1 -Profile Full
+```
+
+Release 档位额外执行生产副本的合成离线端到端演练，以及隔离临时数据库上的 Playwright/Chromium 核心流程和 axe WCAG A/AA 扫描：
+
+```powershell
+Push-Location frontend
+npx.cmd playwright install chromium
+Pop-Location
+.\verify.ps1 -Profile Release
+```
+
+只运行浏览器回归：
+
+```powershell
+.\ops\testing\Test-BrowserFlows.ps1 `
+    -RepositoryRoot . `
+    -PythonExecutable .\venv\Scripts\python.exe `
+    -NpmExecutable npm.cmd
+```
+
+依赖漏洞审计位于独立 CI 作业，不会因外部漏洞库网络波动拖慢本地验证。手动审计命令见 `requirements-audit.txt` 和 `.github/workflows/backend-ci.yml`。
+
+## 数据与发布安全
+
+- 本地 `db.sqlite3` 只是开发数据；正式数据在线上。任何正式迁移都必须先取得数据库和媒体的不可变副本，并在隔离目录完成两轮 R19 演练。
+- 迁移、导出、导入和校验工具均保留旧格式兼容；不得用旧数据库覆盖已经产生新用户写入的数据库。
+- 生产 Waitress 只能监听 `127.0.0.1`，由同机 Nginx 提供 HTTPS、静态文件和媒体文件。
+- 当前限流默认使用进程内缓存，只适用于单应用进程。扩展为多进程或多实例前必须配置共享缓存；`manage.py check --deploy` 会以 `shares.W001` 提醒这一边界。
+- CSP 默认以 Report-Only 运行。收集并确认生产页面没有违规后，才可将 `CSP_REPORT_ONLY=False` 切换为强制模式。
+- Vite 指纹资源可由 Nginx 永久缓存；普通静态文件只使用短缓存，用户媒体不设置永久缓存。
+- 当前尚未取得线上不可变数据库／媒体副本，所以 R19 未完成，R20 正式切换未获授权。
+
+## 目录
+
+```text
+ffxivshare/            Django 配置、环境、安全头、健康检查与可观测性
+shares/                主站领域模型、页面、策略、服务、迁移和测试
+frontend/src/          TypeScript 与设计系统源码
+frontend/e2e/          Playwright 核心流程与 axe 无障碍回归
+templates/             Django 服务端模板
+ops/                   Windows 服务、Nginx、备份和数据迁移工具
+document/              架构、测试、生产运行和迁移手册
+static/overlay/        独立“小抄儿”功能（本轮不改）
+sb_renderer/           独立渲染器（本轮不改）
+```
+
+## 进一步阅读
+
+- [重构执行计划](document/REFACTORING_PLAN.md)
+- [重构问题清单](document/REFACTORING_BACKLOG.md)
+- [项目当前状态](document/PROJECT_STATUS.md)
+- [测试指南](document/TESTING_GUIDE.md)
+- [Windows 生产运行手册](document/WINDOWS_PRODUCTION.md)
+- [生产副本演练手册](document/PRODUCTION_COPY_REHEARSAL.md)
+- [可观测性约定](document/OBSERVABILITY.md)
+- [HTTP 契约](document/HTTP_CONTRACTS.md)
+
+项目使用并兼容 [Ennea/ffxiv-strategy-board-viewer](https://github.com/Ennea/ffxiv-strategy-board-viewer) 的战术板相关能力。《FINAL FANTASY XIV》相关商标和素材权利归其权利人所有。
