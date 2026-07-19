@@ -71,13 +71,13 @@ Pop-Location
 
 ## 数据与发布安全
 
-- 本地 `db.sqlite3` 只是开发数据；正式数据在线上。任何正式迁移都必须先取得数据库和媒体的不可变副本，并在隔离目录完成两轮 R19 演练。
+- 本地 `db.sqlite3` 只是开发数据；正式数据在线上。R19 已使用线上不可变捕获完成两轮独立离线演练；正式切换仍必须在停写后的最终备份副本上迁移和校验。
 - 迁移、导出、导入和校验工具均保留旧格式兼容；不得用旧数据库覆盖已经产生新用户写入的数据库。
 - 生产 Waitress 只能监听 `127.0.0.1`，由同机 Nginx 提供 HTTPS、静态文件和媒体文件。
 - 当前限流默认使用进程内缓存，只适用于单应用进程。扩展为多进程或多实例前必须配置共享缓存；`manage.py check --deploy` 会以 `shares.W001` 提醒这一边界。
 - CSP 默认以 Report-Only 运行。收集并确认生产页面没有违规后，才可将 `CSP_REPORT_ONLY=False` 切换为强制模式。
 - Vite 指纹资源可由 Nginx 永久缓存；普通静态文件只使用短缓存，用户媒体不设置永久缓存。
-- 当前尚未取得线上不可变数据库／媒体副本，所以 R19 未完成，R20 正式切换未获授权。
+- R19 已完成；R20 当前只进行现有 Git clone 部署的只读环境确认和运行单准备，正式切换仍未获授权。
 
 ## 目录
 
@@ -101,6 +101,7 @@ sb_renderer/           独立渲染器（本轮不改）
 - [测试指南](document/TESTING_GUIDE.md)
 - [Windows 生产运行手册](document/WINDOWS_PRODUCTION.md)
 - [生产副本演练手册](document/PRODUCTION_COPY_REHEARSAL.md)
+- [R20 现有 Git 仓库精简发布手册](document/R20_GIT_DEPLOYMENT.md)
 - [可观测性约定](document/OBSERVABILITY.md)
 - [HTTP 契约](document/HTTP_CONTRACTS.md)
 
