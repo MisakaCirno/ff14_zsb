@@ -39,6 +39,7 @@ validate_runtime_config(APP_ENV, debug=DEBUG, allowed_hosts=ALLOWED_HOSTS)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') if IS_PRODUCTION else None
 TRUST_X_FORWARDED_FOR = env_bool('TRUST_X_FORWARDED_FOR', default=IS_PRODUCTION)
 RATE_LIMIT_ENABLED = env_bool('RATE_LIMIT_ENABLED', default=True)
+CSP_REPORT_ONLY = env_bool('CSP_REPORT_ONLY', default=True)
 SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', default=IS_PRODUCTION)
 SECURE_REDIRECT_EXEMPT = [r'^health/(?:live|ready)/$']
 SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
@@ -54,6 +55,24 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = 'same-origin'
 SESSION_COOKIE_HTTPONLY = True
 
+# Start Content Security Policy in report-only mode so production traffic can
+# reveal compatibility gaps before enforcement is enabled. The application is
+# self-contained; inline styles remain temporarily allowed for Django admin and
+# the one legacy presentation attribute that still exists in the main site.
+CONTENT_SECURITY_POLICY = '; '.join((
+    "default-src 'self'",
+    "base-uri 'self'",
+    "connect-src 'self'",
+    "font-src 'self' data:",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "img-src 'self' data: blob:",
+    "media-src 'self'",
+    "object-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+))
+
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -68,6 +87,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'ffxivshare.observability.RequestObservabilityMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'ffxivshare.security.ContentSecurityPolicyMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

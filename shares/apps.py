@@ -7,4 +7,5 @@ class SharesConfig(AppConfig):
     verbose_name = '分享管理'
 
     def ready(self):
+        from . import checks  # noqa: F401
         from . import signals  # noqa: F401
