@@ -134,11 +134,13 @@
 - 使用线上数据库只读副本执行完整导出、导入、校验和恢复。
 - 未取得生产副本前不得进入正式切换。
 
-状态：仓库侧工具和合成数据的完整 Proposal → Review → Approval → 双次离线 E2E 已完成，并新增 SQLite 物理结构、精确 schema SQL 变化和 `sqlite_sequence` 高水位保真门禁。2026-07-18 最终重跑总耗时 318.071978 秒（Proposal 81.556579 秒、Review/Approval 3.376046 秒、两轮演练 109.613517/109.363342 秒、双轮验证 7.647002 秒），较 1562.7 秒旧基线缩短约 79.6%。
+状态：已完成。仓库侧工具和合成数据的完整 Proposal → Review → Approval → 双次离线 E2E 已完成，并新增 SQLite 物理结构、精确 schema SQL 变化和 `sqlite_sequence` 高水位保真门禁。2026-07-18 最终重跑总耗时 318.071978 秒（Proposal 81.556579 秒、Review/Approval 3.376046 秒、两轮演练 109.613517/109.363342 秒、双轮验证 7.647002 秒），较 1562.7 秒旧基线缩短约 79.6%。
 
 两轮实体、媒体和 migration 语义摘要完全一致：实体 `105687ea36e3b55664c1793924a7a933a838220fd7bc1b144649c480ea47a174`，媒体 `df9ec3a4c1e85a50688684cff08abce94d0f4fa24253642fb5e11d3dfb8f3d69`，migration `5e353c56c1e3564d7e64ed68b9a95fd5b9d07e56223359c456a5fae9373b48c3`；Pair verifier 还会独立复算并绑定数据库结构保真摘要。测试源库严格从空库前向构建到 `shares/0018`，没有使用“先迁到最新再回滚”的伪生产状态。
 
-上述计时和摘要只证明工具链、合成数据及性能基线；正式线上不可变数据库与媒体副本尚未取得并完成双次演练，因此 R19 仍未完成，也不得进入 R20。操作步骤和证据门禁见 `PRODUCTION_COPY_REHEARSAL.md`。
+2026-07-19 已使用线上不可变捕获完成 Proposal、人工 Review、Approval、两个全新 RunRoot 的独立离线演练和冻结 Pair verifier 复核。两轮均以 0 退出，未解释差异为 0，源数据库保持不变，Pair 报告 SHA-256 为 `26baadbd30c147987ad6b4b0c190c8963b2694bc1ccca374a13104d357169383`。完整非敏感摘要见 `R19_PRODUCTION_REHEARSAL_REPORT.md`；原始生产证据保留在私有范围，不进入 Git。
+
+R19 完成不代表已经上线。所有证据仍固定 `cutover_authorized=false`，R20 的正式停写、最终备份、迁移、服务切换和发布需要另行准备与明确授权。
 
 ### R20 正式切换与发布验收
 
