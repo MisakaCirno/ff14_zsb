@@ -714,6 +714,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             self.assertIn('aria-hidden="true"', source)
 
         self.assertIn('.browse-card:focus-within', card_styles)
+        self.assertIn('.browse-card--browse {', card_styles)
+        self.assertIn('background: var(--app-color-surface);', card_styles)
+        self.assertIn('border: 1px solid var(--app-color-border);', card_styles)
+        self.assertIn('border-color: var(--app-color-border-strong);', card_styles)
         self.assertIn('.browse-card__actions', card_styles)
         self.assertIn('.management-card__actions', card_styles)
         self.assertIn('@container browse-card (max-width: 18rem)', card_styles)
