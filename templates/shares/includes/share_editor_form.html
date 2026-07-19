@@ -1,12 +1,12 @@
 <section
     class="share-editor-page share-editor-page--{{ editor_mode }}"
     aria-labelledby="share-editor-page-title">
-    <header class="share-editor-hero">
+    <header class="ui-page-header share-editor-hero">
         <div class="share-editor-hero__copy">
-            <p class="share-editor-hero__eyebrow">
+            <p class="ui-eyebrow share-editor-hero__eyebrow">
                 {% if editor_mode == 'create' %}发布战术板{% else %}维护分享内容{% endif %}
             </p>
-            <h1 class="share-editor-hero__title" id="share-editor-page-title">
+            <h1 class="ui-page-title share-editor-hero__title" id="share-editor-page-title">
                 {% if editor_mode == 'create' %}
                 <i class="bi bi-plus-circle" aria-hidden="true"></i>
                 <span>创建新分享</span>
@@ -15,7 +15,7 @@
                 <span>编辑分享</span>
                 {% endif %}
             </h1>
-            <p class="share-editor-hero__description">
+            <p class="ui-page-summary share-editor-hero__description">
                 {% if editor_mode == 'create' %}
                 填写战术板代码和必要说明，选择合适的公开范围后即可发布。
                 {% else %}
@@ -103,9 +103,9 @@
         </div>
         {% endif %}
 
-        <section class="share-editor-panel" aria-labelledby="share-editor-content-heading">
-            <header class="share-editor-panel__header">
-                <span class="share-editor-panel__icon" aria-hidden="true">
+        <section class="ui-panel share-editor-panel" aria-labelledby="share-editor-content-heading">
+            <header class="ui-panel__header share-editor-panel__header">
+                <span class="ui-icon-tile share-editor-panel__icon" aria-hidden="true">
                     <i class="bi bi-card-text"></i>
                 </span>
                 <div>
@@ -113,7 +113,7 @@
                     <p>标题和战术板代码为必填项，描述可以补充使用方式或注意事项。</p>
                 </div>
             </header>
-            <div class="share-editor-panel__body">
+            <div class="ui-panel__body share-editor-panel__body">
                 {% include 'shares/includes/form_field.html' with field=form.title only %}
 
                 {% include 'shares/includes/form_field.html' with field=form.strategy_code only %}
@@ -170,9 +170,9 @@
             </div>
         </section>
 
-        <section class="share-editor-panel" aria-labelledby="share-editor-publishing-heading">
-            <header class="share-editor-panel__header">
-                <span class="share-editor-panel__icon" aria-hidden="true">
+        <section class="ui-panel share-editor-panel" aria-labelledby="share-editor-publishing-heading">
+            <header class="ui-panel__header share-editor-panel__header">
+                <span class="ui-icon-tile share-editor-panel__icon" aria-hidden="true">
                     <i class="bi bi-sliders"></i>
                 </span>
                 <div>
@@ -180,7 +180,7 @@
                     <p>选择内容分类、可见性和必要标记，帮助其他用户正确理解这份分享。</p>
                 </div>
             </header>
-            <div class="share-editor-panel__body">
+            <div class="ui-panel__body share-editor-panel__body">
                 <div class="share-editor-fields-grid">
                     {% include 'shares/includes/form_field.html' with field=form.category only %}
 

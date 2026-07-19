@@ -4,14 +4,14 @@
 
 {% block content %}
 <section class="message-center-page" data-site-message-page data-mailbox="{{ mailbox }}" aria-labelledby="message-center-title">
-    <header class="message-center-hero">
+    <header class="ui-page-header message-center-hero">
         <div class="message-center-hero__copy">
-            <p class="message-center-hero__eyebrow">账户通知</p>
-            <h1 class="message-center-hero__title" id="message-center-title">
+            <p class="ui-eyebrow message-center-hero__eyebrow">账户通知</p>
+            <h1 class="ui-page-title message-center-hero__title" id="message-center-title">
                 <i class="bi bi-envelope" aria-hidden="true"></i>
                 站内信
             </h1>
-            <p class="message-center-hero__description">审核、举报和内容限制的处理结果会安全保留在这里。</p>
+            <p class="ui-page-summary message-center-hero__description">审核、举报和内容限制的处理结果会安全保留在这里。</p>
         </div>
         <div class="message-center-hero__actions">
             <span class="message-center-unread-count" aria-label="{{ global_unread_site_messages_count|default:0 }} 条未读站内信">
@@ -33,22 +33,22 @@
         </div>
     </header>
 
-    <nav class="message-center-nav" aria-label="站内信分区" data-site-message-nav>
-        <ul class="message-center-nav__list">
+    <nav class="ui-segmented-nav message-center-nav" aria-label="站内信分区" data-site-message-nav>
+        <ul class="ui-segmented-nav__list message-center-nav__list">
             <li>
-                <a class="message-center-nav__link{% if mailbox == 'inbox' %} active{% endif %}" href="{% querystring mailbox='inbox' page=None %}"{% if mailbox == 'inbox' %} aria-current="page"{% endif %}>
+                <a class="ui-segmented-nav__link message-center-nav__link{% if mailbox == 'inbox' %} active{% endif %}" href="{% querystring mailbox='inbox' page=None %}"{% if mailbox == 'inbox' %} aria-current="page"{% endif %}>
                     <i class="bi bi-inbox" aria-hidden="true"></i>
                     收件箱
                 </a>
             </li>
             <li>
-                <a class="message-center-nav__link{% if mailbox == 'unread' %} active{% endif %}" href="{% querystring mailbox='unread' page=None %}"{% if mailbox == 'unread' %} aria-current="page"{% endif %}>
+                <a class="ui-segmented-nav__link message-center-nav__link{% if mailbox == 'unread' %} active{% endif %}" href="{% querystring mailbox='unread' page=None %}"{% if mailbox == 'unread' %} aria-current="page"{% endif %}>
                     <i class="bi bi-envelope-exclamation" aria-hidden="true"></i>
                     未读消息
                 </a>
             </li>
             <li>
-                <a class="message-center-nav__link{% if mailbox == 'archived' %} active{% endif %}" href="{% querystring mailbox='archived' page=None %}"{% if mailbox == 'archived' %} aria-current="page"{% endif %}>
+                <a class="ui-segmented-nav__link message-center-nav__link{% if mailbox == 'archived' %} active{% endif %}" href="{% querystring mailbox='archived' page=None %}"{% if mailbox == 'archived' %} aria-current="page"{% endif %}>
                     <i class="bi bi-archive" aria-hidden="true"></i>
                     归档箱
                 </a>
@@ -57,11 +57,11 @@
     </nav>
 
     <section class="message-center-section" aria-labelledby="mailbox-title">
-        <header class="message-center-section__header">
+        <header class="ui-section-header message-center-section__header">
             <div>
-                <p class="message-center-section__eyebrow">消息分区</p>
-                <h2 class="message-center-section__title" id="mailbox-title">{{ mailbox_title }}</h2>
-                <p class="message-center-section__description">{{ mailbox_description }}</p>
+                <p class="ui-eyebrow message-center-section__eyebrow">消息分区</p>
+                <h2 class="ui-section-title message-center-section__title" id="mailbox-title">{{ mailbox_title }}</h2>
+                <p class="ui-section-summary message-center-section__description">{{ mailbox_description }}</p>
             </div>
             <span class="message-center-section__count">
                 共 <strong>{{ site_messages.paginator.count }}</strong> 条

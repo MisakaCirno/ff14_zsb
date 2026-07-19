@@ -1,0 +1,117 @@
+.static-page {
+  display: grid;
+  gap: var(--app-space-5);
+  width: 100%;
+  max-width: 72rem;
+  min-width: 0;
+  margin-inline: auto;
+  padding-inline: clamp(var(--app-space-3), 3vw, var(--app-space-7));
+}
+
+.static-page--narrow {
+  max-width: 42rem;
+  padding-block: var(--app-space-6);
+}
+
+.static-page__body {
+  display: grid;
+  gap: var(--app-space-6);
+}
+
+.static-page__section {
+  display: grid;
+  gap: var(--app-space-3);
+  min-width: 0;
+}
+
+.static-page__section + .static-page__section {
+  padding-top: var(--app-space-5);
+  border-top: 1px solid var(--app-color-border);
+}
+
+.static-page__section-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--app-text-section-title);
+}
+
+.static-page__resource-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-3);
+}
+
+.static-page__resource {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--app-space-3);
+  align-items: center;
+  padding: var(--app-space-4);
+}
+
+.static-page__resource h3,
+.static-page__resource p {
+  margin: 0;
+}
+
+.static-page__resource p {
+  margin-top: var(--app-space-1);
+  color: var(--app-color-text-muted);
+  font-size: var(--app-text-sm);
+}
+
+.static-page__footer {
+  color: var(--app-color-text-muted);
+  text-align: center;
+}
+
+.not-found {
+  display: grid;
+  gap: var(--app-space-4);
+  justify-items: center;
+  padding: clamp(var(--app-space-6), 8vw, var(--app-space-7));
+  text-align: center;
+}
+
+.not-found__icon {
+  color: var(--app-color-text-muted);
+  font-size: var(--app-text-display);
+  line-height: 1;
+}
+
+.not-found__code {
+  margin: 0;
+  color: var(--app-color-primary);
+  font-size: var(--app-text-display);
+  line-height: 1;
+}
+
+.not-found__title,
+.not-found__description {
+  margin: 0;
+}
+
+.not-found__description {
+  max-width: 34rem;
+  color: var(--app-color-text-muted);
+  line-height: var(--app-line-height-relaxed);
+}
+
+.not-found__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  justify-content: center;
+}
+
+@media (max-width: 575.98px) {
+  .static-page__resource-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .not-found__actions,
+  .not-found__actions .btn {
+    width: 100%;
+  }
+}

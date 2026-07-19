@@ -77,7 +77,7 @@ class ReportFrontendContractTests(TestCase):
         log_source = self.read_source('templates/shares/admin_report_logs.html')
 
         for source in (submit_source, queue_source, detail_source, log_source):
-            self.assertIn("shares/includes/moderation_page_header.html", source)
+            self.assertIn("shares/includes/page_header.html", source)
             self.assertIn("icon='bi bi-", source)
             self.assertIn('moderation-report-', source)
             self.assertNotIn('style="', source)

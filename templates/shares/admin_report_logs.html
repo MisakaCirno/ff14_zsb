@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container moderation-page moderation-report-page">
-    {% include 'shares/includes/moderation_page_header.html' with icon='bi bi-journal-x' eyebrow='内容治理' title='举报日志' summary='查看管理员对用户举报作出的处理决定及审计说明。' only %}
+    {% include 'shares/includes/page_header.html' with icon='bi bi-journal-x' eyebrow='内容治理' title='举报日志' summary='查看管理员对用户举报作出的处理决定及审计说明。' only %}
     {% include 'shares/includes/admin_tabs.html' %}
     {% include 'shares/includes/moderation_audit_log.html' with logs=logs log_kind='report' title='举报处理记录' title_id='moderation-report-log-title' empty_message='暂无举报处理记录' pagination_label='举报日志分页' %}
 </div>

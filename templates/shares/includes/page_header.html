@@ -1,0 +1,10 @@
+<header class="ui-page-header ui-page-header--icon{% if header_class %} {{ header_class }}{% endif %}">
+    <span class="ui-icon-tile ui-icon-tile--large ui-icon-tile--strong" aria-hidden="true">
+        <i class="{{ icon }}"></i>
+    </span>
+    <div class="ui-page-header__body">
+        <p class="ui-eyebrow">{{ eyebrow }}</p>
+        <h1 class="ui-page-title"{% if title_id %} id="{{ title_id }}"{% endif %}>{{ title }}</h1>
+        <p class="ui-page-summary">{{ summary }}</p>
+    </div>
+</header>

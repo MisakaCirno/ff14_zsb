@@ -5,7 +5,7 @@
 
 {% block content %}
 <div class="container-fluid collection-detail-page" data-collection-detail-page>
-    <header class="collection-detail-hero" aria-labelledby="collection-title">
+    <header class="ui-page-header collection-detail-hero" aria-labelledby="collection-title">
         <div class="collection-detail-hero__identity">
             <div class="collection-detail-hero__badges" role="group" aria-label="合集状态">
                 <span class="badge text-bg-primary">合集</span>
@@ -22,8 +22,8 @@
                 {% endif %}
             </div>
 
-            <h1 class="collection-detail-hero__title" id="collection-title">{{ collection.title }}</h1>
-            <p class="collection-detail-hero__description">
+            <h1 class="ui-page-title collection-detail-hero__title" id="collection-title">{{ collection.title }}</h1>
+            <p class="ui-page-summary collection-detail-hero__description">
                 {% if collection.description %}
                 {{ collection.description }}
                 {% else %}

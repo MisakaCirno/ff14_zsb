@@ -1,9 +1,9 @@
-<nav class="account-settings-nav" aria-label="账户设置" data-account-settings-nav>
+<nav class="ui-segmented-nav account-settings-nav" aria-label="账户设置" data-account-settings-nav>
     <p class="account-settings-nav__label">账户设置</p>
-    <ul class="account-settings-nav__list">
+    <ul class="ui-segmented-nav__list account-settings-nav__list">
         <li>
             <a
-                class="account-settings-nav__link{% if current_account_section == 'profile' %} active{% endif %}"
+                class="ui-segmented-nav__link account-settings-nav__link{% if current_account_section == 'profile' %} active{% endif %}"
                 href="{% url 'profile_edit' %}"
                 {% if current_account_section == 'profile' %}aria-current="page"{% endif %}>
                 <i class="bi bi-person" aria-hidden="true"></i>
@@ -12,7 +12,7 @@
         </li>
         <li>
             <a
-                class="account-settings-nav__link{% if current_account_section == 'password' %} active{% endif %}"
+                class="ui-segmented-nav__link account-settings-nav__link{% if current_account_section == 'password' %} active{% endif %}"
                 href="{% url 'password_change' %}"
                 {% if current_account_section == 'password' %}aria-current="page"{% endif %}>
                 <i class="bi bi-shield-lock" aria-hidden="true"></i>
@@ -20,7 +20,7 @@
             </a>
         </li>
         <li>
-            <a class="account-settings-nav__link" href="{% url 'my_shares' %}">
+            <a class="ui-segmented-nav__link account-settings-nav__link" href="{% url 'my_shares' %}">
                 <i class="bi bi-person-workspace" aria-hidden="true"></i>
                 <span>我的内容</span>
             </a>

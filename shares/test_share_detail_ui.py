@@ -74,8 +74,8 @@ class ShareDetailUiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(content.count('<h1'), 1)
         self.assertLess(
-            content.index('class="share-detail-hero"'),
-            content.index('class="share-detail-panel share-detail-preview"'),
+            content.index('class="ui-page-header share-detail-hero"'),
+            content.index('class="ui-panel share-detail-panel share-detail-preview"'),
         )
         self.assertContains(response, 'data-content-revealed="false"')
         self.assertContains(response, 'data-content-warning="nsfw-spoiler"')

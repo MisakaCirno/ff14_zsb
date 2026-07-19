@@ -15,12 +15,6 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--app-space-5);
   align-items: center;
-  min-width: 0;
-  padding: clamp(var(--app-space-4), 3vw, var(--app-space-6));
-  background: var(--app-color-surface);
-  border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-surface);
-  box-shadow: var(--app-shadow-surface);
 }
 
 .share-editor-hero__copy {
@@ -41,7 +35,6 @@
   align-items: center;
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: clamp(1.75rem, 4vw, 2.4rem);
   line-height: var(--app-line-height-tight);
 }
 
@@ -83,15 +76,6 @@
   cursor: progress;
 }
 
-.share-editor-panel {
-  min-width: 0;
-  overflow: hidden;
-  background: var(--app-color-surface);
-  border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-surface);
-  box-shadow: var(--app-shadow-surface);
-}
-
 .share-editor-panel:focus-within {
   border-color: var(--app-color-focus-border);
   box-shadow: 0 0 0 var(--app-focus-ring-width) var(--app-focus-ring-color);
@@ -103,19 +87,6 @@
   gap: var(--app-space-3);
   align-items: start;
   min-width: 0;
-  padding: var(--app-space-4) var(--app-space-5);
-  background: var(--app-color-surface-muted);
-  border-bottom: 1px solid var(--app-color-border);
-}
-
-.share-editor-panel__icon {
-  display: inline-grid;
-  width: 2.5rem;
-  height: 2.5rem;
-  place-items: center;
-  color: var(--app-color-primary);
-  background: var(--app-color-primary-soft);
-  border-radius: var(--app-radius-control);
 }
 
 .share-editor-panel__header h2 {
@@ -134,7 +105,6 @@
 .share-editor-panel__body {
   display: grid;
   gap: var(--app-space-5);
-  min-width: 0;
   padding: clamp(var(--app-space-4), 3vw, var(--app-space-6));
 }
 

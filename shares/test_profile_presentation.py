@@ -104,7 +104,7 @@ class MissingUserProfilePageTests(TestCase):
         )
         self.assert_html_matches(
             profile_response,
-            rf'class="public-profile-hero__name">{escaped_username}</h1>',
+            rf'class="ui-page-title public-profile-hero__name">{escaped_username}</h1>',
         )
         self.assertContains(
             profile_response,

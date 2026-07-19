@@ -20,10 +20,10 @@
     data-record-copy-url="{% url 'record_copy' share.share_id %}"
     data-content-revealed="{% if detail.content_warning %}false{% else %}true{% endif %}"
     {% if detail.content_warning %}data-content-warning="{{ detail.content_warning.key }}"{% endif %}>
-    <header class="share-detail-hero">
+    <header class="ui-page-header share-detail-hero">
         <div class="share-detail-hero__identity">
             <div class="share-detail-hero__meta-line">
-                <p class="share-detail-hero__eyebrow">战术板分享</p>
+                <p class="ui-eyebrow share-detail-hero__eyebrow">战术板分享</p>
                 <div class="share-detail-badges" role="list" aria-label="分享状态">
                     {% for badge in detail.badges %}
                     <span
@@ -36,7 +36,7 @@
                     {% endfor %}
                 </div>
             </div>
-            <h1 class="share-detail-hero__title" id="share-detail-title">{{ share.title }}</h1>
+            <h1 class="ui-page-title share-detail-hero__title" id="share-detail-title">{{ share.title }}</h1>
             <div class="share-detail-author">
                 <span class="share-detail-author__avatar" aria-hidden="true">
                     <i class="bi bi-person-circle"></i>
@@ -121,9 +121,9 @@
 
     <div class="share-detail-layout">
         <div class="share-detail-main">
-            <section class="share-detail-panel share-detail-preview" aria-labelledby="share-detail-preview-title">
-                <header class="share-detail-panel__header">
-                    <span class="share-detail-panel__icon" aria-hidden="true">
+            <section class="ui-panel share-detail-panel share-detail-preview" aria-labelledby="share-detail-preview-title">
+                <header class="ui-panel__header share-detail-panel__header">
+                    <span class="ui-icon-tile share-detail-panel__icon" aria-hidden="true">
                         <i class="bi bi-eye"></i>
                     </span>
                     <div>
@@ -163,9 +163,9 @@
                 </div>
             </section>
 
-            <section class="share-detail-panel share-detail-content" aria-labelledby="share-detail-content-title">
-                <header class="share-detail-panel__header">
-                    <span class="share-detail-panel__icon" aria-hidden="true">
+            <section class="ui-panel share-detail-panel share-detail-content" aria-labelledby="share-detail-content-title">
+                <header class="ui-panel__header share-detail-panel__header">
+                    <span class="ui-icon-tile share-detail-panel__icon" aria-hidden="true">
                         <i class="bi bi-clipboard-check"></i>
                     </span>
                     <div>
@@ -173,7 +173,7 @@
                         <p>复制代码是主要操作；分享链接和分享图适合转发给其他玩家。</p>
                     </div>
                 </header>
-                <div class="share-detail-panel__body">
+                <div class="ui-panel__body share-detail-panel__body">
                     <div class="share-detail-field share-detail-field--primary">
                         <label class="share-detail-field__label" id="share-detail-code-label" for="share-detail-code">战术板代码</label>
                         <div class="share-detail-field__control" role="group" aria-labelledby="share-detail-code-label">
@@ -284,7 +284,7 @@
 
         <aside class="share-detail-sidebar" aria-label="分享辅助信息">
             {% if detail.actions.can_add_to_collection or detail.actions.can_edit or detail.actions.can_delete or detail.actions.can_report %}
-            <section class="share-detail-side-panel" aria-labelledby="share-detail-actions-title">
+            <section class="ui-panel share-detail-side-panel" aria-labelledby="share-detail-actions-title">
                 <header class="share-detail-side-panel__header">
                     <i class="bi bi-sliders" aria-hidden="true"></i>
                     <h2 id="share-detail-actions-title">内容操作</h2>
@@ -323,7 +323,7 @@
             </section>
             {% endif %}
 
-            <section class="share-detail-side-panel" aria-labelledby="share-detail-usage-title">
+            <section class="ui-panel share-detail-side-panel" aria-labelledby="share-detail-usage-title">
                 <header class="share-detail-side-panel__header">
                     <i class="bi bi-info-circle" aria-hidden="true"></i>
                     <h2 id="share-detail-usage-title">使用说明</h2>

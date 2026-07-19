@@ -4,12 +4,12 @@
 
 {% block content %}
 <div class="container moderation-page moderation-report-page">
-    {% include 'shares/includes/moderation_page_header.html' with icon='bi bi-shield-exclamation' eyebrow='内容治理' title='举报处理' summary='集中核查待处理举报，保留处理依据并向相关用户同步结果。' only %}
+    {% include 'shares/includes/page_header.html' with icon='bi bi-shield-exclamation' eyebrow='内容治理' title='举报处理' summary='集中核查待处理举报，保留处理依据并向相关用户同步结果。' only %}
     {% include 'shares/includes/admin_tabs.html' %}
 
     {% if shares %}
-    <section class="moderation-panel moderation-report-queue" aria-labelledby="report-queue-title">
-        <header class="moderation-panel__header moderation-report-queue__header">
+    <section class="ui-panel moderation-panel moderation-report-queue" aria-labelledby="report-queue-title">
+        <header class="ui-panel__header moderation-panel__header moderation-report-queue__header">
             <div>
                 <p class="moderation-panel__eyebrow moderation-report-queue__eyebrow">待处理队列</p>
                 <h2 class="moderation-panel__title moderation-report-queue__title" id="report-queue-title">按分享归并的举报</h2>

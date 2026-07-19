@@ -80,6 +80,9 @@
   --app-text-base: 1rem;
   --app-text-lg: 1.125rem;
   --app-text-xl: 1.25rem;
+  --app-text-page-title: clamp(1.65rem, 4vw, 2.25rem);
+  --app-text-section-title: clamp(1.25rem, 3vw, 1.6rem);
+  --app-text-display: clamp(3rem, 10vw, 5rem);
   --app-line-height-tight: 1.2;
   --app-line-height-normal: 1.5;
   --app-line-height-relaxed: 1.7;

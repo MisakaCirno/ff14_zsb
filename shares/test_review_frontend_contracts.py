@@ -27,7 +27,7 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
 
         for source in (queue_source, log_source):
             with self.subTest(template=source[:40]):
-                self.assertIn('shares/includes/moderation_page_header.html', source)
+                self.assertIn('shares/includes/page_header.html', source)
                 self.assertIn('shares/includes/admin_tabs.html', source)
                 self.assertNotIn('style=', source)
 
@@ -103,7 +103,12 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
             'shares/includes/moderation_audit_log.html'
         )
 
-        self.assertIn('class="moderation-tabs"', tabs_source)
+        self.assertIn(
+            'class="ui-segmented-nav moderation-tabs"',
+            tabs_source,
+        )
+        self.assertIn('ui-segmented-nav__list', tabs_source)
+        self.assertIn('ui-segmented-nav__link', tabs_source)
         self.assertIn(
             'moderation_active_tab|default:request.resolver_match.url_name',
             tabs_source,
@@ -123,13 +128,13 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
 
     def test_moderation_css_bounds_long_content_and_mobile_actions(self):
         css_source = self.read_frontend('styles/moderation-page.css')
+        components_source = self.read_frontend('styles/components.css')
         main_source = self.read_frontend('styles/main.css')
 
         self.assertIn("@import './moderation-page.css';", main_source)
 
         for selector in (
             '.moderation-page',
-            '.moderation-hero',
             '.moderation-tabs__list',
             '.moderation-review-grid',
             '.moderation-review-card__title',
@@ -138,6 +143,14 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
         ):
             with self.subTest(selector=selector):
                 self.assertIn(selector, css_source)
+
+        for selector in (
+            '.ui-page-header',
+            '.ui-panel',
+            '.ui-segmented-nav',
+        ):
+            with self.subTest(shared_selector=selector):
+                self.assertIn(selector, components_source)
 
         self.assertIn('minmax(min(100%, 17.5rem), 1fr)', css_source)
         self.assertIn('overflow-wrap: anywhere;', css_source)

@@ -4,9 +4,9 @@
 
 {% block content %}
 <div class="container moderation-page moderation-report-page">
-    {% include 'shares/includes/moderation_page_header.html' with icon='bi bi-flag-fill' eyebrow='社区治理' title='举报分享' summary='请提供清晰、具体的情况说明，管理员会根据内容与站点规则进行核查。' only %}
+    {% include 'shares/includes/page_header.html' with icon='bi bi-flag-fill' eyebrow='社区治理' title='举报分享' summary='请提供清晰、具体的情况说明，管理员会根据内容与站点规则进行核查。' only %}
 
-    <section class="moderation-panel moderation-report-submit" aria-labelledby="report-share-title">
+    <section class="ui-panel moderation-panel moderation-report-submit" aria-labelledby="report-share-title">
         <div class="moderation-report-subject">
             <p class="moderation-report-subject__eyebrow">正在举报</p>
             <h2 class="moderation-report-subject__title" id="report-share-title">{{ share.title }}</h2>

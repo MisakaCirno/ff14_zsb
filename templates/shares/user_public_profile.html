@@ -4,16 +4,16 @@
 
 {% block content %}
 <div class="container-fluid public-profile-page" data-public-profile-page>
-    <header class="public-profile-hero">
+    <header class="ui-page-header public-profile-hero">
         <div class="public-profile-hero__avatar" aria-hidden="true">
             <i class="bi bi-person-circle"></i>
         </div>
 
         <div class="public-profile-hero__identity">
-            <p class="public-profile-hero__eyebrow">公开主页</p>
-            <h1 class="public-profile-hero__name">{{ author_presentation.display_name }}</h1>
+            <p class="ui-eyebrow public-profile-hero__eyebrow">公开主页</p>
+            <h1 class="ui-page-title public-profile-hero__name">{{ author_presentation.display_name }}</h1>
             <p class="public-profile-hero__username">@{{ author.username }}</p>
-            <p class="public-profile-hero__bio">
+            <p class="ui-page-summary public-profile-hero__bio">
                 {% if author_presentation.bio %}
                 {{ author_presentation.bio }}
                 {% else %}
@@ -34,16 +34,16 @@
         </dl>
     </header>
 
-    <nav class="public-profile-tabs" aria-label="用户主页内容">
+    <nav class="ui-segmented-nav public-profile-tabs" aria-label="用户主页内容">
         <a href="{% querystring tab='shares' page=None %}"
-           class="public-profile-tabs__link{% if current_tab == 'shares' %} active{% endif %}"
+           class="ui-segmented-nav__link public-profile-tabs__link{% if current_tab == 'shares' %} active{% endif %}"
            {% if current_tab == 'shares' %}aria-current="page"{% endif %}>
             <i class="bi bi-grid-3x3" aria-hidden="true"></i>
             <span>公开分享</span>
             <span class="badge rounded-pill">{{ public_share_count }}</span>
         </a>
         <a href="{% querystring tab='collections' page=None %}"
-           class="public-profile-tabs__link{% if current_tab == 'collections' %} active{% endif %}"
+           class="ui-segmented-nav__link public-profile-tabs__link{% if current_tab == 'collections' %} active{% endif %}"
            {% if current_tab == 'collections' %}aria-current="page"{% endif %}>
             <i class="bi bi-folder" aria-hidden="true"></i>
             <span>公开合集</span>

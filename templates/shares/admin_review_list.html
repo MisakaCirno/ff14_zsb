@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container moderation-page">
-    {% include 'shares/includes/moderation_page_header.html' with icon='bi bi-shield-check' eyebrow='内容治理' title='审核与限制队列' summary='集中处理待审核分享、历史限制确认和受限内容复核。所有操作都会保留审计记录，并向相关用户发送站内通知。' only %}
+    {% include 'shares/includes/page_header.html' with icon='bi bi-shield-check' eyebrow='内容治理' title='审核与限制队列' summary='集中处理待审核分享、历史限制确认和受限内容复核。所有操作都会保留审计记录，并向相关用户发送站内通知。' only %}
 
     {% include 'shares/includes/admin_tabs.html' %}
 

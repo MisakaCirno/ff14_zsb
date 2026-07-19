@@ -33,7 +33,7 @@ class AnnouncementFrontendSourceContractTests(SimpleTestCase):
             source,
         )
         self.assertIn(
-            '<h1 class="announcement-page__title" id="announcement-page-title">',
+            '<h1 class="ui-page-title announcement-page__title" id="announcement-page-title">',
             source,
         )
         self.assertIn('<ol class="announcement-list" data-announcement-list>', source)

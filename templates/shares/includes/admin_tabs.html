@@ -1,9 +1,9 @@
 {% with active_tab=moderation_active_tab|default:request.resolver_match.url_name %}
-<nav class="moderation-tabs" aria-label="内容管理页面">
-    <ul class="nav moderation-tabs__list">
+<nav class="ui-segmented-nav moderation-tabs" aria-label="内容管理页面">
+    <ul class="nav ui-segmented-nav__list moderation-tabs__list">
         <li class="nav-item moderation-tabs__item">
             <a
-                class="nav-link moderation-tabs__link{% if active_tab == 'admin_review_list' %} active{% endif %}"
+                class="nav-link ui-segmented-nav__link moderation-tabs__link{% if active_tab == 'admin_review_list' %} active{% endif %}"
                 href="{% url 'admin_review_list' %}"
                 {% if active_tab == 'admin_review_list' %}aria-current="page"{% endif %}>
                 <i class="bi bi-list-check" aria-hidden="true"></i>
@@ -16,7 +16,7 @@
         </li>
         <li class="nav-item moderation-tabs__item">
             <a
-                class="nav-link moderation-tabs__link{% if active_tab == 'admin_report_list' %} active{% endif %}"
+                class="nav-link ui-segmented-nav__link moderation-tabs__link{% if active_tab == 'admin_report_list' %} active{% endif %}"
                 href="{% url 'admin_report_list' %}"
                 {% if active_tab == 'admin_report_list' %}aria-current="page"{% endif %}>
                 <i class="bi bi-flag" aria-hidden="true"></i>
@@ -29,7 +29,7 @@
         </li>
         <li class="nav-item moderation-tabs__item moderation-tabs__item--logs-start">
             <a
-                class="nav-link moderation-tabs__link{% if active_tab == 'admin_review_logs' %} active{% endif %}"
+                class="nav-link ui-segmented-nav__link moderation-tabs__link{% if active_tab == 'admin_review_logs' %} active{% endif %}"
                 href="{% url 'admin_review_logs' %}"
                 {% if active_tab == 'admin_review_logs' %}aria-current="page"{% endif %}>
                 <i class="bi bi-journal-check" aria-hidden="true"></i>
@@ -38,7 +38,7 @@
         </li>
         <li class="nav-item moderation-tabs__item">
             <a
-                class="nav-link moderation-tabs__link{% if active_tab == 'admin_report_logs' %} active{% endif %}"
+                class="nav-link ui-segmented-nav__link moderation-tabs__link{% if active_tab == 'admin_report_logs' %} active{% endif %}"
                 href="{% url 'admin_report_logs' %}"
                 {% if active_tab == 'admin_report_logs' %}aria-current="page"{% endif %}>
                 <i class="bi bi-journal-x" aria-hidden="true"></i>

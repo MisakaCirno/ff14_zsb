@@ -4,14 +4,14 @@
 
 {% block content %}
 <div class="my-content-page" data-my-content-page>
-    <header class="my-content-hero">
+    <header class="ui-page-header my-content-hero">
         <div class="my-content-hero__copy">
-            <p class="my-content-hero__eyebrow">个人工作台</p>
-            <h1 class="my-content-hero__title">
+            <p class="ui-eyebrow my-content-hero__eyebrow">个人工作台</p>
+            <h1 class="ui-page-title my-content-hero__title">
                 <i class="bi bi-person-workspace" aria-hidden="true"></i>
                 我的内容
             </h1>
-            <p class="my-content-hero__description">集中管理你创建、点赞和收藏的战术板，以及自己维护的合集。</p>
+            <p class="ui-page-summary my-content-hero__description">集中管理你创建、点赞和收藏的战术板，以及自己维护的合集。</p>
         </div>
         <div class="my-content-hero__actions">
             <a href="{% url 'create_share' %}" class="btn btn-primary">
@@ -25,28 +25,28 @@
         </div>
     </header>
 
-    <nav class="my-content-nav" aria-label="我的内容分区" data-my-content-nav>
-        <ul class="my-content-nav__list">
+    <nav class="ui-segmented-nav my-content-nav" aria-label="我的内容分区" data-my-content-nav>
+        <ul class="ui-segmented-nav__list my-content-nav__list">
             <li>
-                <a class="my-content-nav__link{% if current_tab == 'my_shares' %} active{% endif %}" href="{% querystring tab='my_shares' page=None %}"{% if current_tab == 'my_shares' %} aria-current="page"{% endif %}>
+                <a class="ui-segmented-nav__link my-content-nav__link{% if current_tab == 'my_shares' %} active{% endif %}" href="{% querystring tab='my_shares' page=None %}"{% if current_tab == 'my_shares' %} aria-current="page"{% endif %}>
                     <i class="bi bi-grid-1x2" aria-hidden="true"></i>
                     <span>我的分享</span>
                 </a>
             </li>
             <li>
-                <a class="my-content-nav__link{% if current_tab == 'collections' %} active{% endif %}" href="{% querystring tab='collections' page=None order=None %}"{% if current_tab == 'collections' %} aria-current="page"{% endif %}>
+                <a class="ui-segmented-nav__link my-content-nav__link{% if current_tab == 'collections' %} active{% endif %}" href="{% querystring tab='collections' page=None order=None %}"{% if current_tab == 'collections' %} aria-current="page"{% endif %}>
                     <i class="bi bi-folder2-open" aria-hidden="true"></i>
                     <span>我的合集</span>
                 </a>
             </li>
             <li>
-                <a class="my-content-nav__link{% if current_tab == 'likes' %} active{% endif %}" href="{% querystring tab='likes' page=None order=None %}"{% if current_tab == 'likes' %} aria-current="page"{% endif %}>
+                <a class="ui-segmented-nav__link my-content-nav__link{% if current_tab == 'likes' %} active{% endif %}" href="{% querystring tab='likes' page=None order=None %}"{% if current_tab == 'likes' %} aria-current="page"{% endif %}>
                     <i class="bi bi-heart" aria-hidden="true"></i>
                     <span>我的点赞</span>
                 </a>
             </li>
             <li>
-                <a class="my-content-nav__link{% if current_tab == 'favorites' %} active{% endif %}" href="{% querystring tab='favorites' page=None order=None %}"{% if current_tab == 'favorites' %} aria-current="page"{% endif %}>
+                <a class="ui-segmented-nav__link my-content-nav__link{% if current_tab == 'favorites' %} active{% endif %}" href="{% querystring tab='favorites' page=None order=None %}"{% if current_tab == 'favorites' %} aria-current="page"{% endif %}>
                     <i class="bi bi-star" aria-hidden="true"></i>
                     <span>我的收藏</span>
                 </a>
@@ -68,10 +68,10 @@
         hx-swap="outerHTML"
         hx-sync="this:replace"
         {% endif %}>
-        <header class="my-content-section__header">
+        <header class="ui-section-header my-content-section__header">
             <div class="my-content-section__copy">
-                <p class="my-content-section__eyebrow">分享分区</p>
-                <h2 class="my-content-section__title" id="my-content-section-title" tabindex="-1">
+                <p class="ui-eyebrow my-content-section__eyebrow">分享分区</p>
+                <h2 class="ui-section-title my-content-section__title" id="my-content-section-title" tabindex="-1">
                     {% if current_tab == 'my_shares' %}
                     我创建的分享
                     {% elif current_tab == 'likes' %}
@@ -80,7 +80,7 @@
                     我收藏的分享
                     {% endif %}
                 </h2>
-                <p class="my-content-section__description">
+                <p class="ui-section-summary my-content-section__description">
                     {% if current_tab == 'my_shares' %}
                     查看审核与可见状态，并继续编辑或整理你的分享。
                     {% elif current_tab == 'likes' %}
@@ -131,11 +131,11 @@
     </section>
     {% else %}
     <section class="my-content-section" aria-labelledby="my-content-section-title" data-my-content-collections>
-        <header class="my-content-section__header">
+        <header class="ui-section-header my-content-section__header">
             <div class="my-content-section__copy">
-                <p class="my-content-section__eyebrow">合集分区</p>
-                <h2 class="my-content-section__title" id="my-content-section-title">我维护的合集</h2>
-                <p class="my-content-section__description">将相关分享整理到一起，并决定合集是否向其他用户公开。</p>
+                <p class="ui-eyebrow my-content-section__eyebrow">合集分区</p>
+                <h2 class="ui-section-title my-content-section__title" id="my-content-section-title">我维护的合集</h2>
+                <p class="ui-section-summary my-content-section__description">将相关分享整理到一起，并决定合集是否向其他用户公开。</p>
             </div>
             <span class="my-content-section__count">
                 <i class="bi bi-folder2-open" aria-hidden="true"></i>

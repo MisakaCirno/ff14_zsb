@@ -4,17 +4,17 @@
 
 {% block content %}
 <div class="container moderation-page">
-    <header class="moderation-hero">
-        <div class="moderation-hero__icon" aria-hidden="true"><i class="bi bi-folder-plus"></i></div>
-        <div class="moderation-hero__copy">
-            <p class="moderation-hero__eyebrow">整理分享</p>
-            <h1 class="moderation-hero__title">选择合集</h1>
-            <p class="moderation-hero__summary">将《{{ share.title }}》加入你的合集。每页最多显示 20 个合集。</p>
+    <header class="ui-page-header ui-page-header--icon">
+        <div class="ui-icon-tile ui-icon-tile--large ui-icon-tile--strong" aria-hidden="true"><i class="bi bi-folder-plus"></i></div>
+        <div class="ui-page-header__body">
+            <p class="ui-eyebrow">整理分享</p>
+            <h1 class="ui-page-title">选择合集</h1>
+            <p class="ui-page-summary">将《{{ share.title }}》加入你的合集。每页最多显示 20 个合集。</p>
         </div>
     </header>
 
-    <section class="moderation-panel" aria-labelledby="collection-picker-title">
-        <div class="moderation-panel__header">
+    <section class="ui-panel moderation-panel" aria-labelledby="collection-picker-title">
+        <div class="ui-panel__header moderation-panel__header">
             <div>
                 <p class="moderation-panel__eyebrow">我的合集</p>
                 <h2 id="collection-picker-title">共 {{ collections.paginator.count }} 个合集</h2>

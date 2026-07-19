@@ -46,7 +46,7 @@ class ModerationFormRecoveryTests(TestCase):
             markup,
             re.compile(
                 r'<a\s+'
-                r'class="nav-link moderation-tabs__link active"\s+'
+                r'class="nav-link ui-segmented-nav__link moderation-tabs__link active"\s+'
                 rf'href="{re.escape(url)}"\s+'
                 r'aria-current="page">',
             ),

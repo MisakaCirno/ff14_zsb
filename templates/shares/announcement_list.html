@@ -5,20 +5,20 @@
 
 {% block content %}
 <section class="announcement-page" data-announcement-page aria-labelledby="announcement-page-title">
-    <header class="announcement-page__hero">
-        <p class="announcement-page__eyebrow">站点信息</p>
-        <h1 class="announcement-page__title" id="announcement-page-title">
+    <header class="ui-page-header announcement-page__hero">
+        <p class="ui-eyebrow announcement-page__eyebrow">站点信息</p>
+        <h1 class="ui-page-title announcement-page__title" id="announcement-page-title">
             <i class="bi bi-megaphone" aria-hidden="true"></i>
             站点动态
         </h1>
-        <p class="announcement-page__description">维护通知、功能更新和服务调整会按时间保留在这里。</p>
+        <p class="ui-page-summary announcement-page__description">维护通知、功能更新和服务调整会按时间保留在这里。</p>
     </header>
 
     <section class="announcement-page__feed" aria-labelledby="announcement-feed-title">
-        <header class="announcement-page__feed-header">
+        <header class="ui-section-header announcement-page__feed-header">
             <div class="announcement-page__feed-copy">
-                <p class="announcement-page__feed-eyebrow">更新记录</p>
-                <h2 class="announcement-page__feed-title" id="announcement-feed-title">全部动态</h2>
+                <p class="ui-eyebrow announcement-page__feed-eyebrow">更新记录</p>
+                <h2 class="ui-section-title announcement-page__feed-title" id="announcement-feed-title">全部动态</h2>
             </div>
             <span class="announcement-page__count">
                 共 <strong>{{ announcements.paginator.count }}</strong> 条

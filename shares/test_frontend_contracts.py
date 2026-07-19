@@ -793,6 +793,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "@import './my-content-page.css';",
             "@import './account-page.css';",
             "@import './site-message-page.css';",
+            "@import './static-page.css';",
             "@import './collection-page.css';",
             "@import './share-editor-page.css';",
             "@import './share-detail-page.css';",
@@ -814,6 +815,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('--app-radius-surface:', tokens_source)
         self.assertIn('--app-shadow-surface:', tokens_source)
         self.assertIn('--app-shadow-floating:', tokens_source)
+        self.assertIn('--app-text-page-title:', tokens_source)
+        self.assertIn('--app-text-section-title:', tokens_source)
         self.assertIn('--app-focus-ring-color:', tokens_source)
         self.assertIn('--app-motion-normal:', tokens_source)
 
@@ -991,6 +994,71 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('app-notification__message', feedback_source)
         self.assertIn('app-notification__message', notify_source)
         self.assertNotIn('messageText.style', notify_source)
+
+    def test_shared_visual_components_are_reused_across_pages(self):
+        components_source = self.read_frontend('styles/components.css')
+        adapter_source = self.read_frontend('styles/bootstrap-adapter.css')
+        page_header_source = self.read_template(
+            'shares/includes/page_header.html',
+        )
+
+        for selector in (
+            '.ui-page-header {',
+            '.ui-panel {',
+            '.ui-section-header {',
+            '.ui-segmented-nav {',
+            '.ui-icon-tile {',
+        ):
+            self.assertIn(selector, components_source)
+
+        for bootstrap_radius in (
+            '--bs-border-radius: var(--app-radius-control);',
+            '--bs-border-radius-lg: var(--app-radius-surface);',
+            '--bs-border-radius-pill: var(--app-radius-pill);',
+        ):
+            self.assertIn(bootstrap_radius, adapter_source)
+
+        self.assertIn('class="ui-page-header ui-page-header--icon', page_header_source)
+        self.assertIn('class="ui-page-title"', page_header_source)
+        self.assertFalse(
+            (Path(settings.BASE_DIR) / 'templates' / 'shares' / 'includes'
+             / 'moderation_page_header.html').exists(),
+        )
+
+        template_contracts = {
+            'shares/my_shares.html': (
+                'ui-page-header my-content-hero',
+                'ui-section-header my-content-section__header',
+                'ui-segmented-nav my-content-nav',
+            ),
+            'shares/profile_edit.html': (
+                'ui-page-header account-settings-hero',
+                'ui-panel account-panel',
+            ),
+            'shares/site_message_list.html': (
+                'ui-page-header message-center-hero',
+                'ui-segmented-nav message-center-nav',
+            ),
+            'shares/detail.html': (
+                'ui-page-header share-detail-hero',
+                'ui-panel share-detail-panel',
+            ),
+        }
+        for template_path, hooks in template_contracts.items():
+            source = self.read_template(template_path)
+            for hook in hooks:
+                with self.subTest(template=template_path, hook=hook):
+                    self.assertIn(hook, source)
+
+        about_source = self.read_template('about.html')
+        not_found_source = self.read_template('404.html')
+        static_page_source = self.read_frontend('styles/static-page.css')
+        self.assertIn("shares/includes/page_header.html", about_source)
+        self.assertIn('class="ui-panel"', about_source)
+        self.assertIn('class="ui-panel not-found"', not_found_source)
+        self.assertNotIn('style="', about_source + not_found_source)
+        self.assertNotIn('javascript:', not_found_source)
+        self.assertIn('.static-page {', static_page_source)
 
     def test_frontend_verification_runs_design_and_contrast_checkers(self):
         package = json.loads(self.read_project_file('frontend/package.json'))
@@ -1382,14 +1450,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('id="pageDropdown"', source)
         self.assertNotIn('href="?page=', source)
 
-    def test_admin_log_pages_use_shared_pagination_component(self):
-        admin_log_source = self.read_template('shares/admin_log_list.html')
-        self.assertIn(
-            "{% include 'shares/includes/pagination.html' with page_obj=logs",
-            admin_log_source,
-        )
-        self.assertNotIn('logs.paginator.page_range', admin_log_source)
-
+    def test_moderation_log_pages_use_shared_pagination_component(self):
         audit_source = self.read_template(
             'shares/includes/moderation_audit_log.html'
         )
@@ -1430,7 +1491,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         profile_styles = self.read_frontend('styles/public-profile.css')
 
         self.assertIn('data-public-profile-page', source)
-        self.assertIn('<h1 class="public-profile-hero__name">', source)
+        self.assertIn(
+            '<h1 class="ui-page-title public-profile-hero__name">',
+            source,
+        )
         self.assertIn('aria-label="用户主页内容"', source)
         self.assertIn("{% querystring tab='shares' page=None %}", source)
         self.assertIn("{% querystring tab='collections' page=None %}", source)
@@ -1453,7 +1517,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         page_styles = self.read_frontend('styles/my-content-page.css')
 
         self.assertIn('data-my-content-page', source)
-        self.assertIn('<h1 class="my-content-hero__title">', source)
+        self.assertIn(
+            '<h1 class="ui-page-title my-content-hero__title">',
+            source,
+        )
         self.assertIn('aria-label="我的内容分区"', source)
         self.assertIn("{% querystring tab='my_shares' page=None %}", source)
         for tab in ('collections', 'likes', 'favorites'):
@@ -1533,7 +1600,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         collection_styles = self.read_frontend('styles/collection-page.css')
 
         self.assertIn('data-collection-detail-page', source)
-        self.assertIn('<h1 class="collection-detail-hero__title"', source)
+        self.assertIn(
+            '<h1 class="ui-page-title collection-detail-hero__title"',
+            source,
+        )
         self.assertIn('<ol class="row ', source)
         self.assertIn('data-collection-items', source)
         self.assertIn(
@@ -1907,8 +1977,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('aria-labelledby="share-detail-title"', source)
         self.assertEqual(source.count('<h1'), 1)
         self.assertLess(
-            source.index('class="share-detail-hero"'),
-            source.index('class="share-detail-panel share-detail-preview"'),
+            source.index('class="ui-page-header share-detail-hero"'),
+            source.index(
+                'class="ui-panel share-detail-panel share-detail-preview"',
+            ),
         )
 
         for hook in (

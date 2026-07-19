@@ -4,8 +4,8 @@
 
 {% block content %}
 <section class="auth-page" aria-labelledby="auth-page-title" data-auth-page="login">
-    <div class="auth-card">
-        <header class="auth-card__header">
+    <div class="ui-panel ui-panel--floating auth-card">
+        <header class="ui-panel__header auth-card__header">
             <span class="auth-card__icon" aria-hidden="true">
                 <i class="bi bi-box-arrow-in-right"></i>
             </span>
@@ -14,7 +14,7 @@
             <p class="auth-card__description">继续管理你的战术板分享、合集和个人资料。</p>
         </header>
 
-        <div class="auth-card__body">
+        <div class="ui-panel__body auth-card__body">
             {% if form.errors or account_error_message %}
                 {% include 'shares/includes/account_error_summary.html' with form=form summary_title='登录未完成' summary_message=account_error_message|default:'用户名或密码错误，请重试。' hide_error_details=True only %}
             {% endif %}

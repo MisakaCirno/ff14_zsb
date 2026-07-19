@@ -15,12 +15,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(23rem, auto);
   gap: var(--app-space-4);
   align-items: center;
-  min-width: 0;
   padding: var(--app-space-4) var(--app-space-5);
-  background: var(--app-color-surface);
-  border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-surface);
-  box-shadow: var(--app-shadow-surface);
 }
 
 .share-detail-hero__identity,
@@ -92,7 +87,6 @@
 .share-detail-hero__title {
   margin: 0;
   overflow-wrap: anywhere;
-  font-size: clamp(1.5rem, 3vw, 2rem);
   line-height: var(--app-line-height-tight);
 }
 
@@ -264,8 +258,6 @@
   min-width: 0;
 }
 
-.share-detail-panel,
-.share-detail-side-panel,
 .share-detail-disclosure {
   min-width: 0;
   overflow: hidden;
@@ -281,19 +273,6 @@
   gap: var(--app-space-3);
   align-items: start;
   min-width: 0;
-  padding: var(--app-space-4) var(--app-space-5);
-  background: var(--app-color-surface-muted);
-  border-bottom: 1px solid var(--app-color-border);
-}
-
-.share-detail-panel__icon {
-  display: inline-grid;
-  width: 2.5rem;
-  height: 2.5rem;
-  place-items: center;
-  color: var(--app-color-primary);
-  background: var(--app-color-primary-soft);
-  border-radius: var(--app-radius-control);
 }
 
 .share-detail-panel__header h2 {
@@ -313,7 +292,6 @@
 .share-detail-panel__body {
   display: grid;
   gap: var(--app-space-5);
-  min-width: 0;
   padding: clamp(var(--app-space-4), 3vw, var(--app-space-6));
 }
 

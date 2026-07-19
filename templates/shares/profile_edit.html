@@ -4,14 +4,14 @@
 
 {% block content %}
 <div class="account-settings-page" data-account-settings-page="profile">
-    <header class="account-settings-hero">
+    <header class="ui-page-header account-settings-hero">
         <div>
-            <p class="account-settings-hero__eyebrow">账户设置</p>
-            <h1 class="account-settings-hero__title">
+            <p class="ui-eyebrow account-settings-hero__eyebrow">账户设置</p>
+            <h1 class="ui-page-title account-settings-hero__title">
                 <i class="bi bi-person-circle" aria-hidden="true"></i>
                 个人资料
             </h1>
-            <p class="account-settings-hero__description">管理其他用户看到的昵称和简介，以及你的主页浏览偏好。</p>
+            <p class="ui-page-summary account-settings-hero__description">管理其他用户看到的昵称和简介，以及你的主页浏览偏好。</p>
         </div>
         <a class="btn btn-outline-primary" href="{% url 'user_public_profile' user.username %}">
             <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
@@ -25,15 +25,15 @@
         </aside>
 
         <div class="account-settings-content">
-            <section class="account-panel" aria-labelledby="profile-form-title">
-                <header class="account-panel__header">
+            <section class="ui-panel account-panel" aria-labelledby="profile-form-title">
+                <header class="ui-panel__header account-panel__header">
                     <div>
                         <p class="account-panel__eyebrow">公开信息与偏好</p>
                         <h2 class="account-panel__title" id="profile-form-title">编辑资料</h2>
                     </div>
                 </header>
 
-                <div class="account-panel__body">
+                <div class="ui-panel__body account-panel__body">
                     {% if form.errors %}
                         {% if profile_conflict %}
                             {% url 'profile_edit' as profile_reload_url %}
@@ -67,8 +67,8 @@
                 </div>
             </section>
 
-            <section class="account-panel" aria-labelledby="account-facts-title">
-                <header class="account-panel__header">
+            <section class="ui-panel account-panel" aria-labelledby="account-facts-title">
+                <header class="ui-panel__header account-panel__header">
                     <div>
                         <p class="account-panel__eyebrow">只读信息</p>
                         <h2 class="account-panel__title" id="account-facts-title">账户概况</h2>

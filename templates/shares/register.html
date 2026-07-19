@@ -4,8 +4,8 @@
 
 {% block content %}
 <section class="auth-page" aria-labelledby="auth-page-title" data-auth-page="register">
-    <div class="auth-card auth-card--wide">
-        <header class="auth-card__header">
+    <div class="ui-panel ui-panel--floating auth-card auth-card--wide">
+        <header class="ui-panel__header auth-card__header">
             <span class="auth-card__icon" aria-hidden="true">
                 <i class="bi bi-person-plus"></i>
             </span>
@@ -14,7 +14,7 @@
             <p class="auth-card__description">保存和整理喜欢的战术板，也可以发布自己的内容。</p>
         </header>
 
-        <div class="auth-card__body">
+        <div class="ui-panel__body auth-card__body">
             {% if form.errors or account_error_message %}
                 {% include 'shares/includes/account_error_summary.html' with form=form summary_title='注册未完成' summary_message=account_error_message only %}
             {% endif %}

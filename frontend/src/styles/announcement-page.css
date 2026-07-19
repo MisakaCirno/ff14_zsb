@@ -10,15 +10,6 @@
   padding-inline: clamp(var(--app-space-3), 3vw, var(--app-space-7));
 }
 
-.announcement-page__hero {
-  min-width: 0;
-  padding: clamp(var(--app-space-4), 4vw, var(--app-space-7));
-  background: var(--app-color-surface);
-  border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-surface);
-  box-shadow: var(--app-shadow-surface);
-}
-
 .announcement-page__eyebrow,
 .announcement-page__feed-eyebrow {
   margin: 0 0 var(--app-space-1);
@@ -40,7 +31,6 @@
   display: flex;
   gap: var(--app-space-2);
   align-items: center;
-  font-size: clamp(1.65rem, 5vw, 2.35rem);
 }
 
 .announcement-page__title i {
@@ -61,24 +51,11 @@
 }
 
 .announcement-page__feed-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--app-space-4);
-  align-items: flex-end;
-  justify-content: space-between;
   margin-bottom: var(--app-space-4);
-  padding: var(--app-space-4) var(--app-space-5);
-  background: var(--app-color-surface);
-  border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-surface);
 }
 
 .announcement-page__feed-copy {
   min-width: 0;
-}
-
-.announcement-page__feed-title {
-  font-size: clamp(1.25rem, 4vw, 1.65rem);
 }
 
 .announcement-page__count {
