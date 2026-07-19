@@ -1137,7 +1137,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                     template_path.read_text(encoding='utf-8'),
                 )
 
-    def test_frontend_verification_runs_design_and_contrast_checkers(self):
+    def test_frontend_verification_runs_all_static_and_behavior_checks(self):
         package = json.loads(self.read_project_file('frontend/package.json'))
         scripts = package['scripts']
 
@@ -1149,10 +1149,16 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             scripts.get('check:contrast'),
             'node scripts/check-color-contrast.mjs',
         )
+        self.assertEqual(scripts.get('test:e2e'), 'playwright test')
+        self.assertEqual(
+            scripts.get('typecheck:e2e'),
+            'tsc --noEmit --project tsconfig.e2e.json',
+        )
         self.assertEqual(
             scripts.get('verify'),
             'npm run test && npm run check:design && npm run check:contrast '
-            '&& npm run typecheck && npm run lint && npm run build',
+            '&& npm run typecheck && npm run typecheck:e2e '
+            '&& npm run lint && npm run build',
         )
         self.assertTrue(
             (Path(settings.BASE_DIR) / 'frontend' / 'scripts'
