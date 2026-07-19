@@ -7,10 +7,23 @@
 # unchanged. This include intentionally does not define /n/ or rewrite its URI.
 # The renderer is outside the scope of this migration.
 
+# Vite fingerprints production bundles, so these files can be cached forever.
+# Keep this more-specific location before the general static location.
+location ^~ /static/app/assets/ {
+    alias D:/FFXIVShareApp/current/staticfiles/app/assets/;
+    access_log off;
+    log_not_found off;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    add_header X-Content-Type-Options "nosniff" always;
+}
+
+# Other static files are not guaranteed to have content-hashed names. Give
+# them a short cache lifetime so deployments become visible promptly.
 location ^~ /static/ {
     alias D:/FFXIVShareApp/current/staticfiles/;
     access_log off;
     log_not_found off;
+    add_header Cache-Control "public, max-age=3600" always;
     add_header X-Content-Type-Options "nosniff" always;
 }
 

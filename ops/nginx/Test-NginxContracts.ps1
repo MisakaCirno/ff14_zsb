@@ -160,6 +160,26 @@ try {
         -Message 'The compatibility include must not replace the /n/ renderer location.'
     Assert-True -Condition ($includeText.Contains('alias D:/FFXIVShareApp/current/staticfiles/;')) `
         -Message 'The static alias does not point at AppRoot/current/staticfiles.'
+    Assert-True -Condition ($includeText.Contains('location ^~ /static/app/assets/')) `
+        -Message 'The immutable Vite asset location is missing.'
+    Assert-True -Condition ($includeText.Contains('alias D:/FFXIVShareApp/current/staticfiles/app/assets/;')) `
+        -Message 'The Vite asset alias does not point at the fingerprinted build directory.'
+    Assert-True `
+        -Condition ($includeText.Contains('Cache-Control "public, max-age=31536000, immutable" always;')) `
+        -Message 'The Vite asset location is not cached immutably for one year.'
+    Assert-True `
+        -Condition ($includeText.Contains('Cache-Control "public, max-age=3600" always;')) `
+        -Message 'The general static location does not have the short cache policy.'
+    $viteLocationIndex = $includeText.IndexOf('location ^~ /static/app/assets/')
+    $generalStaticIndex = $includeText.IndexOf('location ^~ /static/ {')
+    Assert-True -Condition ($viteLocationIndex -lt $generalStaticIndex) `
+        -Message 'The Vite asset location must precede the general static location.'
+    $immutablePolicies = [System.Text.RegularExpressions.Regex]::Matches(
+        $includeText,
+        'Cache-Control\s+"[^"]*immutable[^"]*"'
+    )
+    Assert-True -Condition ($immutablePolicies.Count -eq 1) `
+        -Message 'Only fingerprinted Vite assets may use immutable caching.'
     Assert-True -Condition ($includeText.Contains('alias D:/FFXIVShareData/media/;')) `
         -Message 'The media alias does not point at DataRoot/media.'
     Assert-True -Condition ($includeText.Contains('location = /health/live/')) `
