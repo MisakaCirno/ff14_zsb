@@ -180,8 +180,14 @@ class ShareAccessContractTests(TestCase):
         self.assertEqual(hidden.context['nsfw_preference'], 'mask')
         self.assertEqual(invalid.context['spoiler_preference'], 'mask')
         self.assertEqual(invalid.context['nsfw_preference'], 'mask')
-        self.assertContains(shown, 'id="spoiler-show" value="show" checked')
-        self.assertContains(shown, 'id="nsfw-show" value="show" checked')
+        self.assertContains(shown, 'id="spoiler-preference"')
+        self.assertContains(shown, 'id="nsfw-preference"')
+        self.assertContains(
+            shown,
+            '<option value="show" selected>显示</option>',
+            count=2,
+            html=True,
+        )
 
     def test_partial_cards_keep_show_preferences(self):
         self.create_share(
