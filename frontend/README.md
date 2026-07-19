@@ -1,6 +1,6 @@
 # 主站前端
 
-本目录只构建 Django 主站使用的 TypeScript、HTMX、Alpine 和 CSS。
+本目录只构建 Django 主站使用的 TypeScript、HTMX 和 CSS。
 
 明确不属于此管线的目录：
 

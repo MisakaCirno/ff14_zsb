@@ -91,7 +91,7 @@
 
 ### R12 主站 Vite 管线
 
-- 建立 TypeScript、HTMX、Alpine 和 CSS 构建入口。
+- 建立 TypeScript、HTMX 和 CSS 构建入口；移除未实际使用的 Alpine 运行时。
 - 移除主站全局 Vue、重复脚本和内联逻辑。
 
 ### R13 设计系统

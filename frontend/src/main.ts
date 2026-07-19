@@ -1,4 +1,3 @@
-import Alpine from 'alpinejs'
 import htmx from 'htmx.org'
 
 import { getCsrfToken } from './core/csrf'
@@ -20,7 +19,6 @@ import './styles/main.css'
 
 declare global {
   interface Window {
-    Alpine: typeof Alpine
     htmx: typeof htmx
   }
 }
@@ -39,7 +37,6 @@ document.addEventListener('htmx:configRequest', (event) => {
   detail.headers['X-CSRFToken'] = csrfToken
 })
 
-window.Alpine = Alpine
 window.htmx = htmx
 htmx.config.allowEval = false
 
@@ -57,4 +54,3 @@ initializeShareDetails()
 initializeShareDetailDialog()
 initializeShareImages()
 initializeShareInteractions()
-Alpine.start()

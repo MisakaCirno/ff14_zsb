@@ -90,7 +90,7 @@ FFXIVShare/
 
 - **后端**: Django 5.2.16 LTS
 - **数据库**: SQLite3
-- **前端**: Vite + TypeScript + HTMX + Alpine.js + Bootstrap 5.3
+- **前端**: Vite + TypeScript + HTMX + Bootstrap 5.3
 - **短链接**: 应用内生成的 8 位分享 ID
 - **二维码**: 浏览器端 qrcodejs2
 
