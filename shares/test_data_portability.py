@@ -961,7 +961,7 @@ class DataPortabilityTests(TestCase):
             )
             self.assertEqual(
                 current_share_leaf[1],
-                '0026_sync_announcement_permission_names',
+                '0027_classify_legacy_private_shares',
             )
             leaves.remove(current_share_leaf)
             leaves.append(['shares', '0024_widen_site_message_titles'])

@@ -227,6 +227,7 @@ PENDING_MIGRATIONS = (
     ("shares", "0024_widen_site_message_titles"),
     ("shares", "0025_add_collection_owner_index"),
     ("shares", "0026_sync_announcement_permission_names"),
+    ("shares", "0027_classify_legacy_private_shares"),
 )
 SQLITE_SEQUENCE_MINIMUM_HEADROOM = 1_000_000
 SQLITE_SEQUENCE_REBUILD_FLOORS = {
@@ -237,7 +238,7 @@ SQLITE_SEQUENCE_REBUILD_FLOORS = {
     "shares_userprofile": 9_500_005,
 }
 SQLITE_SEQUENCE_CONTROL_FLOORS = {
-    # This AUTOINCREMENT table is not rebuilt by shares/0019 through shares/0026.
+    # This AUTOINCREMENT table is not rebuilt by shares/0019 through shares/0027.
     "shares_announcement": 9_600_006,
 }
 SQLITE_SEQUENCE_SOURCE_FLOORS = {
@@ -1282,7 +1283,7 @@ run_command(
         reviewer,
         "--notes",
         (
-            "Reviewed the complete shares/0019 through shares/0026 plan as "
+            "Reviewed the complete shares/0019 through shares/0027 plan as "
             "lossless for this deployed-0018 synthetic E2E source."
         ),
         "--output",

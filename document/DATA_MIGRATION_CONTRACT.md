@@ -144,6 +144,7 @@ python ops\migration\Compare-SiteDataExports.py `
 - 对 `legacy_private`，管理员必须在审核中心选择“确认为历史下架”或“确认为作者私密”。前者写入 `confirm_restriction` 并继续 fail-closed，后者写入 `release_restriction`，且两者都保留原 `visibility`。
 - 对“举报下架后又出现审核通过”的记录，管理员必须明确“确认维持”或“解除限制”；不能为了通过预检而被迫开放内容。
 - 每次人工处理后重新运行严格预检，只有 `blocking_errors` 和 `manual_review` 都为空才允许切换。
+- `shares/0027` 固化 2026-07-19 R19 生产快照中四条 `legacy_private` 的逐条人工结论：一条历史下架、三条作者私密。迁移只处理仍为“已通过 + 私有 + 历史待确认”的对应记录，保留 `visibility=private`，并写入确定性 `confirm_restriction`/`release_restriction` 日志；已出现新审核证据或状态变化的记录不会被该结论覆盖。
 
 ### SQLite 物理结构与序列保真
 
