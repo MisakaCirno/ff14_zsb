@@ -66,7 +66,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ops\windows\Test-Waitr
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ops\nginx\Test-NginxContracts.ps1
 ```
 
-Waitress 冒烟使用临时环境文件、临时 SQLite 和随机回环端口，结束后必须没有残留进程、监听端口或临时目录。`verify.ps1` 在 Windows 上会自动执行这些契约；传入 `-SkipTests` 时只跳过真实 Waitress 进程冒烟。
+Waitress 冒烟使用临时环境文件、临时 SQLite 和随机回环端口，结束后必须没有残留进程、监听端口或临时目录。`verify.ps1 -Profile Full` 和 `-Profile Release` 会在 Windows 上执行这些契约；默认 `Fast` 档位跳过重量级迁移契约和真实 Waitress 进程冒烟，`-SkipTests` 则进一步跳过 Django 测试。
 
 ## 安装 WinSW 服务
 

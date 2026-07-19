@@ -13,10 +13,17 @@ python manage.py createsuperuser
 
 ## 自动化与可访问性回归
 
-提交前运行完整验证：
+日常提交前运行快速验证；它仍会并行执行完整 Django 测试、前端验证和基础运维契约：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\verify.ps1
+```
+
+合并或发布候选前运行完整验证；正式发布工具链的合成离线演练使用 `Release` 档位：
+
+```powershell
+.\verify.ps1 -Profile Full
+.\verify.ps1 -Profile Release
 ```
 
 前端行为测试和颜色对比度也可单独运行：

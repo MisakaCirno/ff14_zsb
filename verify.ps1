@@ -2,6 +2,10 @@
 param(
     [string]$PythonExecutable = '',
     [string]$NpmExecutable = '',
+    [ValidateSet('Fast', 'Full', 'Release')]
+    [string]$Profile = 'Fast',
+    [ValidateRange(1, 32)]
+    [int]$DjangoParallel = 4,
     [switch]$SkipTests,
     [switch]$SkipFrontend,
     [switch]$IncludeProductionCopyE2E
@@ -10,11 +14,15 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if ($SkipTests -and $IncludeProductionCopyE2E) {
-    throw 'IncludeProductionCopyE2E cannot be combined with SkipTests.'
+$effectiveProfile = if ($IncludeProductionCopyE2E) { 'Release' } else { $Profile }
+$runHeavyContracts = $effectiveProfile -in @('Full', 'Release')
+$runReleaseE2E = $effectiveProfile -eq 'Release'
+
+if ($SkipTests -and $runReleaseE2E) {
+    throw 'The Release profile cannot be combined with SkipTests.'
 }
-if ($IncludeProductionCopyE2E -and $env:OS -ne 'Windows_NT') {
-    throw 'IncludeProductionCopyE2E requires Windows NTFS and DACL APIs.'
+if ($runReleaseE2E -and $env:OS -ne 'Windows_NT') {
+    throw 'The Release profile requires Windows NTFS and DACL APIs.'
 }
 
 function Invoke-CheckedStep {
@@ -25,15 +33,25 @@ function Invoke-CheckedStep {
         [scriptblock]$Action
     )
 
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     Write-Host "==> $Name"
-    & $Action
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Name failed with exit code $LASTEXITCODE"
+    try {
+        & $Action
+        if ($LASTEXITCODE -ne 0) {
+            throw "$Name failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        $stopwatch.Stop()
+        Write-Host ("<== {0} ({1:N2}s)" -f $Name, $stopwatch.Elapsed.TotalSeconds)
     }
 }
 
 Push-Location $PSScriptRoot
 try {
+    $verificationStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    Write-Host "Verification profile: $effectiveProfile"
+
     if ([string]::IsNullOrWhiteSpace($PythonExecutable)) {
         $venvPython = Join-Path $PSScriptRoot 'venv\Scripts\python.exe'
         if (Test-Path -LiteralPath $venvPython) {
@@ -85,7 +103,7 @@ try {
             & (Join-Path $PSScriptRoot 'ops\nginx\Test-NginxContracts.ps1')
         }
 
-        if (-not $SkipTests) {
+        if (-not $SkipTests -and $runHeavyContracts) {
             Invoke-CheckedStep 'Production-copy capture gate contracts' {
                 & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyCaptureGate.ps1') `
                     -RepositoryRoot $PSScriptRoot `
@@ -150,7 +168,7 @@ try {
                     -PythonExecutable $PythonExecutable
             }
 
-            if ($IncludeProductionCopyE2E) {
+            if ($runReleaseE2E) {
                 Invoke-CheckedStep 'Production-copy real offline end-to-end contracts' {
                     & (Join-Path $PSScriptRoot 'ops\migration\Test-ProductionCopyEndToEnd.ps1') `
                         -IncludeSlow `
@@ -174,12 +192,17 @@ try {
     }
 
     if (-not $SkipTests) {
-        Invoke-CheckedStep 'Django test suite' {
-            & $PythonExecutable manage.py test -v 1
+        Invoke-CheckedStep "Django test suite ($DjangoParallel workers)" {
+            & $PythonExecutable manage.py test -v 1 --parallel $DjangoParallel
         }
     }
 
-    Write-Host 'All requested checks passed.'
+    $verificationStopwatch.Stop()
+    Write-Host (
+        "All requested checks passed for profile {0} in {1:N2}s." -f `
+            $effectiveProfile,
+            $verificationStopwatch.Elapsed.TotalSeconds
+    )
 }
 finally {
     Pop-Location

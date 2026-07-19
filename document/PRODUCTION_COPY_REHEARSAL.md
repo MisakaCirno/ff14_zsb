@@ -497,7 +497,7 @@ E2E 源库从空库严格前向构建到 `shares/0018`，并断言 `django_migra
 
 handoff 合同和端到端脚本使用真实 NTFS/DACL；其余快速合同的部分成功路径为了可重复测试会使用严格限域的 ACL 回调，不能单独证明目标机能够写入和复核生产 DACL。端到端脚本在指定的真实 RunParent 下调用生产 `run_bootstrap` 三次（一次 Proposal、两次 approved rehearsal），并使用冻结 Approval CLI；Bootstrap CLI 参数解析和 Invoke wrapper 另由快速合同覆盖。必须先用非敏感合成数据在计划使用的演练机与 RunParent 上让这些命令完整通过，再放入生产副本；若 `SetFileSecurityW`、祖先链、handoff 或 approval 输出 DACL 校验失败，不得绕过。
 
-需要连同 Django、前端静态检查和其它运维合同一起执行时，可运行 `verify.ps1 -IncludeProductionCopyE2E`。该开关会显式启用耗时的真实离线端到端测试，但仍不读取生产输入，也不启动浏览器。
+需要连同 Django、前端静态检查和其它运维合同一起执行时，可运行 `verify.ps1 -Profile Release`。该档位会显式启用耗时的真实离线端到端测试，但仍不读取生产输入，也不启动浏览器。旧的 `-IncludeProductionCopyE2E` 参数仍作为等价兼容入口保留。
 
 ## R19 完成门禁
 
