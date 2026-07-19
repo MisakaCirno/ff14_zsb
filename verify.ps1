@@ -95,6 +95,11 @@ try {
                 -RepositoryRoot $PSScriptRoot
         }
 
+        Invoke-CheckedStep 'Current Git deployment fact contracts' {
+            & (Join-Path $PSScriptRoot 'ops\release\Test-CurrentGitDeploymentFactsContract.ps1') `
+                -RepositoryRoot $PSScriptRoot
+        }
+
         Invoke-CheckedStep 'WinSW service contract checks' {
             & (Join-Path $PSScriptRoot 'ops\windows\Test-WinSWServiceContract.ps1')
         }
