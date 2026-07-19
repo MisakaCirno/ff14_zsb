@@ -12,6 +12,10 @@
 4. `components.css`：可跨页面复用的 `ui-*` 组件。
 5. `*-page.css`：页面布局和业务状态，不重复定义通用容器外观。
 
+第三方组件样式必须先于 Vite 主样式加载，由页面样式用设计令牌完成最终适配；当前 Quill 编辑器遵循这一加载顺序。
+
+审计范围覆盖主站 Django 模板、自有前端样式、Quill 编辑器适配和分享图片生成。`static/overlay`、`static/viewer*` 与 `sb_renderer` 属于后续单独处理的“小抄儿”/渲染器范围，不纳入主站视觉系统。
+
 ## 视觉规则
 
 - 圆角只有两档：按钮、输入框、导航项、筛选项和徽章统一使用 `--app-radius-control`（8px），卡片、面板和浮层统一使用 `--app-radius-surface`（12px）。只有宽高相等且必须呈正圆的图标、关闭按钮和提示点可以使用 `--app-radius-circle`。

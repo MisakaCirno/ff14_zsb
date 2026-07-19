@@ -8,6 +8,19 @@ const STYLES_DIRECTORY = fileURLToPath(
 );
 const TEMPLATES_DIRECTORY = join(PROJECT_DIRECTORY, "templates");
 const TOKENS_PATH = join(STYLES_DIRECTORY, "tokens.css");
+const QUILL_ADAPTER_PATH = join(
+  PROJECT_DIRECTORY,
+  "static",
+  "css",
+  "quill-widget.css",
+);
+const SHARE_IMAGE_PATH = join(
+  PROJECT_DIRECTORY,
+  "frontend",
+  "src",
+  "features",
+  "share-image.ts",
+);
 const failures = [];
 
 const requiredTokens = new Map([
@@ -146,6 +159,22 @@ for (const templatePath of templateFiles) {
   }
 }
 
+const quillAdapterSource = readFileSync(QUILL_ADAPTER_PATH, "utf8");
+if (!quillAdapterSource.includes(
+  "border-radius: var(--app-radius-control, 0.5rem);",
+)) {
+  failures.push(
+    "static/css/quill-widget.css: Quill code blocks must use the 8px control radius",
+  );
+}
+
+const shareImageSource = readFileSync(SHARE_IMAGE_PATH, "utf8");
+if (!shareImageSource.includes("const cornerRadius = 8")) {
+  failures.push(
+    "frontend/src/features/share-image.ts: exported QR cards must use the 8px control radius",
+  );
+}
+
 if (failures.length > 0) {
   console.error(`Design-system check failed (${failures.length} issues):`);
   for (const failure of failures) {
@@ -156,6 +185,7 @@ if (failures.length > 0) {
   console.log(
     `Design-system check passed: ${styleFiles.length} stylesheets and ` +
       `${checkedRadiusDeclarations} radius declarations across ` +
-      `${templateFiles.length} templates follow the shared contract.`,
+      `${templateFiles.length} templates plus editor/export integrations ` +
+      "follow the shared contract.",
   );
 }

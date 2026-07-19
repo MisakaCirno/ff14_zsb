@@ -8,8 +8,8 @@
     <title>{% block title %}粘鼠板儿{% endblock %}</title>
     <link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/bootstrap-icons.css' %}">
-    {% vite_assets %}
     {% block extra_css %}{% endblock %}
+    {% vite_assets %}
     {% block extra_head %}{% endblock %}
 </head>
 <body class="app-body">

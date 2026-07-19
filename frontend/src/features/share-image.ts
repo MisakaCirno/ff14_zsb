@@ -177,7 +177,7 @@ function drawQrCode(
 ): { x: number; y: number; size: number } {
   const size = 120
   const padding = 15
-  const borderRadius = 6
+  const cornerRadius = 8
   const checkSize = size + padding * 2
   const bottom = canvas.height - checkSize
   const leftScore = calculateRegionComplexity(context, 0, bottom, checkSize, checkSize)
@@ -197,15 +197,15 @@ function drawQrCode(
   context.shadowOffsetX = 0
   context.shadowOffsetY = 3
   context.beginPath()
-  context.moveTo(x + borderRadius, y)
-  context.lineTo(x + size - borderRadius, y)
-  context.quadraticCurveTo(x + size, y, x + size, y + borderRadius)
-  context.lineTo(x + size, y + size - borderRadius)
-  context.quadraticCurveTo(x + size, y + size, x + size - borderRadius, y + size)
-  context.lineTo(x + borderRadius, y + size)
-  context.quadraticCurveTo(x, y + size, x, y + size - borderRadius)
-  context.lineTo(x, y + borderRadius)
-  context.quadraticCurveTo(x, y, x + borderRadius, y)
+  context.moveTo(x + cornerRadius, y)
+  context.lineTo(x + size - cornerRadius, y)
+  context.quadraticCurveTo(x + size, y, x + size, y + cornerRadius)
+  context.lineTo(x + size, y + size - cornerRadius)
+  context.quadraticCurveTo(x + size, y + size, x + size - cornerRadius, y + size)
+  context.lineTo(x + cornerRadius, y + size)
+  context.quadraticCurveTo(x, y + size, x, y + size - cornerRadius)
+  context.lineTo(x, y + cornerRadius)
+  context.quadraticCurveTo(x, y, x + cornerRadius, y)
   context.closePath()
   context.fill()
   context.shadowColor = 'transparent'

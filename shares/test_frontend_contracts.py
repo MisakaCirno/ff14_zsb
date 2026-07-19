@@ -1067,6 +1067,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         templates_directory = Path(settings.BASE_DIR) / 'templates'
         browse_source = self.read_frontend('styles/browse-page.css')
         shell_source = self.read_frontend('styles/app-shell.css')
+        editor_source = self.read_frontend('styles/share-editor-page.css')
+        base_source = self.read_template('base.html')
+        admin_editor_source = self.read_project_file('static/css/quill-widget.css')
+        share_image_source = self.read_frontend('features/share-image.ts')
 
         for selector in ('.browse-category-chip', '.browse-filter-panel__trigger'):
             self.assert_css_rule_contains(
@@ -1083,6 +1087,19 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 re.DOTALL,
             ),
         )
+        self.assertIn(
+            '.share-editor-rich-text .ql-editor .ql-code-block-container',
+            editor_source,
+        )
+        self.assertLess(
+            base_source.index('{% block extra_css %}'),
+            base_source.index('{% vite_assets %}'),
+        )
+        self.assertIn(
+            'border-radius: var(--app-radius-control, 0.5rem);',
+            admin_editor_source,
+        )
+        self.assertIn('const cornerRadius = 8', share_image_source)
 
         for style_path in styles_directory.glob('*.css'):
             with self.subTest(style=style_path.name):

@@ -11,3 +11,8 @@
 .quill-admin-editor .ql-editor {
     min-height: 18rem;
 }
+
+.quill-admin-editor .ql-editor code,
+.quill-admin-editor .ql-editor .ql-code-block-container {
+    border-radius: var(--app-radius-control, 0.5rem);
+}

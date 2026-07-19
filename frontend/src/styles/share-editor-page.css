@@ -500,6 +500,11 @@
   line-height: var(--app-line-height-relaxed);
 }
 
+.share-editor-rich-text .ql-editor code,
+.share-editor-rich-text .ql-editor .ql-code-block-container {
+  border-radius: var(--app-radius-control);
+}
+
 @container share-editor-page (max-width: 44rem) {
   .share-editor-hero {
     grid-template-columns: 1fr;
