@@ -1094,7 +1094,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         admin_editor_source = self.read_project_file('static/css/quill-widget.css')
         share_image_source = self.read_frontend('features/share-image.ts')
 
-        for selector in ('.browse-category-chip', '.browse-content-policy'):
+        for selector in ('.browse-category-chip', '.browse-content-policy__select'):
             self.assert_css_rule_contains(
                 browse_source,
                 selector,
@@ -1976,8 +1976,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('aria-labelledby="browse-toolbar-title"', source)
         self.assertIn('aria-labelledby="browse-results-title"', source)
         self.assertIn('aria-label="敏感内容显示方式"', source)
-        self.assertIn('aria-label="剧透内容显示方式"', source)
-        self.assertIn('aria-label="令人不适内容显示方式"', source)
+        self.assertIn('for="spoiler-preference"', source)
+        self.assertIn('for="nsfw-preference"', source)
         self.assertIn('class="browse-toolbar__controls"', source)
         self.assertIn('class="browse-toolbar__utilities"', source)
         self.assertLess(
@@ -1988,9 +1988,13 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('<span>高级</span>', source)
         self.assertNotIn('<span>筛选</span>', source)
         for field in ('spoiler', 'nsfw'):
+            self.assertIn(
+                f'name="{field}" id="{field}-preference"',
+                source,
+            )
             for value in ('hide', 'mask', 'show'):
                 self.assertIn(
-                    f'name="{field}" id="{field}-{value}" value="{value}"',
+                    f'<option value="{value}"',
                     source,
                 )
         self.assertIn('aria-labelledby="browse-mode-label"', source)

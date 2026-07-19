@@ -261,49 +261,31 @@
 
 .browse-content-policy {
   display: flex;
-  flex: 1 1 0;
+  flex: 0 1 auto;
   gap: var(--app-space-2);
   align-items: center;
   min-width: 0;
-  margin: 0;
-  padding: var(--app-space-1);
-  background: var(--app-color-surface-muted);
-  border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-control);
 }
 
-.browse-content-policy legend {
+.browse-content-policy label {
   flex: 0 0 auto;
-  float: none;
-  width: auto;
-  margin: 0 0 0 var(--app-space-1);
+  margin: 0;
   color: var(--app-color-text);
   font-size: var(--app-text-xs);
   font-weight: var(--app-font-semibold);
   white-space: nowrap;
 }
 
-.browse-content-policy legend i {
+.browse-content-policy label i {
   margin-right: var(--app-space-1);
   color: var(--app-color-text-muted);
 }
 
-.browse-content-policy__options {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--app-space-1);
-  min-width: 0;
-}
-
-.browse-content-policy__options .btn {
-  min-width: 0;
+.browse-content-policy__select {
+  width: auto;
+  min-width: 5.5rem;
   min-height: 2.25rem;
-  padding: var(--app-space-1) var(--app-space-2);
-  overflow: hidden;
   font-size: var(--app-text-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
   border-radius: var(--app-radius-control);
 }
 
@@ -417,6 +399,10 @@
 
   .browse-toolbar__setting {
     display: grid;
+  }
+
+  .browse-content-policy__select {
+    width: 100%;
   }
 
   .browse-toolbar__sort,
