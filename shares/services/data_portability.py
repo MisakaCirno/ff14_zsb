@@ -26,6 +26,7 @@ from .data_portability_codec import (
     _v3_record,
     _write_v3_record,
 )
+from .data_portability_io import _sha256_file, _write_json_atomic
 from .data_portability_projection import (
     SQLITE_INTERNAL_TABLES,
     _build_dependency_projection,
@@ -144,27 +145,6 @@ class ValidationReport:
             'warnings': self.warnings,
             'quarantined_records': self.quarantined_records,
         }
-
-
-def _sha256_file(path: Path) -> str:
-    digest = sha256()
-    with path.open('rb') as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f'.{path.name}.tmp-{uuid4().hex}')
-    try:
-        with temporary.open('w', encoding='utf-8', newline='\n') as stream:
-            json.dump(payload, stream, ensure_ascii=False, indent=2, sort_keys=True)
-            stream.write('\n')
-        os.replace(temporary, path)
-    finally:
-        if temporary.exists():
-            temporary.unlink()
 
 
 def _serialize_v3_queryset(queryset, stream, *, spec: EntitySpec) -> None:
