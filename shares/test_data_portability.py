@@ -1083,11 +1083,11 @@ class DataPortabilityTests(TestCase):
                 cursor.execute(f'DROP TABLE {quoted_table}')
 
     def test_v3_fails_closed_for_unclassified_database_object_types(self):
-        from .services import data_portability
+        from .services import data_portability_projection
 
-        discovered = data_portability._discovered_database_objects()
+        discovered = data_portability_projection._discovered_database_objects()
         with patch.object(
-            data_portability,
+            data_portability_projection,
             '_discovered_database_objects',
             return_value={**discovered, 'external_business_data': 'm'},
         ):
