@@ -19,8 +19,8 @@
   padding: clamp(var(--app-space-4), 3vw, var(--app-space-6));
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-xl);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .share-editor-hero__copy {
@@ -88,8 +88,8 @@
   overflow: hidden;
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-xl);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .share-editor-panel:focus-within {
@@ -115,7 +115,7 @@
   place-items: center;
   color: var(--app-color-primary);
   background: var(--app-color-primary-soft);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .share-editor-panel__header h2 {
@@ -227,7 +227,7 @@
   min-width: 0;
   padding: var(--app-space-4) var(--app-space-5);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .share-editor-notice > i {
@@ -283,7 +283,7 @@
   background: var(--app-color-danger-soft);
   border: 1px solid var(--app-color-danger);
   border-left-width: 0.35rem;
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .share-editor-error-summary:focus-visible {
@@ -331,7 +331,7 @@
   padding: var(--app-space-4);
   background: var(--app-color-surface-muted);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .share-editor-flags legend {
@@ -368,7 +368,7 @@
   padding: var(--app-space-2) var(--app-space-3);
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-control-border);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .share-editor-flag:focus-within {
@@ -432,7 +432,7 @@
   font-family: inherit;
   background: var(--app-color-surface-muted);
   border-color: var(--app-color-border-strong);
-  border-radius: var(--app-radius-md) var(--app-radius-md) 0 0;
+  border-radius: var(--app-radius-control) var(--app-radius-control) 0 0;
 }
 
 .share-editor-rich-text .ql-toolbar.ql-snow .ql-formats {
@@ -450,7 +450,7 @@
   height: 2.75rem;
   min-height: 2.75rem;
   padding: 0.6rem;
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-control);
 }
 
 .share-editor-rich-text .ql-toolbar.ql-snow button:hover,
@@ -477,7 +477,7 @@
   display: flex;
   align-items: center;
   min-height: 2.75rem;
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-control);
 }
 
 .share-editor-rich-text .ql-toolbar.ql-snow .ql-picker.ql-header .ql-picker-label::before,
@@ -520,7 +520,7 @@
   font-family: inherit;
   font-size: inherit;
   border-color: var(--app-color-border-strong);
-  border-radius: 0 0 var(--app-radius-md) var(--app-radius-md);
+  border-radius: 0 0 var(--app-radius-control) var(--app-radius-control);
 }
 
 .share-editor-rich-text .ql-editor {

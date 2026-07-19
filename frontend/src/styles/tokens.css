@@ -53,18 +53,14 @@
   --app-color-disabled-text: #625a55;
   --app-color-disabled-bg: #e4ddd7;
   --app-color-disabled-border: #877a71;
-  --app-color-preview-start: #667eea;
-  --app-color-preview-end: #764ba2;
   --app-color-focus-border: #a64262;
   --app-color-image-focus-inner: #fffdfb;
   --app-color-image-focus-outer: #9b2f50;
-  --app-gradient-preview: linear-gradient(
-    135deg,
-    var(--app-color-preview-start) 0%,
-    var(--app-color-preview-end) 100%
-  );
   --app-color-overlay: rgba(0, 0, 0, 0.6);
   --app-color-overlay-hover: rgba(0, 0, 0, 0.68);
+  --app-color-dialog-backdrop: rgba(20, 18, 17, 0.72);
+  --app-color-media-canvas: #17151a;
+  --app-color-media-veil: rgba(0, 0, 0, 0.05);
   --app-color-shell: #171725;
   --app-color-shell-raised: #252441;
   --app-color-shell-text: #f8f8ff;
@@ -75,12 +71,6 @@
   --app-color-shell-notification: #e24b5b;
   --app-color-shell-hover: rgba(255, 255, 255, 0.09);
   --app-color-danger-on-dark: #ffc1c8;
-  --app-color-shell-gradient-end: #28234d;
-  --app-gradient-shell: linear-gradient(
-    115deg,
-    var(--app-color-shell) 0%,
-    var(--app-color-shell-gradient-end) 100%
-  );
 
   /* Typography */
   --app-font-sans: var(--bs-font-sans-serif);
@@ -107,17 +97,17 @@
   --app-space-6: 2rem;
   --app-space-7: 3rem;
 
-  /* Shape and elevation */
-  --app-radius-sm: 0.25rem;
-  --app-radius-md: 0.375rem;
-  --app-radius-lg: 0.75rem;
-  --app-radius-xl: 1rem;
+  /* Shape: controls, surfaces, and fully rounded geometry only. */
+  --app-radius-control: 0.5rem;
+  --app-radius-surface: 0.75rem;
   --app-radius-pill: 50rem;
-  --app-shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-  --app-shadow-md: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-  --app-shadow-hover: 0 0.5rem 1.5625rem rgba(0, 0, 0, 0.15);
-  --app-shadow-modal: 0 1rem 3rem rgba(0, 0, 0, 0.175);
-  --app-shadow-shell: 0 0.35rem 1.25rem rgba(18, 17, 40, 0.18);
+  --app-radius-circle: 50%;
+
+  /* Elevation: resting surfaces, floating controls, and dialogs. */
+  --app-shadow-surface: 0 0.125rem 0.5rem rgba(45, 41, 38, 0.08);
+  --app-shadow-floating: 0 0.5rem 1.5rem rgba(45, 41, 38, 0.14);
+  --app-shadow-dialog: 0 1rem 3rem rgba(20, 18, 17, 0.18);
+  --app-shadow-bottom-nav: 0 -0.25rem 1rem rgba(45, 41, 38, 0.08);
   --app-focus-ring-width: 0.25rem;
   --app-focus-ring-color: rgba(155, 47, 80, 0.7);
   --app-focus-ring-offset: 0.125rem;

@@ -15,8 +15,8 @@
   padding: clamp(var(--app-space-4), 4vw, var(--app-space-7));
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-xl);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .announcement-page__eyebrow,
@@ -70,7 +70,7 @@
   padding: var(--app-space-4) var(--app-space-5);
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .announcement-page__feed-copy {
@@ -91,7 +91,7 @@
   font-size: var(--app-text-sm);
   background: var(--app-color-surface-muted);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .announcement-page__count strong {
@@ -118,8 +118,8 @@
   overflow: hidden;
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .announcement-card:focus-within {

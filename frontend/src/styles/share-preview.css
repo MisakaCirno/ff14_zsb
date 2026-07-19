@@ -6,7 +6,7 @@
 .share-preview__link {
   position: relative;
   display: block;
-  border-radius: var(--app-radius-lg) var(--app-radius-lg) 0 0;
+  border-radius: var(--app-radius-surface) var(--app-radius-surface) 0 0;
 }
 
 .share-preview__link:focus-visible {
@@ -20,8 +20,8 @@
   pointer-events: none;
   content: '';
   border: 2px solid var(--app-color-image-focus-inner);
-  border-radius: calc(var(--app-radius-lg) - var(--app-space-1))
-    calc(var(--app-radius-lg) - var(--app-space-1)) 0 0;
+  border-radius: calc(var(--app-radius-surface) - var(--app-space-1))
+    calc(var(--app-radius-surface) - var(--app-space-1)) 0 0;
   box-shadow: 0 0 0 0.1875rem var(--app-color-image-focus-outer);
 }
 
@@ -38,25 +38,17 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background:
-    linear-gradient(
-      105deg,
-      transparent 30%,
-      rgba(255, 255, 255, 0.22) 45%,
-      transparent 60%
-    ),
-    var(--app-color-surface-muted);
-  background-size: 250% 100%, 100% 100%;
+  background: var(--app-color-surface-muted);
 }
 
 .share-preview__veil {
   z-index: 2;
   pointer-events: none;
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--app-color-media-veil);
 }
 
 .share-preview[aria-busy='true'] .share-preview__skeleton {
-  animation: app-preview-shimmer 1.4s var(--app-ease-standard) infinite;
+  animation: app-preview-pulse 1.4s var(--app-ease-standard) infinite alternate;
 }
 
 .share-preview__meta {
@@ -67,13 +59,13 @@
   cursor: default;
 }
 
-@keyframes app-preview-shimmer {
+@keyframes app-preview-pulse {
   from {
-    background-position: 100% 0, 0 0;
+    opacity: 0.72;
   }
 
   to {
-    background-position: -150% 0, 0 0;
+    opacity: 1;
   }
 }
 

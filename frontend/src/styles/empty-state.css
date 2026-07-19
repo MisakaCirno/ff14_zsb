@@ -1,7 +1,7 @@
 .empty-state {
   border: 1px dashed var(--app-color-border);
   background: var(--app-color-surface-muted);
-  box-shadow: var(--app-shadow-sm);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .empty-state .card-body {

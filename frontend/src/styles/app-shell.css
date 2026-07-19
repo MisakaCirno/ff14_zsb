@@ -6,8 +6,8 @@
   padding: var(--app-space-2) var(--app-space-4);
   color: var(--app-color-text);
   background: var(--app-color-surface);
-  border-radius: var(--app-radius-md);
-  box-shadow: var(--app-shadow-md);
+  border-radius: var(--app-radius-control);
+  box-shadow: var(--app-shadow-floating);
   transform: translateY(calc(-100% - var(--app-space-5)));
   transition: transform var(--app-motion-fast) var(--app-ease-standard);
 }
@@ -29,7 +29,7 @@
   color: var(--app-color-text);
   background: color-mix(in srgb, var(--app-color-surface) 96%, transparent);
   border-bottom: 1px solid var(--app-color-border);
-  box-shadow: var(--app-shadow-sm);
+  box-shadow: var(--app-shadow-surface);
   backdrop-filter: blur(0.75rem);
 }
 
@@ -61,8 +61,8 @@
   background: var(--app-color-primary);
   color: var(--app-color-shell-text);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .app-navbar .navbar-toggler {
@@ -89,7 +89,7 @@
   min-height: 2.5rem;
   padding-inline: var(--app-space-3);
   color: var(--app-color-text-muted);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .app-navbar .nav-link:hover,
@@ -253,7 +253,7 @@
   height: 0.65rem;
   background: var(--app-color-shell-notification);
   border: 2px solid var(--app-color-surface);
-  border-radius: 50%;
+  border-radius: var(--app-radius-circle);
 }
 
 .app-navbar__brand:focus-visible,
@@ -596,7 +596,7 @@
     padding: var(--app-space-1) var(--app-space-1) var(--app-space-1) var(--app-space-3);
     background: var(--app-color-surface-muted);
     border: 1px solid var(--app-color-border);
-    border-radius: 999px;
+    border-radius: var(--app-radius-pill);
   }
 
   .app-mobile-search__icon {
@@ -616,7 +616,7 @@
     flex: 0 0 auto;
     min-height: 2.25rem;
     padding-inline: var(--app-space-4);
-    border-radius: 999px;
+    border-radius: var(--app-radius-pill);
   }
 
   .app-mobile-nav {
@@ -631,7 +631,7 @@
     padding: var(--app-space-1) var(--app-space-2) env(safe-area-inset-bottom);
     background: color-mix(in srgb, var(--app-color-surface) 96%, transparent);
     border-top: 1px solid var(--app-color-border);
-    box-shadow: 0 -0.25rem 1rem rgba(45, 41, 38, 0.08);
+    box-shadow: var(--app-shadow-bottom-nav);
     backdrop-filter: blur(0.75rem);
   }
 
@@ -647,7 +647,7 @@
     color: var(--app-color-text-muted);
     font-size: 0.68rem;
     text-decoration: none;
-    border-radius: var(--app-radius-md);
+    border-radius: var(--app-radius-control);
   }
 
   .app-mobile-nav__item > i,
@@ -673,8 +673,8 @@
     color: var(--app-color-shell-text);
     font-size: 1rem;
     background: var(--app-color-primary);
-    border-radius: 0.5rem;
-    box-shadow: var(--app-shadow-sm);
+    border-radius: var(--app-radius-control);
+    box-shadow: var(--app-shadow-surface);
   }
 
   .app-mobile-nav__icon-wrap {
@@ -690,7 +690,7 @@
     height: 0.45rem;
     background: var(--app-color-danger);
     border: 1px solid var(--app-color-surface);
-    border-radius: 50%;
+    border-radius: var(--app-radius-circle);
   }
 }
 

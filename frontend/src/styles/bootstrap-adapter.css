@@ -68,9 +68,9 @@
   --bs-form-invalid-color: var(--app-color-danger);
   --bs-form-invalid-border-color: var(--app-color-danger);
 
-  --bs-box-shadow-sm: var(--app-shadow-sm);
-  --bs-box-shadow: var(--app-shadow-md);
-  --bs-box-shadow-lg: var(--app-shadow-modal);
+  --bs-box-shadow-sm: var(--app-shadow-surface);
+  --bs-box-shadow: var(--app-shadow-floating);
+  --bs-box-shadow-lg: var(--app-shadow-dialog);
   --bs-focus-ring-width: var(--app-focus-ring-width);
   --bs-focus-ring-color: var(--app-focus-ring-color);
 }
@@ -293,9 +293,9 @@
 
 .card {
   --bs-card-border-color: var(--app-color-border);
-  --bs-card-border-radius: var(--app-radius-lg);
+  --bs-card-border-radius: var(--app-radius-surface);
   --bs-card-inner-border-radius: calc(
-    var(--app-radius-lg) - var(--bs-card-border-width)
+    var(--app-radius-surface) - var(--bs-card-border-width)
   );
 }
 
@@ -339,27 +339,27 @@
 }
 
 .alert {
-  --bs-alert-border-radius: var(--app-radius-md);
+  --bs-alert-border-radius: var(--app-radius-control);
 }
 
 .modal {
   --bs-modal-border-color: var(--app-color-border);
-  --bs-modal-border-radius: var(--app-radius-lg);
+  --bs-modal-border-radius: var(--app-radius-surface);
   --bs-modal-inner-border-radius: calc(
-    var(--app-radius-lg) - var(--bs-modal-border-width)
+    var(--app-radius-surface) - var(--bs-modal-border-width)
   );
-  --bs-modal-box-shadow: var(--app-shadow-modal);
+  --bs-modal-box-shadow: var(--app-shadow-dialog);
 }
 
 .dropdown-menu:not(.dropdown-menu-dark) {
   --bs-dropdown-color: var(--app-color-text);
   --bs-dropdown-bg: var(--app-color-surface);
   --bs-dropdown-border-color: var(--app-color-control-border);
-  --bs-dropdown-border-radius: var(--app-radius-md);
+  --bs-dropdown-border-radius: var(--app-radius-control);
   --bs-dropdown-inner-border-radius: calc(
-    var(--app-radius-md) - var(--bs-dropdown-border-width)
+    var(--app-radius-control) - var(--bs-dropdown-border-width)
   );
-  --bs-dropdown-box-shadow: var(--app-shadow-md);
+  --bs-dropdown-box-shadow: var(--app-shadow-floating);
   --bs-dropdown-link-color: var(--app-color-text);
   --bs-dropdown-link-hover-color: var(--app-color-primary-hover);
   --bs-dropdown-link-hover-bg: var(--app-color-primary-soft);

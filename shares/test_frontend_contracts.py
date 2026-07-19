@@ -810,8 +810,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('--app-color-primary:', tokens_source)
         self.assertIn('--app-font-sans:', tokens_source)
         self.assertIn('--app-space-4:', tokens_source)
-        self.assertIn('--app-radius-lg:', tokens_source)
-        self.assertIn('--app-shadow-hover:', tokens_source)
+        self.assertIn('--app-radius-control:', tokens_source)
+        self.assertIn('--app-radius-surface:', tokens_source)
+        self.assertIn('--app-shadow-surface:', tokens_source)
+        self.assertIn('--app-shadow-floating:', tokens_source)
         self.assertIn('--app-focus-ring-color:', tokens_source)
         self.assertIn('--app-motion-normal:', tokens_source)
 
@@ -837,7 +839,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('#id_', account_page_source)
         self.assertIn('.admin-tabs .nav-link', components_source)
         self.assertIn('.share-card {', components_source)
-        self.assertIn('box-shadow: var(--app-shadow-sm);', components_source)
+        self.assertIn('box-shadow: var(--app-shadow-surface);', components_source)
         self.assertIn('@media (prefers-reduced-motion: reduce)', components_source)
         self.assertNotIn('transition: all', components_source)
         self.assertNotRegex(
@@ -990,22 +992,30 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('app-notification__message', notify_source)
         self.assertNotIn('messageText.style', notify_source)
 
-    def test_frontend_verification_runs_the_contrast_checker(self):
+    def test_frontend_verification_runs_design_and_contrast_checkers(self):
         package = json.loads(self.read_project_file('frontend/package.json'))
         scripts = package['scripts']
 
+        self.assertEqual(
+            scripts.get('check:design'),
+            'node scripts/check-design-system.mjs',
+        )
         self.assertEqual(
             scripts.get('check:contrast'),
             'node scripts/check-color-contrast.mjs',
         )
         self.assertEqual(
             scripts.get('verify'),
-            'npm run test && npm run check:contrast && npm run typecheck '
-            '&& npm run lint && npm run build',
+            'npm run test && npm run check:design && npm run check:contrast '
+            '&& npm run typecheck && npm run lint && npm run build',
         )
         self.assertTrue(
             (Path(settings.BASE_DIR) / 'frontend' / 'scripts'
              / 'check-color-contrast.mjs').is_file(),
+        )
+        self.assertTrue(
+            (Path(settings.BASE_DIR) / 'frontend' / 'scripts'
+             / 'check-design-system.mjs').is_file(),
         )
 
     def test_color_tokens_cover_interactive_and_shell_contexts(self):
@@ -1022,10 +1032,12 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             '--app-color-shell-control-border:',
             '--app-color-shell-focus-ring:',
             '--app-color-shell-notification:',
-            '--app-color-shell-gradient-end:',
             '--app-color-danger-on-dark:',
             '--app-color-image-focus-inner:',
             '--app-color-image-focus-outer:',
+            '--app-color-dialog-backdrop:',
+            '--app-color-media-canvas:',
+            '--app-color-media-veil:',
         )
         for token in required_tokens:
             with self.subTest(token=token):

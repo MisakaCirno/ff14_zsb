@@ -478,7 +478,6 @@ for (const background of [
 for (const background of [
   "--app-color-shell",
   "--app-color-shell-raised",
-  "--app-color-shell-gradient-end",
 ]) {
   const backgroundLabel = background.replace("--app-color-", "");
   addText(

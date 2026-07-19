@@ -3,7 +3,7 @@
 }
 
 .card-hover {
-  box-shadow: var(--app-shadow-sm);
+  box-shadow: var(--app-shadow-surface);
   transition:
     transform var(--app-motion-normal) var(--app-ease-standard),
     box-shadow var(--app-motion-normal) var(--app-ease-standard);
@@ -11,7 +11,7 @@
 
 .card-hover:hover {
   transform: translateY(-5px);
-  box-shadow: var(--app-shadow-hover);
+  box-shadow: var(--app-shadow-floating);
 }
 
 .card-hover:hover .card-img-top iframe {
@@ -49,7 +49,7 @@
   word-break: break-all;
   background: var(--app-color-surface-muted);
   padding: var(--app-space-2);
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-control);
 }
 
 .blur-content {

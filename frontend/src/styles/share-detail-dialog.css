@@ -8,12 +8,12 @@
   color: var(--app-color-text);
   background: var(--app-color-surface);
   border: 0;
-  border-radius: var(--app-radius-xl);
-  box-shadow: var(--app-shadow-modal);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-dialog);
 }
 
 .app-share-dialog::backdrop {
-  background: rgba(20, 18, 17, 0.72);
+  background: var(--app-color-dialog-backdrop);
   backdrop-filter: blur(0.25rem);
 }
 
@@ -52,8 +52,8 @@
   color: var(--app-color-text);
   background: color-mix(in srgb, var(--app-color-surface) 90%, transparent);
   border: 1px solid var(--app-color-border);
-  border-radius: 50%;
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-circle);
+  box-shadow: var(--app-shadow-surface);
   backdrop-filter: blur(0.5rem);
 }
 
@@ -75,7 +75,7 @@
   min-height: 0;
   overflow: hidden;
   place-items: center;
-  background: #17151a;
+  background: var(--app-color-media-canvas);
 }
 
 .share-detail-overlay__image {
@@ -171,7 +171,7 @@
   color: var(--app-color-text);
   background: var(--app-color-surface-muted);
   border-left: 0.25rem solid currentcolor;
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-overlay__notice p {
@@ -209,7 +209,7 @@
   padding: var(--app-space-4);
   background: var(--app-color-primary-soft);
   border: 1px solid color-mix(in srgb, var(--app-color-primary) 25%, transparent);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .share-detail-overlay__code p {

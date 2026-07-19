@@ -16,8 +16,8 @@
   padding: clamp(var(--app-space-4), 3vw, var(--app-space-6));
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-xl);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .message-center-hero {
@@ -93,7 +93,7 @@
   font-size: var(--app-text-sm);
   background: var(--app-color-surface-muted);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .message-center-unread-count strong {
@@ -121,8 +121,8 @@
   padding: var(--app-space-1);
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .message-center-nav__list {
@@ -151,7 +151,7 @@
   text-align: center;
   text-decoration: none;
   border: 1px solid transparent;
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
   transition:
     color var(--app-motion-fast) var(--app-ease-standard),
     background-color var(--app-motion-fast) var(--app-ease-standard),
@@ -180,7 +180,7 @@
   padding: var(--app-space-4) var(--app-space-5);
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .message-center-section__title,
@@ -206,8 +206,8 @@
   overflow: hidden;
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
   transition:
     transform var(--app-motion-fast) var(--app-ease-standard),
     box-shadow var(--app-motion-fast) var(--app-ease-standard),
@@ -217,7 +217,7 @@
 .message-summary:hover,
 .message-summary:focus-within {
   border-color: var(--app-color-focus-border);
-  box-shadow: var(--app-shadow-hover);
+  box-shadow: var(--app-shadow-floating);
   transform: translateY(-1px);
 }
 
@@ -372,8 +372,8 @@
   overflow: hidden;
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-xl);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .message-detail-panel__header {
@@ -410,7 +410,7 @@
   padding: var(--app-space-4);
   background: var(--app-color-primary-soft);
   border: 1px solid var(--app-color-focus-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .message-detail-related p {

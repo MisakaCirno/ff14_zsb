@@ -19,8 +19,8 @@
   padding: var(--app-space-4) var(--app-space-5);
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-xl);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .share-detail-hero__identity,
@@ -114,7 +114,7 @@
   font-size: 1.25rem;
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .share-detail-author__name {
@@ -167,7 +167,7 @@
   padding: var(--app-space-2) var(--app-space-3);
   background: var(--app-color-surface-muted);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .share-detail-stats__item dt {
@@ -212,7 +212,7 @@
   padding: var(--app-space-4) var(--app-space-5);
   border: 1px solid;
   border-left-width: 0.35rem;
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .share-detail-notice > i {
@@ -246,7 +246,7 @@
 .share-detail-notice__feedback {
   padding: var(--app-space-3);
   background: var(--app-color-surface);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-layout {
@@ -271,8 +271,8 @@
   overflow: hidden;
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-xl);
-  box-shadow: var(--app-shadow-sm);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-surface);
 }
 
 .share-detail-panel__header {
@@ -293,7 +293,7 @@
   place-items: center;
   color: var(--app-color-primary);
   background: var(--app-color-primary-soft);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-panel__header h2 {
@@ -409,7 +409,7 @@
   color: var(--app-color-warning-text);
   background: var(--app-color-warning-soft);
   border: 1px solid var(--app-color-warning-text);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-field__control {
@@ -440,7 +440,7 @@
   padding: var(--app-space-4);
   background: var(--app-color-primary-soft);
   border: 1px solid var(--app-color-focus-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .share-detail-field--primary .strategy-code {
@@ -539,7 +539,7 @@
   padding: var(--app-space-3) var(--app-space-4);
   background: var(--app-color-surface-muted);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-log-list__meta {
@@ -623,7 +623,7 @@
   font-size: var(--app-text-sm);
   background: var(--app-color-surface-muted);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-surface);
 }
 
 .share-detail-disclaimer h2 {
@@ -712,7 +712,7 @@
   padding: var(--app-space-2);
   color: var(--app-color-text);
   text-decoration: none;
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 a.share-detail-collection__item:hover,
@@ -737,7 +737,7 @@ a.share-detail-collection__item:focus-visible {
   font-size: var(--app-text-xs);
   font-weight: var(--app-font-semibold);
   background: var(--app-color-surface-muted);
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-collection__item-title {
@@ -767,7 +767,7 @@ a.share-detail-collection__item:focus-visible {
   font-weight: var(--app-font-medium);
   text-align: center;
   text-decoration: none;
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-collection__all:hover,
@@ -849,8 +849,8 @@ a.share-detail-collection__item:focus-visible {
   max-width: 100%;
   height: auto;
   border: 2px solid var(--app-color-border);
-  border-radius: var(--app-radius-lg);
-  box-shadow: var(--app-shadow-md);
+  border-radius: var(--app-radius-surface);
+  box-shadow: var(--app-shadow-floating);
 }
 
 .share-detail-image-modal__help {
@@ -861,7 +861,7 @@ a.share-detail-collection__item:focus-visible {
   text-align: center;
   background: var(--app-color-info-soft);
   border: 1px solid var(--app-color-info-text);
-  border-radius: var(--app-radius-md);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-image-modal__actions {
