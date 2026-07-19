@@ -15,7 +15,7 @@
   height: 5rem;
   margin-bottom: var(--app-space-4);
   place-items: center;
-  border-radius: var(--app-radius-pill);
+  border-radius: var(--app-radius-circle);
   color: var(--app-color-primary);
   background: var(--app-color-primary-soft);
   font-size: 2.5rem;

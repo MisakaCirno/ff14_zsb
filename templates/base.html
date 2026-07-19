@@ -152,7 +152,7 @@
                                     <li><a class="dropdown-item d-flex justify-content-between align-items-center{% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %} active{% endif %}" href="{% url 'site_message_list' %}" {% if request.resolver_match.url_name == 'site_message_list' or request.resolver_match.url_name == 'site_message_detail' %}aria-current="page"{% endif %}>
                                         <span><i class="bi bi-envelope" aria-hidden="true"></i> 站内信</span>
                                         {% if global_unread_site_messages_count > 0 %}
-                                        <span class="badge bg-danger rounded-pill" aria-label="{{ global_unread_site_messages_count }} 条未读站内信">{{ global_unread_site_messages_count }}</span>
+                                        <span class="badge bg-danger" aria-label="{{ global_unread_site_messages_count }} 条未读站内信">{{ global_unread_site_messages_count }}</span>
                                         {% endif %}
                                     </a></li>
 
@@ -165,13 +165,13 @@
                                     <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'admin_review_list' %}">
                                         <span><i class="bi bi-shield-check" aria-hidden="true"></i> 审核列表</span>
                                         {% if global_pending_reviews_count > 0 %}
-                                        <span class="badge bg-danger rounded-pill">{{ global_pending_reviews_count }}</span>
+                                        <span class="badge bg-danger">{{ global_pending_reviews_count }}</span>
                                         {% endif %}
                                     </a></li>
                                     <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'admin_report_list' %}">
                                         <span><i class="bi bi-shield-exclamation" aria-hidden="true"></i> 举报处理</span>
                                         {% if global_pending_reports_count > 0 %}
-                                        <span class="badge bg-danger rounded-pill">{{ global_pending_reports_count }}</span>
+                                        <span class="badge bg-danger">{{ global_pending_reports_count }}</span>
                                         {% endif %}
                                     </a></li>
                                     {% endif %}

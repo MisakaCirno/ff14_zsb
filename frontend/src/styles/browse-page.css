@@ -216,7 +216,7 @@
   text-decoration: none;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--app-radius-pill);
+  border-radius: var(--app-radius-control);
 }
 
 .browse-category-chip:hover,
@@ -259,7 +259,7 @@
   list-style: none;
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border);
-  border-radius: var(--app-radius-pill);
+  border-radius: var(--app-radius-control);
 }
 
 .browse-filter-panel__trigger::-webkit-details-marker {

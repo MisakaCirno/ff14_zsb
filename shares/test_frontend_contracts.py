@@ -813,6 +813,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('--app-space-4:', tokens_source)
         self.assertIn('--app-radius-control:', tokens_source)
         self.assertIn('--app-radius-surface:', tokens_source)
+        self.assertIn('--app-radius-circle:', tokens_source)
+        self.assertNotIn('--app-radius-pill:', tokens_source)
         self.assertIn('--app-shadow-surface:', tokens_source)
         self.assertIn('--app-shadow-floating:', tokens_source)
         self.assertIn('--app-text-page-title:', tokens_source)
@@ -1014,7 +1016,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         for bootstrap_radius in (
             '--bs-border-radius: var(--app-radius-control);',
             '--bs-border-radius-lg: var(--app-radius-surface);',
-            '--bs-border-radius-pill: var(--app-radius-pill);',
+            '--bs-border-radius-pill: var(--app-radius-control);',
         ):
             self.assertIn(bootstrap_radius, adapter_source)
 
@@ -1059,6 +1061,42 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('style="', about_source + not_found_source)
         self.assertNotIn('javascript:', not_found_source)
         self.assertIn('.static-page {', static_page_source)
+
+    def test_radius_contract_uses_controls_surfaces_and_true_circles_only(self):
+        styles_directory = Path(settings.BASE_DIR) / 'frontend' / 'src' / 'styles'
+        templates_directory = Path(settings.BASE_DIR) / 'templates'
+        browse_source = self.read_frontend('styles/browse-page.css')
+        shell_source = self.read_frontend('styles/app-shell.css')
+
+        for selector in ('.browse-category-chip', '.browse-filter-panel__trigger'):
+            self.assert_css_rule_contains(
+                browse_source,
+                selector,
+                ('border-radius: var(--app-radius-control);',),
+            )
+
+        self.assertRegex(
+            shell_source,
+            re.compile(
+                r'\.app-mobile-search\s*\{[^}]*'
+                r'border-radius:\s*var\(--app-radius-control\);',
+                re.DOTALL,
+            ),
+        )
+
+        for style_path in styles_directory.glob('*.css'):
+            with self.subTest(style=style_path.name):
+                self.assertNotIn(
+                    '--app-radius-pill',
+                    style_path.read_text(encoding='utf-8'),
+                )
+
+        for template_path in templates_directory.rglob('*.html'):
+            with self.subTest(template=template_path.name):
+                self.assertNotIn(
+                    'rounded-pill',
+                    template_path.read_text(encoding='utf-8'),
+                )
 
     def test_frontend_verification_runs_design_and_contrast_checkers(self):
         package = json.loads(self.read_project_file('frontend/package.json'))

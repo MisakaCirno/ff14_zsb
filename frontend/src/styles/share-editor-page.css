@@ -63,7 +63,7 @@
   white-space: nowrap;
   background: var(--app-color-primary-soft);
   border: 1px solid var(--app-color-focus-border);
-  border-radius: var(--app-radius-pill);
+  border-radius: var(--app-radius-control);
 }
 
 .share-editor-form {

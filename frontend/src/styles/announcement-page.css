@@ -145,7 +145,7 @@
   font-weight: var(--app-font-semibold);
   background: var(--app-color-surface);
   border: 1px solid var(--app-color-border-strong);
-  border-radius: var(--app-radius-pill);
+  border-radius: var(--app-radius-control);
 }
 
 .announcement-card__time {

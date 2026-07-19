@@ -57,7 +57,7 @@
   font-size: var(--app-text-xs);
   font-weight: var(--app-font-semibold);
   border: 1px solid transparent;
-  border-radius: var(--app-radius-pill);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-badge--primary {
@@ -538,7 +538,7 @@
   padding: var(--app-space-1) var(--app-space-2);
   color: var(--app-color-primary);
   background: var(--app-color-primary-soft);
-  border-radius: var(--app-radius-pill);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-log-list__meta time {
@@ -729,7 +729,7 @@ a.share-detail-collection__item:focus-visible {
   padding: var(--app-space-1) var(--app-space-2);
   font-size: var(--app-text-xs);
   background: var(--app-color-surface);
-  border-radius: var(--app-radius-pill);
+  border-radius: var(--app-radius-control);
 }
 
 .share-detail-collection__all,

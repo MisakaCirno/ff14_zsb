@@ -2,16 +2,17 @@ import { readFileSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const PROJECT_DIRECTORY = fileURLToPath(new URL("../../", import.meta.url));
 const STYLES_DIRECTORY = fileURLToPath(
   new URL("../src/styles/", import.meta.url),
 );
+const TEMPLATES_DIRECTORY = join(PROJECT_DIRECTORY, "templates");
 const TOKENS_PATH = join(STYLES_DIRECTORY, "tokens.css");
 const failures = [];
 
 const requiredTokens = new Map([
   ["--app-radius-control", "0.5rem"],
   ["--app-radius-surface", "0.75rem"],
-  ["--app-radius-pill", "50rem"],
   ["--app-radius-circle", "50%"],
 ]);
 
@@ -39,6 +40,7 @@ const obsoleteTokens = [
   "--app-radius-md",
   "--app-radius-lg",
   "--app-radius-xl",
+  "--app-radius-pill",
   "--app-shadow-sm",
   "--app-shadow-md",
   "--app-shadow-hover",
@@ -95,7 +97,7 @@ for (const fileName of styleFiles) {
     const value = radiusMatch[1].replace(/\s*!important\s*$/, "").trim();
     const withoutAllowedTokens = value
       .replace(
-        /var\(--app-radius-(?:control|surface|pill|circle)\)/g,
+        /var\(--app-radius-(?:control|surface|circle)\)/g,
         "",
       )
       .replace(/\b0\b/g, "")
@@ -109,6 +111,41 @@ for (const fileName of styleFiles) {
   }
 }
 
+const collectFiles = (directory, extension) =>
+  readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      return collectFiles(path, extension);
+    }
+
+    return extname(entry.name) === extension ? [path] : [];
+  });
+
+const templateFiles = collectFiles(TEMPLATES_DIRECTORY, ".html");
+const allowedStructuralRadiusClasses = new Set([
+  "rounded-start-0",
+  "rounded-end-0",
+]);
+
+for (const templatePath of templateFiles) {
+  const source = readFileSync(templatePath, "utf8");
+  const relativePath = templatePath.slice(PROJECT_DIRECTORY.length + 1);
+  const classPattern = /class\s*=\s*(["'])(.*?)\1/gs;
+
+  for (const match of source.matchAll(classPattern)) {
+    const radiusClasses = match[2].match(/\brounded(?:-[a-z]+)?(?:-\d+)?\b/g) ?? [];
+
+    for (const radiusClass of radiusClasses) {
+      if (!allowedStructuralRadiusClasses.has(radiusClass)) {
+        failures.push(
+          `${relativePath}: Bootstrap radius utility is outside the visual contract: ${radiusClass}`,
+        );
+      }
+    }
+  }
+}
+
 if (failures.length > 0) {
   console.error(`Design-system check failed (${failures.length} issues):`);
   for (const failure of failures) {
@@ -118,6 +155,7 @@ if (failures.length > 0) {
 } else {
   console.log(
     `Design-system check passed: ${styleFiles.length} stylesheets and ` +
-      `${checkedRadiusDeclarations} radius declarations follow the shared contract.`,
+      `${checkedRadiusDeclarations} radius declarations across ` +
+      `${templateFiles.length} templates follow the shared contract.`,
   );
 }

@@ -9,7 +9,7 @@
                     <a href="{% url 'collection_detail' collection.id %}">{{ collection.title }}</a>
                 </h3>
                 {% if card_variant == 'public' %}
-                <span class="badge rounded-pill collection-card__count">{{ collection.item_count }} 个内容</span>
+                <span class="badge collection-card__count">{{ collection.item_count }} 个内容</span>
                 {% elif collection.is_public %}
                 <span class="badge text-bg-success collection-card__visibility">
                     <i class="bi bi-globe2" aria-hidden="true"></i>

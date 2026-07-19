@@ -100,10 +100,9 @@
   --app-space-6: 2rem;
   --app-space-7: 3rem;
 
-  /* Shape: controls, surfaces, and fully rounded geometry only. */
+  /* Shape: controls, surfaces, and true circles only. */
   --app-radius-control: 0.5rem;
   --app-radius-surface: 0.75rem;
-  --app-radius-pill: 50rem;
   --app-radius-circle: 50%;
 
   /* Elevation: resting surfaces, floating controls, and dialogs. */
