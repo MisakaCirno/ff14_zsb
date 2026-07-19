@@ -189,6 +189,15 @@ try {
         Invoke-CheckedStep 'Frontend type, lint, and build checks' {
             & $NpmExecutable --prefix frontend run verify
         }
+
+        if (-not $SkipTests -and $runReleaseE2E -and $env:OS -eq 'Windows_NT') {
+            Invoke-CheckedStep 'Browser flow and accessibility checks' {
+                & (Join-Path $PSScriptRoot 'ops\testing\Test-BrowserFlows.ps1') `
+                    -RepositoryRoot $PSScriptRoot `
+                    -PythonExecutable $PythonExecutable `
+                    -NpmExecutable $NpmExecutable
+            }
+        }
     }
 
     if (-not $SkipTests) {

@@ -7,6 +7,7 @@ export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   test: {
     environment: 'jsdom',
+    include: ['src/**/*.test.ts'],
     setupFiles: ['./src/test/setup.ts'],
   },
 })

@@ -14,4 +14,19 @@ export default [
       globals: globals.browser,
     },
   },
+  {
+    files: ['e2e/**/*.ts'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+  },
+  {
+    files: ['playwright.config.ts'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ]

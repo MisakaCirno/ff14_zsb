@@ -10,17 +10,22 @@
     "dev": "vite build --watch --mode development",
     "build": "vite build",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "check:design": "node scripts/check-design-system.mjs",
     "check:contrast": "node scripts/check-color-contrast.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"src/**/*.ts\"",
-    "verify": "npm run test && npm run check:design && npm run check:contrast && npm run typecheck && npm run lint && npm run build"
+    "typecheck:e2e": "tsc --noEmit --project tsconfig.e2e.json",
+    "lint": "eslint \"src/**/*.ts\" \"e2e/**/*.ts\" playwright.config.ts",
+    "verify": "npm run test && npm run check:design && npm run check:contrast && npm run typecheck && npm run typecheck:e2e && npm run lint && npm run build"
   },
   "dependencies": {
     "htmx.org": "2.0.10"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.61.1",
+    "@types/node": "22.20.1",
     "eslint": "10.7.0",
     "globals": "17.7.0",
     "jsdom": "29.1.1",
