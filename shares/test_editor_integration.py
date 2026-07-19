@@ -17,6 +17,21 @@ class QuillEditorIntegrationTests(SimpleTestCase):
         self.assertNotIn('ckeditor', settings.INSTALLED_APPS)
         self.assertIs(type(Announcement._meta.get_field('content')), models.TextField)
 
+    def test_fresh_migration_replay_does_not_require_ckeditor_package(self):
+        requirements = (
+            Path(settings.BASE_DIR) / 'requirements.txt'
+        ).read_text(encoding='utf-8')
+        historical_migration = (
+            Path(settings.BASE_DIR)
+            / 'shares'
+            / 'migrations'
+            / '0011_alter_announcement_content.py'
+        ).read_text(encoding='utf-8')
+
+        self.assertNotIn('django-ckeditor', requirements)
+        self.assertNotIn('ckeditor.fields', historical_migration)
+        self.assertIn('models.TextField', historical_migration)
+
     def test_admin_rich_text_fields_use_quill_widget(self):
         self.assertIsInstance(AnnouncementAdminForm.base_fields['content'].widget, QuillWidget)
         self.assertIsInstance(ShareAdminForm.base_fields['description'].widget, QuillWidget)
