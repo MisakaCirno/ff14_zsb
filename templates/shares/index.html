@@ -64,105 +64,90 @@
 
             <div class="browse-toolbar__summary">
                 <span class="browse-toolbar__count">{{ shares.paginator.count }} 份分享</span>
-                <details class="browse-filter-panel">
-                    <summary class="browse-filter-panel__trigger">
-                        <i class="bi bi-sliders2" aria-hidden="true"></i>
-                        <span>高级</span>
-                    </summary>
-                    <div class="browse-filter-panel__surface" aria-labelledby="browse-advanced-title">
-                        <header class="browse-filter-panel__header">
-                            <span class="ui-icon-tile ui-icon-tile--compact browse-filter-panel__icon" aria-hidden="true"><i class="bi bi-sliders2"></i></span>
-                            <div>
-                                <h3 id="browse-advanced-title">高级浏览</h3>
-                                <p>调整内容显示、排序和加载方式。</p>
-                            </div>
-                        </header>
+            </div>
+        </div>
 
-                        <div class="browse-toolbar__controls">
-                            <form method="get" action="{{ request.path }}" class="browse-toolbar__switches" aria-label="敏感内容显示方式">
-                                {% if search_query %}
-                                <input type="hidden" name="q" value="{{ search_query }}">
-                                {% endif %}
-                                {% if current_category %}
-                                <input type="hidden" name="category" value="{{ current_category }}">
-                                {% endif %}
-                                {% if sort_by %}
-                                <input type="hidden" name="sort" value="{{ sort_by }}">
-                                {% endif %}
-                                <input type="hidden" name="feed" value="{{ feed_mode }}">
+        <div class="browse-toolbar__controls">
+            <form method="get" action="{{ request.path }}" class="browse-toolbar__switches" aria-label="敏感内容显示方式">
+                {% if search_query %}
+                <input type="hidden" name="q" value="{{ search_query }}">
+                {% endif %}
+                {% if current_category %}
+                <input type="hidden" name="category" value="{{ current_category }}">
+                {% endif %}
+                {% if sort_by %}
+                <input type="hidden" name="sort" value="{{ sort_by }}">
+                {% endif %}
+                <input type="hidden" name="feed" value="{{ feed_mode }}">
 
-                                <fieldset class="browse-content-policy">
-                                    <legend><i class="bi bi-eye-slash" aria-hidden="true"></i> 剧透内容</legend>
-                                    <div class="browse-content-policy__options" role="radiogroup" aria-label="剧透内容显示方式">
-                                        <input class="btn-check" type="radio" name="spoiler" id="spoiler-hide" value="hide" {% if spoiler_preference == 'hide' %}checked{% endif %} data-submit-on-change>
-                                        <label class="btn btn-outline-secondary" for="spoiler-hide">隐藏</label>
-                                        <input class="btn-check" type="radio" name="spoiler" id="spoiler-mask" value="mask" {% if spoiler_preference == 'mask' %}checked{% endif %} data-submit-on-change>
-                                        <label class="btn btn-outline-secondary" for="spoiler-mask">遮挡</label>
-                                        <input class="btn-check" type="radio" name="spoiler" id="spoiler-show" value="show" {% if spoiler_preference == 'show' %}checked{% endif %} data-submit-on-change>
-                                        <label class="btn btn-outline-secondary" for="spoiler-show">显示</label>
-                                    </div>
-                                </fieldset>
-                                <fieldset class="browse-content-policy">
-                                    <legend><i class="bi bi-exclamation-diamond" aria-hidden="true"></i> 令人不适</legend>
-                                    <div class="browse-content-policy__options" role="radiogroup" aria-label="令人不适内容显示方式">
-                                        <input class="btn-check" type="radio" name="nsfw" id="nsfw-hide" value="hide" {% if nsfw_preference == 'hide' %}checked{% endif %} data-submit-on-change>
-                                        <label class="btn btn-outline-secondary" for="nsfw-hide">隐藏</label>
-                                        <input class="btn-check" type="radio" name="nsfw" id="nsfw-mask" value="mask" {% if nsfw_preference == 'mask' %}checked{% endif %} data-submit-on-change>
-                                        <label class="btn btn-outline-secondary" for="nsfw-mask">遮挡</label>
-                                        <input class="btn-check" type="radio" name="nsfw" id="nsfw-show" value="show" {% if nsfw_preference == 'show' %}checked{% endif %} data-submit-on-change>
-                                        <label class="btn btn-outline-secondary" for="nsfw-show">显示</label>
-                                    </div>
-                                </fieldset>
-                            </form>
-
-                            <div class="browse-advanced-secondary">
-                                <section class="browse-advanced-setting" aria-labelledby="browse-sort-label">
-                                    <div class="browse-advanced-setting__label" id="browse-sort-label">
-                                        <i class="bi bi-sort-down" aria-hidden="true"></i>
-                                        <span>内容排序</span>
-                                    </div>
-                                    <div class="dropdown browse-toolbar__sort">
-                                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="sortDropdown" data-bs-toggle="dropdown" aria-expanded="false" aria-labelledby="browse-sort-label sortDropdown">
-                                            <span>{% if sort_by == 'latest' %}最新发布{% elif sort_by == 'likes' %}最多点赞{% elif sort_by == 'views' %}最多查看{% elif sort_by == 'favorites' %}最多收藏{% elif sort_by == 'copies' %}最多复制{% else %}排序{% endif %}</span>
-                                        </button>
-                                        <ul class="dropdown-menu" aria-labelledby="sortDropdown">
-                                            <li><a class="dropdown-item {% if sort_by == 'latest' %}active{% endif %}" href="{% querystring sort='latest' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'latest' %}aria-current="true"{% endif %}>最新发布</a></li>
-                                            <li><a class="dropdown-item {% if sort_by == 'likes' %}active{% endif %}" href="{% querystring sort='likes' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'likes' %}aria-current="true"{% endif %}>最多点赞</a></li>
-                                            <li><a class="dropdown-item {% if sort_by == 'views' %}active{% endif %}" href="{% querystring sort='views' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'views' %}aria-current="true"{% endif %}>最多查看</a></li>
-                                            <li><a class="dropdown-item {% if sort_by == 'favorites' %}active{% endif %}" href="{% querystring sort='favorites' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'favorites' %}aria-current="true"{% endif %}>最多收藏</a></li>
-                                            <li><a class="dropdown-item {% if sort_by == 'copies' %}active{% endif %}" href="{% querystring sort='copies' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'copies' %}aria-current="true"{% endif %}>最多复制</a></li>
-                                        </ul>
-                                    </div>
-                                </section>
-
-                                <section class="browse-advanced-setting" aria-labelledby="browse-mode-label">
-                                    <div class="browse-advanced-setting__label" id="browse-mode-label">
-                                        <i class="bi bi-layout-three-columns" aria-hidden="true"></i>
-                                        <span>浏览方式</span>
-                                    </div>
-                                    <div class="browse-toolbar__modes btn-group" role="group" aria-labelledby="browse-mode-label">
-                                        <form method="post" action="{% url 'set_home_feed_mode' %}">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="feed" value="paginated">
-                                            <input type="hidden" name="next" value="{{ request.path }}?{{ paginated_query }}">
-                                            <button type="submit" class="btn btn-outline-secondary rounded-end-0 {% if feed_mode == 'paginated' %}active{% endif %}" title="使用分页浏览" aria-pressed="{% if feed_mode == 'paginated' %}true{% else %}false{% endif %}">
-                                                <span>分页</span>
-                                            </button>
-                                        </form>
-                                        <form method="post" action="{% url 'set_home_feed_mode' %}">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="feed" value="infinite">
-                                            <input type="hidden" name="next" value="{{ request.path }}?{{ infinite_query }}">
-                                            <button type="submit" class="btn btn-outline-secondary rounded-start-0 {% if feed_mode == 'infinite' %}active{% endif %}" title="瀑布式自动加载" aria-pressed="{% if feed_mode == 'infinite' %}true{% else %}false{% endif %}">
-                                                <span>瀑布</span>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </section>
-                            </div>
-                        </div>
+                <fieldset class="browse-content-policy">
+                    <legend><i class="bi bi-eye-slash" aria-hidden="true"></i> 剧透内容</legend>
+                    <div class="browse-content-policy__options" role="radiogroup" aria-label="剧透内容显示方式">
+                        <input class="btn-check" type="radio" name="spoiler" id="spoiler-hide" value="hide" {% if spoiler_preference == 'hide' %}checked{% endif %} data-submit-on-change>
+                        <label class="btn btn-outline-secondary" for="spoiler-hide">隐藏</label>
+                        <input class="btn-check" type="radio" name="spoiler" id="spoiler-mask" value="mask" {% if spoiler_preference == 'mask' %}checked{% endif %} data-submit-on-change>
+                        <label class="btn btn-outline-secondary" for="spoiler-mask">遮挡</label>
+                        <input class="btn-check" type="radio" name="spoiler" id="spoiler-show" value="show" {% if spoiler_preference == 'show' %}checked{% endif %} data-submit-on-change>
+                        <label class="btn btn-outline-secondary" for="spoiler-show">显示</label>
                     </div>
-                </details>
+                </fieldset>
+                <fieldset class="browse-content-policy">
+                    <legend><i class="bi bi-exclamation-diamond" aria-hidden="true"></i> 令人不适</legend>
+                    <div class="browse-content-policy__options" role="radiogroup" aria-label="令人不适内容显示方式">
+                        <input class="btn-check" type="radio" name="nsfw" id="nsfw-hide" value="hide" {% if nsfw_preference == 'hide' %}checked{% endif %} data-submit-on-change>
+                        <label class="btn btn-outline-secondary" for="nsfw-hide">隐藏</label>
+                        <input class="btn-check" type="radio" name="nsfw" id="nsfw-mask" value="mask" {% if nsfw_preference == 'mask' %}checked{% endif %} data-submit-on-change>
+                        <label class="btn btn-outline-secondary" for="nsfw-mask">遮挡</label>
+                        <input class="btn-check" type="radio" name="nsfw" id="nsfw-show" value="show" {% if nsfw_preference == 'show' %}checked{% endif %} data-submit-on-change>
+                        <label class="btn btn-outline-secondary" for="nsfw-show">显示</label>
+                    </div>
+                </fieldset>
+            </form>
+
+            <div class="browse-toolbar__utilities">
+                <section class="browse-toolbar__setting" aria-labelledby="browse-sort-label">
+                    <div class="browse-toolbar__setting-label" id="browse-sort-label">
+                        <i class="bi bi-sort-down" aria-hidden="true"></i>
+                        <span>内容排序</span>
+                    </div>
+                    <div class="dropdown browse-toolbar__sort">
+                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="sortDropdown" data-bs-toggle="dropdown" aria-expanded="false" aria-labelledby="browse-sort-label sortDropdown">
+                            <span>{% if sort_by == 'latest' %}最新发布{% elif sort_by == 'likes' %}最多点赞{% elif sort_by == 'views' %}最多查看{% elif sort_by == 'favorites' %}最多收藏{% elif sort_by == 'copies' %}最多复制{% else %}排序{% endif %}</span>
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="sortDropdown">
+                            <li><a class="dropdown-item {% if sort_by == 'latest' %}active{% endif %}" href="{% querystring sort='latest' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'latest' %}aria-current="true"{% endif %}>最新发布</a></li>
+                            <li><a class="dropdown-item {% if sort_by == 'likes' %}active{% endif %}" href="{% querystring sort='likes' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'likes' %}aria-current="true"{% endif %}>最多点赞</a></li>
+                            <li><a class="dropdown-item {% if sort_by == 'views' %}active{% endif %}" href="{% querystring sort='views' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'views' %}aria-current="true"{% endif %}>最多查看</a></li>
+                            <li><a class="dropdown-item {% if sort_by == 'favorites' %}active{% endif %}" href="{% querystring sort='favorites' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'favorites' %}aria-current="true"{% endif %}>最多收藏</a></li>
+                            <li><a class="dropdown-item {% if sort_by == 'copies' %}active{% endif %}" href="{% querystring sort='copies' feed=feed_mode page=None partial=None continuation=None %}" {% if sort_by == 'copies' %}aria-current="true"{% endif %}>最多复制</a></li>
+                        </ul>
+                    </div>
+                </section>
+
+                <section class="browse-toolbar__setting" aria-labelledby="browse-mode-label">
+                    <div class="browse-toolbar__setting-label" id="browse-mode-label">
+                        <i class="bi bi-layout-three-columns" aria-hidden="true"></i>
+                        <span>浏览方式</span>
+                    </div>
+                    <div class="browse-toolbar__modes btn-group" role="group" aria-labelledby="browse-mode-label">
+                        <form method="post" action="{% url 'set_home_feed_mode' %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="feed" value="paginated">
+                            <input type="hidden" name="next" value="{{ request.path }}?{{ paginated_query }}">
+                            <button type="submit" class="btn btn-outline-secondary rounded-end-0 {% if feed_mode == 'paginated' %}active{% endif %}" title="使用分页浏览" aria-pressed="{% if feed_mode == 'paginated' %}true{% else %}false{% endif %}">
+                                <span>分页</span>
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'set_home_feed_mode' %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="feed" value="infinite">
+                            <input type="hidden" name="next" value="{{ request.path }}?{{ infinite_query }}">
+                            <button type="submit" class="btn btn-outline-secondary rounded-start-0 {% if feed_mode == 'infinite' %}active{% endif %}" title="瀑布式自动加载" aria-pressed="{% if feed_mode == 'infinite' %}true{% else %}false{% endif %}">
+                                <span>瀑布</span>
+                            </button>
+                        </form>
+                    </div>
+                </section>
             </div>
         </div>
     </section>

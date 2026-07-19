@@ -1094,7 +1094,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         admin_editor_source = self.read_project_file('static/css/quill-widget.css')
         share_image_source = self.read_frontend('features/share-image.ts')
 
-        for selector in ('.browse-category-chip', '.browse-filter-panel__trigger'):
+        for selector in ('.browse-category-chip', '.browse-content-policy'):
             self.assert_css_rule_contains(
                 browse_source,
                 selector,
@@ -1978,8 +1978,14 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('aria-label="敏感内容显示方式"', source)
         self.assertIn('aria-label="剧透内容显示方式"', source)
         self.assertIn('aria-label="令人不适内容显示方式"', source)
-        self.assertIn('<span>高级</span>', source)
-        self.assertIn('id="browse-advanced-title">高级浏览</h3>', source)
+        self.assertIn('class="browse-toolbar__controls"', source)
+        self.assertIn('class="browse-toolbar__utilities"', source)
+        self.assertLess(
+            source.index('browse-toolbar__topline'),
+            source.index('browse-toolbar__controls'),
+        )
+        self.assertNotIn('browse-filter-panel', source)
+        self.assertNotIn('<span>高级</span>', source)
         self.assertNotIn('<span>筛选</span>', source)
         for field in ('spoiler', 'nsfw'):
             for value in ('hide', 'mask', 'show'):
@@ -1991,9 +1997,12 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('aria-pressed="{% if feed_mode ==', source)
         self.assertIn("@import './browse-page.css';", main_styles)
         self.assertIn('.browse-toolbar__controls', browse_styles)
-        self.assertIn('.browse-filter-panel__header', browse_styles)
-        self.assertIn('.browse-advanced-secondary', browse_styles)
+        self.assertIn('.browse-toolbar__utilities', browse_styles)
+        self.assertIn('.browse-toolbar__setting', browse_styles)
+        self.assertNotIn('.browse-filter-panel', browse_styles)
+        self.assertNotIn('.browse-advanced-', browse_styles)
         self.assertIn('min-width: 0;', browse_styles)
+        self.assertIn('@media (max-width: 991.98px)', browse_styles)
         self.assertIn('@media (max-width: 575.98px)', browse_styles)
 
     def test_detail_basic_interactions_use_module_contract(self):
