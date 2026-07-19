@@ -160,7 +160,7 @@ HANDOFF_SCOPE_ROLES = (
     "target_media_root_1",
     "target_media_root_2",
 )
-PENDING_NODE = ("shares", "0025_add_collection_owner_index")
+PENDING_NODE = ("shares", "0026_sync_announcement_permission_names")
 
 
 def assert_final_handoff_checkpoint_order() -> None:
@@ -990,7 +990,7 @@ if include_slow:
         in (slow_root / "logs" / "inner.stdout.log").read_text(encoding="utf-8")
     )
     print(
-        "Slow real offline policy proposal passed: pending shares/0025, "
+        "Slow real offline policy proposal passed: pending shares/0026, "
         "migration not applied, cutover false, entire RunRoot marked sensitive."
     )
 else:

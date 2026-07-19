@@ -959,7 +959,10 @@ class DataPortabilityTests(TestCase):
             current_share_leaf = next(
                 node for node in leaves if node[0] == 'shares'
             )
-            self.assertEqual(current_share_leaf[1], '0025_add_collection_owner_index')
+            self.assertEqual(
+                current_share_leaf[1],
+                '0026_sync_announcement_permission_names',
+            )
             leaves.remove(current_share_leaf)
             leaves.append(['shares', '0024_widen_site_message_titles'])
             leaves.sort()
