@@ -52,30 +52,31 @@ Get-FileHash -LiteralPath $Output -Algorithm SHA256
 
 本阶段不要求把应用迁移到 `releases/current` 目录。WinSW 仍是可选的后续运行方式改进，但不与首次安全升级捆绑。
 
-#### 启动时无需人工判断 migration
+#### 一个 BAT 完成判断、升级选择和启动
 
-正式切换后，日常只运行 `ops/release/Start-DirectGitWaitress.bat`。它在启动 Waitress 前调用 `check_deployment_schema --require-current`，以 SQLite `immutable=1` 只读连接比较代码 migration 图和数据库 `django_migrations`：
+正式切换后，日常只运行仓库根目录的 `start_ffxivshare.bat`。不再根据经验选择“带迁移”或“不带迁移”的启动脚本。统一入口会先以 SQLite `immutable=1` 只读连接比较代码 migration 图和数据库 `django_migrations`：
 
-- 完全一致：正常启动 Waitress；
-- 存在 pending migration：拒绝启动，并明确提示运行维护升级流程；
-- 出现未知 migration、依赖断裂或 SQLite sidecar：视为状态异常，保持停止并要求检查。
+- 完全一致：直接启动 Waitress；
+- 存在 pending migration：列出待应用 migration，并让操作者选择“创建已校验备份、安全升级并启动”或“暂不升级、保持停止”；
+- 出现未知 migration、依赖断裂或 SQLite sidecar：不提供升级选项，保持停止并要求检查。
 
-检查不会执行 migration，也不会创建 WAL/SHM/journal。操作者不需要根据代码改动猜测是否升级；始终先运行普通启动入口，只有收到确定的“Database upgrade required”结果时才使用维护升级脚本。
+选择升级后，内部流程先确认 `127.0.0.1:8000` 没有监听者，在 `C:\FFXIVShare-R20\Upgrades` 的私有时间戳目录中保存两份迁移前数据库副本。`migrate`、schema 检查、限制预检、部署检查和 SQLite Backup API 校验全部只在候选库上执行；全部通过后才在同一磁盘上原子替换活动库，并再次检查活动库，然后启动 Waitress。切换前失败不会修改活动库；切换后检查失败会尝试原子恢复迁移前数据库并核对 SHA-256。
+
+选择不升级不会修改数据库，也不会启动旧代码。非交互调用绝不默认批准升级：发现 pending migration 时以退出码 10 保持停止。检查和升级入口都不执行 Git 更新、依赖安装、前端构建、`collectstatic` 或 Nginx/Bun 控制，因此这些发布准备仍需在维护窗口前单独完成。
 
 ### C. 短维护窗口与切换
 
 严格按运行单顺序执行：
 
 1. 启用维护页或阻断主站写请求，同时保持 `/n/` 原路由。
-2. 停止所有 Django/Waitress 写入者，确认相关进程和监听端口已经退出。
-3. 使用 R19 已验证的捕获工具制作最终 SQLite 备份三件套，记录源 commit、UTC、操作者和 SHA-256。
-4. 从最终备份创建候选数据库；新代码只对候选数据库执行 `migrate`、完整性/外键检查、限制预检和数据比较。
-5. 在线上 Git clone 中 `fetch`，确认目标对象存在，再切换到固定 commit。若本机修改与目标冲突，立即停止，不自动清理。
-6. 使用锁定文件更新虚拟环境，执行前端构建和 `collectstatic`。
-7. 交互轮换线上管理员密码；记录账户、时间和验证结果，不记录密码。
-8. 用已验证候选数据库替换运行路径中的数据库，同时保留迁移前原库和最终备份。
-9. 启动主站，先做回环健康检查，再验证 HTTPS、登录、创建/编辑、审核后台、CSRF、静态资源和 `/n/`。
-10. 全部通过后才撤下维护页并恢复写入。
+2. 停止所有 Django/Waitress 写入者，确认 `127.0.0.1:8000` 已经停止监听；不要停止独立的 `/n/` Bun 进程。
+3. 记录当前 commit；保护线上脏文件后，在 Git clone 中取得并切换到已经验证的固定 40 位目标 commit。若本机修改与目标冲突，立即停止，不自动清理。
+4. 使用锁定文件更新虚拟环境，执行前端构建和 `collectstatic`。
+5. 运行仓库根目录的 `start_ffxivshare.bat`。若提示需要升级，确认列出的 migration 后选择 1；不准备继续时选择 2，数据库和主站都保持原状。
+6. 选择 1 后等待候选库迁移、校验、原子切换和最终 schema 检查全部完成；任一步失败都不要手工启动 Waitress。
+7. Waitress 启动后先做回环健康检查，再验证 HTTPS、登录、创建/编辑、审核后台、CSRF、静态资源和 `/n/`。
+8. 交互轮换线上管理员密码；记录账户、时间和验证结果，不记录密码。
+9. 全部通过后才撤下维护页并恢复写入，并保留本次 `C:\FFXIVShare-R20\Upgrades\<时间戳>` 目录作为回滚证据。
 
 每一步都必须成功才进入下一步。任一失败都保持停写，不用旧库覆盖候选数据库后继续尝试。
 
@@ -115,6 +116,6 @@ R19 已完成。2026-07-20 已取得并验证线上只读环境清单及启动/N
 - SQLite 为仓库根目录 `db.sqlite3`，检查时没有 WAL/SHM/journal；媒体目录不存在；
 - 正式 `/n/` 由 Nginx 独立转发到 Bun，主站升级不需要停止或修改它。
 
-仓库已新增 `ops/release/Start-DirectGitWaitress.bat`：它先只读判断 schema 是否匹配，再启动 Waitress；不激活环境、不执行 migration、依赖安装、Git 更新或静态构建。代理信任和 traceback 参数与当前生产安全契约一致。`ops/nginx/ffxivshare.direct-git.locations.conf.example` 只替换主站、静态和健康检查块，不定义 `/n/`。
+仓库已新增统一根入口 `start_ffxivshare.bat`。它委托 `ops/release/Start-DirectGitWaitress.bat` 自动判断 schema：一致时直接启动，存在 pending migration 时由操作者在同一界面选择安全升级或保持停止；异常历史不会被自动处理。升级流程已用隔离数据库完整验证候选迁移、双份源库回滚副本、SHA-256、原子替换和最终 schema 检查。启动器不激活环境，也不执行依赖安装、Git 更新、静态构建或 Nginx/Bun 控制；代理信任和 traceback 参数与当前生产安全契约一致。`ops/nginx/ffxivshare.direct-git.locations.conf.example` 只替换主站、静态和健康检查块，不定义 `/n/`。
 
 R20 当前进入阶段 B。下一步是确认线上 `.env` 仅包含哪些键（不采集值）、Node/npm 是否满足前端构建要求，并准备固定目标 commit 的依赖与候选数据库流程；仍未进入维护窗口。
