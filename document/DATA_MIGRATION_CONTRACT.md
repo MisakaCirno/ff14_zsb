@@ -77,12 +77,14 @@ R19 的生产副本验证必须按 `PRODUCTION_COPY_REHEARSAL.md` 执行：先�
 - `0019` 仅在所有 `SiteMessage` 为空、全部 `Report.resolution_reason` 为空字符串，并且全部 `Share.review_feedback` 为空字符串、`reviewed_at` 与 `reviewed_by` 均为 `NULL` 时允许安全反向。检查作为反向第一项操作执行，发现任意一项非默认数据就必须在删除表或字段前以 `IrreversibleError` 拒绝回滚。
 - 线上一旦产生上述审核或通知数据，回滚必须恢复包含这些字段与站内信的完整数据库备份，不能通过删除新增结构来丢弃上线后的业务与审计记录。
 
-当前导出格式为 v3。新版本导入器同时接受历史 v1、v2 和当前 v3：
+当前导出格式为 v4。新版本导入器同时接受历史 v1、v2、v3 和当前 v4：
 
-- v3 使用规范化 JSONL、固定 UTC 六位微秒时间、显式自然键协议和冻结的语义结构指纹；同名字段改型、关系目标变化或编码协议变化必须发布新的数据集版本。
-- v3 保存 Django Admin 操作日志、完整 ContentType/Permission 目录、源 migration 投影和自增序列高水位。
-- v3 的直接可移植实体序列范围固定为 `auth_group`、`auth_user`、`shares_userprofile`、`shares_share`、`shares_collection`、`shares_collectionitem`、`shares_report`、`shares_sharelog`、`shares_announcement`、`shares_sitemessage`、`django_admin_log`；框架元数据、会话和内嵌桥接表代理 ID 不冒充可移植身份。
-- v3 对数据库物理表进行完整分类；未知非空表和悬空的内嵌多对多记录一律阻止导出、导入或“已导入”判定。
+- v4 延续规范化 JSONL、固定 UTC 六位微秒时间、显式自然键协议和冻结的语义结构指纹；同名字段改型、关系目标变化或编码协议变化必须发布新的数据集版本。
+- v4 在 v3 基础上加入分享与合集的回收站时间、操作人、删除来源及说明，导出、导入和摘要比较必须逐字段保留这些状态。
+- v4 保存 Django Admin 操作日志、完整 ContentType/Permission 目录、源 migration 投影和自增序列高水位。
+- v4 的直接可移植实体序列范围固定为 `auth_group`、`auth_user`、`shares_userprofile`、`shares_share`、`shares_collection`、`shares_collectionitem`、`shares_report`、`shares_sharelog`、`shares_announcement`、`shares_sitemessage`、`django_admin_log`；框架元数据、会话和内嵌桥接表代理 ID 不冒充可移植身份。
+- v4 对数据库物理表进行完整分类；未知非空表和悬空的内嵌多对多记录一律阻止导出、导入或“已导入”判定。
+- v3 仍是不可改写的历史契约；它不含回收站字段，导入时由 `0029` 的安全默认值恢复为未删除状态。
 - `django_session` 不导出会话载荷。清单只记录总数、未过期数和最晚过期时间，切换时强制所有用户重新登录；目标会话表必须为空。
 - v2 显式保存 `Share` 的活动限制状态、原因、时间和操作人。
 - v1 缺少上述四个字段；导入器会从已认可举报、当前审核拒绝及审核日志时序确定性恢复。
@@ -114,7 +116,7 @@ python manage.py preflight_share_restrictions --strict `
   --output D:\migration\share-restriction-preflight.json
 ```
 
-导入完成后，从目标库重新导出一份 v3 数据集，并对两个已经分别通过
+导入完成后，从目标库重新导出一份同版本数据集，并对两个已经分别通过
 `validate_site_data` 的不可变导出执行独立比较：
 
 ```powershell
@@ -124,7 +126,7 @@ python ops\migration\Compare-SiteDataExports.py `
   --output D:\migration\evidence\site-data-comparison.json
 ```
 
-- 比较器不连接数据库，也不信任 manifest 中的摘要声明；它重新读取并校验固定 v3 目录、canonical JSONL 字节、实际 SHA、记录数量、模型和主键序列。
+- 比较器不连接数据库，也不信任 manifest 中的摘要声明；它重新读取并校验冻结的 v3 或 v4 目录、canonical JSONL 字节、实际 SHA、记录数量、模型和主键序列；两端格式版本必须一致。
 - 业务实体和依赖引用必须一致；目标 ContentType、Permission 和 migration 只允许是可解释的前向超集。
 - 升级源库必须保留全部原始源库序列下限；最终目标只检查上述 11 张直接可移植实体表，其有效下限为原始源库与升级源库高水位的较大值。保持相等是合法结果，禁止向下重置或复用已删除 ID；被排除的已观察序列必须记录原始源、升级源、目标三方值和具体原因。目标会话证据必须为空；导出时间、应用版本和数据库引擎只作为来源证据记录，不用于掩盖业务差异。
 - 输出必须位于两个不可变数据集之外且默认拒绝覆盖；任何额外文件、链接、未知结构、摘要变化或不规范 JSON 都会生成失败证据并返回非零状态。
@@ -136,7 +138,7 @@ python ops\migration\Compare-SiteDataExports.py `
 - 业务行在独立 durable 事务中导入，并在提交前完成内容摘要校验；失败时业务行整体回滚，序列尚未修改。
 - 自增序列在业务事务提交后执行幂等、只升不降的第二阶段收尾。收尾中断时业务数据保持已提交，报告标记 `finalization_incomplete`；使用同一数据集重跑会从内容摘要匹配状态继续，禁止清空目标库重来。
 - 文件报告与数据库提交无法组成同一原子事务。命令会在写数据库前发布 `started` 证据；若最终证据写入失败，重跑会根据数据库摘要恢复 `already_imported` 证据。
-- 目标库已有不同数据时拒绝导入；v3 同时比较结构投影、依赖、migration、实体摘要和序列下限，v2 使用冻结字段摘要，v1 额外校验推导后的限制语义。
+- 目标库已有不同数据时拒绝导入；v3/v4 同时比较结构投影、依赖、migration、实体摘要和序列下限，v2 使用冻结字段摘要，v1 额外校验推导后的限制语义。
 - 导入保留主键、密码哈希、分享 ID、时间字段和所有关系；序列高于最低要求属于安全空洞，不得向下重置或复用已删除 ID。
 - 所有 R19 导入报告固定包含 `cutover_authorized=false`；只有后续 R20 切换验收才能授权正式切换。
 - 限制预检不会修改数据；它按举报认可、审核拒绝/通过、确认维持和解除限制的完整时序反向检查当前状态，并输出所有相关 `share_ids`，不截断为抽样列表。
@@ -146,6 +148,8 @@ python ops\migration\Compare-SiteDataExports.py `
 - 每次人工处理后重新运行严格预检，只有 `blocking_errors` 和 `manual_review` 都为空才允许切换。
 - `shares/0027` 固化 2026-07-19 R19 生产快照中四条 `legacy_private` 的逐条人工结论：一条历史下架、三条作者私密。迁移只处理仍为“已通过 + 私有 + 历史待确认”的对应记录，保留 `visibility=private`，并写入确定性 `confirm_restriction`/`release_restriction` 日志；已出现新审核证据或状态变化的记录不会被该结论覆盖。
 - `shares/0028` 把历史 SQLite 中位于表尾的 `shares_announcement.content` 规范化为当前从零建库的物理列顺序；字段名称、类型、约束和值不变，迁移前后显式捕获并恢复公告表的 AUTOINCREMENT 高水位。
+- `shares/0029` 只增加分享与合集的回收站元数据、索引和一致性约束，并为恢复动作扩展日志枚举；所有历史记录保持未删除默认值，不删除或改写既有内容及关系。回收站存在任何内容时，反向迁移会在删除字段前拒绝执行；生产回滚必须恢复完整备份。
+- 用户或管理员在网页中删除分享、用户在网页中删除合集时只写入回收站元数据；点赞、收藏、举报、合集成员和审计日志继续保留。作者只能恢复自己主动删除的分享，管理员删除的分享只能由管理员恢复。Django Admin 禁止物理删除用户和分享。
 
 ### SQLite 物理结构与序列保真
 
@@ -153,7 +157,7 @@ python ops\migration\Compare-SiteDataExports.py `
 - `table_structures` 规范化记录列、外键和唯一约束，并对 canonical JSON 计算 SHA-256。所有整数契约字段严格拒绝布尔值；普通列 `cid` 只作为物理顺序诊断，类型、`notnull`、默认值、主键序号、hidden、外键和唯一约束语义仍是阻断门禁。
 - 唯一约束比较保留列顺序、名称、降序、collation 和 partial，并区分普通列、rowid 与表达式；不能用索引内部序号变化掩盖真实约束变化。
 - 原始源结构只允许冻结代码中按精确 source/destination SQL SHA-256 对、对象身份和列属性值绑定的例外。每个声明例外都必须在升级源库和最终目标中分别消费；未消费例外、额外对象、未知 SQL、列属性、外键或唯一约束变化一律失败。
-- 升级源库与最终目标的 `sqlite_schema` 和 `table_structures` 必须精确相等；升级源库保留全部原始序列下限，最终目标按上述 v3 范围检查 `max(original source, upgraded source)`。被排除的内嵌桥接、框架元数据、会话及其它序列必须逐项附原因。
+- 升级源库与最终目标的 `sqlite_schema` 和 `table_structures` 必须精确相等；升级源库保留全部原始序列下限，最终目标按上述 v3/v4 范围检查 `max(original source, upgraded source)`。被排除的内嵌桥接、框架元数据、会话及其它序列必须逐项附原因。
 - Pair verifier 不信任单轮的通过声明，会独立复算结构投影，并把 `database_structure_preservation_sha256` 同时绑定进 authority 和跨轮语义比较。
 
 ## 强制校验
