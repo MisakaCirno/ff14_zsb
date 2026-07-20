@@ -60,6 +60,7 @@ def _queue_log_prefetch():
 
 def _queue_share_queryset(queryset=None, *, include_strategy_code=False):
     queryset = queryset if queryset is not None else Share.objects.all()
+    queryset = queryset.filter(deleted_at__isnull=True)
     deferred_fields = [
         'description',
         'review_feedback',
@@ -112,8 +113,11 @@ def _staff_reason_form(
 def _review_queryset():
     return _queue_share_queryset(
         Share.objects.filter(
-            Q(status=Share.Status.PENDING)
-            | ~Q(restriction_state=Share.RestrictionState.CLEAR)
+            Q(
+                Q(status=Share.Status.PENDING)
+                | ~Q(restriction_state=Share.RestrictionState.CLEAR)
+            ),
+            deleted_at__isnull=True,
         ),
         include_strategy_code=True,
     ).order_by('-created_at', '-pk')
@@ -508,7 +512,7 @@ def _pending_report_queryset(*, text_length=_QUEUE_TEXT_PREVIEW_LENGTH):
 
 def _report_queryset():
     return _queue_share_queryset(
-        Share.objects.annotate(
+        Share.objects.filter(deleted_at__isnull=True).annotate(
             pending_count=_pending_report_count(),
         ).filter(pending_count__gt=0)
     ).prefetch_related(

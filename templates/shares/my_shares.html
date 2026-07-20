@@ -51,9 +51,108 @@
                     <span>我的收藏</span>
                 </a>
             </li>
+            <li>
+                <a class="ui-segmented-nav__link my-content-nav__link{% if current_tab == 'trash' %} active{% endif %}" href="{% querystring tab='trash' page=None order=None share_page=None collection_page=None %}"{% if current_tab == 'trash' %} aria-current="page"{% endif %}>
+                    <i class="bi bi-trash3" aria-hidden="true"></i>
+                    <span>回收站</span>
+                </a>
+            </li>
         </ul>
     </nav>
 
+    {% if current_tab == 'trash' %}
+    <section class="my-content-section" aria-labelledby="trash-shares-title">
+        <header class="ui-section-header my-content-section__header">
+            <div class="my-content-section__copy">
+                <p class="ui-eyebrow my-content-section__eyebrow">可恢复内容</p>
+                <h2 class="ui-section-title my-content-section__title" id="trash-shares-title">已删除的分享</h2>
+                <p class="ui-section-summary my-content-section__description">删除只会隐藏内容，互动、举报、合集关系和操作记录仍会保留。</p>
+            </div>
+            <span class="my-content-section__count">共 <strong>{{ deleted_shares.paginator.count }}</strong> 个分享</span>
+        </header>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 my-content-grid">
+            {% for share in deleted_shares %}
+            <div class="col">
+                <article class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h5">{{ share.title }}</h3>
+                        <p class="text-muted mb-2">删除于 {{ share.deleted_at|date:"Y-m-d H:i" }}</p>
+                        <p class="mb-0">{{ share.deletion_reason }}</p>
+                    </div>
+                    <footer class="card-footer">
+                        {% if share.deletion_origin == 'owner' %}
+                        <form method="post" action="{% url 'restore_share' share.share_id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-success">
+                                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                                恢复分享
+                            </button>
+                        </form>
+                        {% else %}
+                        <span class="text-muted">该分享由管理员移入回收站，请联系管理员恢复。</span>
+                        {% endif %}
+                    </footer>
+                </article>
+            </div>
+            {% empty %}
+            <div class="col-12">
+                {% include 'shares/includes/empty_state.html' with icon='bi-trash3' title='没有已删除的分享' message='移入回收站的分享会出现在这里。' only %}
+            </div>
+            {% endfor %}
+        </div>
+        {% if deleted_shares.paginator.num_pages > 1 %}
+        <nav class="mt-4" aria-label="回收站分享分页">
+            {% if deleted_shares.has_previous %}<a class="btn btn-sm btn-outline-secondary" href="{% querystring share_page=deleted_shares.previous_page_number %}">上一页</a>{% endif %}
+            <span class="mx-2">第 {{ deleted_shares.number }} / {{ deleted_shares.paginator.num_pages }} 页</span>
+            {% if deleted_shares.has_next %}<a class="btn btn-sm btn-outline-secondary" href="{% querystring share_page=deleted_shares.next_page_number %}">下一页</a>{% endif %}
+        </nav>
+        {% endif %}
+    </section>
+
+    <section class="my-content-section mt-5" aria-labelledby="trash-collections-title">
+        <header class="ui-section-header my-content-section__header">
+            <div class="my-content-section__copy">
+                <p class="ui-eyebrow my-content-section__eyebrow">可恢复内容</p>
+                <h2 class="ui-section-title my-content-section__title" id="trash-collections-title">已删除的合集</h2>
+                <p class="ui-section-summary my-content-section__description">合集中的分享、排序和公开设置都会原样保留。</p>
+            </div>
+            <span class="my-content-section__count">共 <strong>{{ deleted_collections.paginator.count }}</strong> 个合集</span>
+        </header>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 my-content-grid">
+            {% for collection in deleted_collections %}
+            <div class="col">
+                <article class="card h-100">
+                    <div class="card-body">
+                        <h3 class="h5">{{ collection.title }}</h3>
+                        <p class="text-muted mb-2">删除于 {{ collection.deleted_at|date:"Y-m-d H:i" }} · {{ collection.item_count }} 个内容</p>
+                        <p class="mb-0">{{ collection.deletion_reason }}</p>
+                    </div>
+                    <footer class="card-footer">
+                        <form method="post" action="{% url 'restore_collection' collection.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-success">
+                                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                                恢复合集
+                            </button>
+                        </form>
+                    </footer>
+                </article>
+            </div>
+            {% empty %}
+            <div class="col-12">
+                {% include 'shares/includes/empty_state.html' with icon='bi-trash3' title='没有已删除的合集' message='移入回收站的合集会出现在这里。' only %}
+            </div>
+            {% endfor %}
+        </div>
+        {% if deleted_collections.paginator.num_pages > 1 %}
+        <nav class="mt-4" aria-label="回收站合集分页">
+            {% if deleted_collections.has_previous %}<a class="btn btn-sm btn-outline-secondary" href="{% querystring collection_page=deleted_collections.previous_page_number %}">上一页</a>{% endif %}
+            <span class="mx-2">第 {{ deleted_collections.number }} / {{ deleted_collections.paginator.num_pages }} 页</span>
+            {% if deleted_collections.has_next %}<a class="btn btn-sm btn-outline-secondary" href="{% querystring collection_page=deleted_collections.next_page_number %}">下一页</a>{% endif %}
+        </nav>
+        {% endif %}
+    </section>
+    {% else %}
     {% if current_tab != 'collections' %}
     <section
         class="my-content-section"
@@ -156,6 +255,7 @@
 
         {% include 'shares/includes/pagination.html' with page_obj=collections aria_label='我的合集分页' nav_class='mt-5' pagination_class='pagination-lg' %}
     </section>
+    {% endif %}
     {% endif %}
 </div>
 {% endblock %}

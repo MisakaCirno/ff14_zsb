@@ -183,4 +183,6 @@ class AccountContentPermissionTests(TestCase):
         )
 
         self.assertRedirects(allowed_response, reverse('my_shares'))
-        self.assertFalse(Collection.objects.filter(pk=self.collection.pk).exists())
+        self.assertTrue(Collection.objects.filter(pk=self.collection.pk).exists())
+        self.collection.refresh_from_db()
+        self.assertIsNotNone(self.collection.deleted_at)

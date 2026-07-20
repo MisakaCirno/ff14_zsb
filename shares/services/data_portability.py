@@ -20,6 +20,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from .data_portability_codec import (
+    _current_model_schema_signature,
     _current_v3_model_schema_signature,
     _format_v3_datetime,
     _serialize_queryset,
@@ -55,6 +56,7 @@ from .data_portability_schema import (
     ENTITY_SPECS_BY_VERSION,
     IMPORT_REPORT_FILENAME,
     MANIFEST_FILENAME,
+    MODEL_SCHEMA_SIGNATURE_BY_VERSION,
     SUPPORTED_DATASET_VERSIONS,
     VALIDATION_REPORT_FILENAME,
     V1_ENTITY_FIELDS,
@@ -67,6 +69,7 @@ from .data_portability_schema import (
     V3_MODEL_SCHEMA_SIGNATURE,
     V3_NATURAL_KEY_PROTOCOL,
     V3_SESSION_PROJECTION_POLICY,
+    V4_ENTITY_FIELDS,
     DataPortabilityError,
     EntitySpec,
     _entity_by_name_for_version,
@@ -147,8 +150,17 @@ class ValidationReport:
         }
 
 
-def _serialize_v3_queryset(queryset, stream, *, spec: EntitySpec) -> None:
-    fields = _expected_serialized_fields(spec, dataset_version=3)
+def _serialize_v3_queryset(
+    queryset,
+    stream,
+    *,
+    spec: EntitySpec,
+    dataset_version: int = DATASET_VERSION,
+) -> None:
+    fields = _expected_serialized_fields(
+        spec,
+        dataset_version=dataset_version,
+    )
     for obj in queryset.iterator(chunk_size=1000):
         _write_v3_record(stream, _v3_record(spec, obj, fields))
 
@@ -162,8 +174,13 @@ def _serialize_entity(
     queryset = spec.model._default_manager.order_by(spec.model._meta.pk.name)
     count = queryset.count()
     with destination.open('w', encoding='utf-8', newline='\n') as stream:
-        if dataset_version == 3:
-            _serialize_v3_queryset(queryset, stream, spec=spec)
+        if dataset_version >= 3:
+            _serialize_v3_queryset(
+                queryset,
+                stream,
+                spec=spec,
+                dataset_version=dataset_version,
+            )
         else:
             _serialize_queryset(
                 queryset,
@@ -182,10 +199,11 @@ def _serialize_entity(
 
 
 def export_dataset(output_directory: str | Path, *, overwrite: bool = False) -> dict[str, Any]:
-    current_schema_signature = _current_v3_model_schema_signature()
-    if current_schema_signature != V3_MODEL_SCHEMA_SIGNATURE:
+    expected_schema_signature = MODEL_SCHEMA_SIGNATURE_BY_VERSION[DATASET_VERSION]
+    current_schema_signature = _current_model_schema_signature(DATASET_VERSION)
+    if current_schema_signature != expected_schema_signature:
         raise DataPortabilityError(
-            'The runtime model semantics no longer match the frozen v3 schema; '
+            'The runtime model semantics no longer match the current frozen schema; '
             'define a new dataset version before exporting.'
         )
     output = Path(output_directory).expanduser().resolve()
@@ -206,7 +224,7 @@ def export_dataset(output_directory: str | Path, *, overwrite: bool = False) -> 
             dependency_projection = _build_dependency_projection()
             migration_projection = _build_migration_projection()
             sequence_projection = _build_sequence_projection()
-            for spec in V3_ENTITY_SPECS:
+            for spec in ENTITY_SPECS:
                 entities[spec.name] = _serialize_entity(
                     spec,
                     staging / spec.filename,
@@ -218,7 +236,7 @@ def export_dataset(output_directory: str | Path, *, overwrite: bool = False) -> 
             'format_version': DATASET_VERSION,
             'codec': V3_CODEC,
             'schema_fingerprint': _schema_fingerprint(DATASET_VERSION),
-            'model_schema_signature': V3_MODEL_SCHEMA_SIGNATURE,
+            'model_schema_signature': expected_schema_signature,
             'application_version': os.environ.get('APP_VERSION', 'unknown'),
             'exported_at': _format_v3_datetime(timezone.now()),
             'source_database': connection.vendor,
@@ -316,7 +334,7 @@ def _record_schema_errors(
                 errors.append(f'{model_field.name} cannot be null')
             continue
         if (
-            dataset_version == 3
+            dataset_version >= 3
             and isinstance(model_field, models.DateTimeField)
             and (
                 not isinstance(value, str)
@@ -339,7 +357,10 @@ def _record_schema_errors(
                 )
         if model_field.choices:
             allowed = {choice[0] for choice in model_field.flatchoices}
-            if converted not in allowed:
+            if (
+                converted not in allowed
+                and not (model_field.blank and converted == '')
+            ):
                 errors.append(f'{model_field.name} is not an allowed choice')
     for model_field in spec.model._meta.local_many_to_many:
         if model_field.name not in fields:
@@ -633,7 +654,7 @@ def _validate_cross_entity(
     }
     referenced_permissions: set[tuple[str, str, str]] = set()
     referenced_content_types: set[tuple[str, str]] = set()
-    if dataset_version == 3:
+    if dataset_version >= 3:
         available_permissions, available_content_types = _available_dependency_keys()
     else:
         available_permissions, available_content_types = set(), set()
@@ -642,7 +663,7 @@ def _validate_cross_entity(
         name = record.fields.get('name')
         if isinstance(name, str):
             _check_duplicate(group_names, name, record, 'group name', errors_by_record)
-        if dataset_version == 3:
+        if dataset_version >= 3:
             for reference in _list_or_empty(record.fields.get('permissions')):
                 permission = _natural_permission(reference)
                 if permission is None or permission not in available_permissions:
@@ -663,7 +684,7 @@ def _validate_cross_entity(
             group_name = _natural_user(group_ref)
             if group_name is None or group_name not in group_names:
                 _add_error(errors_by_record, record, f'unknown group reference: {group_ref!r}')
-        if dataset_version == 3:
+        if dataset_version >= 3:
             for reference in _list_or_empty(record.fields.get('user_permissions')):
                 permission = _natural_permission(reference)
                 if permission is None or permission not in available_permissions:
@@ -825,7 +846,7 @@ def _validate_cross_entity(
         if related_report is not None and not _key_exists(report_pks, related_report):
             _add_error(errors_by_record, record, 'site message references an unknown report')
 
-    if dataset_version == 3:
+    if dataset_version >= 3:
         for record in records['admin_log_entries']:
             fields = record.fields
             username = _natural_user(fields.get('user'))
@@ -865,16 +886,19 @@ def _validate_cross_entity(
 def _validate_v3_manifest_shape(
     manifest: dict[str, Any],
     report: ValidationReport,
+    *,
+    dataset_version: int = 3,
 ) -> None:
     if manifest.get('codec') != V3_CODEC:
         report.errors.append(f'Unexpected v3 codec: {manifest.get("codec")!r}')
-    if manifest.get('schema_fingerprint') != _schema_fingerprint(3):
+    if manifest.get('schema_fingerprint') != _schema_fingerprint(dataset_version):
         report.errors.append('v3 schema fingerprint does not match this importer')
-    if manifest.get('model_schema_signature') != V3_MODEL_SCHEMA_SIGNATURE:
+    expected_signature = MODEL_SCHEMA_SIGNATURE_BY_VERSION[dataset_version]
+    if manifest.get('model_schema_signature') != expected_signature:
         report.errors.append('v3 model schema signature does not match this importer')
     if (
-        DATASET_VERSION == 3
-        and _current_v3_model_schema_signature() != V3_MODEL_SCHEMA_SIGNATURE
+        DATASET_VERSION == dataset_version
+        and _current_model_schema_signature(dataset_version) != expected_signature
     ):
         report.errors.append(
             'The current v3 exporter runtime no longer implements its frozen '
@@ -1157,7 +1181,7 @@ def _validate_v3_sequences(
         return
     expected_specs = {
         spec.name: spec
-        for spec in V3_ENTITY_SPECS
+        for spec in ENTITY_SPECS
         if isinstance(spec.model._meta.pk, models.AutoField)
     }
     if set(sequences) != set(expected_specs):
@@ -1236,8 +1260,12 @@ def validate_dataset(dataset_directory: str | Path) -> ValidationReport:
         report.errors.append(
             'Unexpected JSONL files: ' + ', '.join(unexpected_jsonl_files)
         )
-    if schema_version == 3:
-        _validate_v3_manifest_shape(manifest, report)
+    if schema_version >= 3:
+        _validate_v3_manifest_shape(
+            manifest,
+            report,
+            dataset_version=schema_version,
+        )
 
     manifest_entities = manifest.get('entities')
     if not isinstance(manifest_entities, dict):
@@ -1306,7 +1334,7 @@ def validate_dataset(dataset_directory: str | Path) -> ValidationReport:
                 )
                 records[spec.name].append(record)
                 record_errors: list[str] = []
-                if schema_version == 3:
+                if schema_version >= 3:
                     try:
                         canonical_line = json.dumps(
                             payload,
@@ -1364,7 +1392,7 @@ def validate_dataset(dataset_directory: str | Path) -> ValidationReport:
         errors_by_record,
         dataset_version=schema_version,
     )
-    if schema_version == 3:
+    if schema_version >= 3:
         _validate_v3_dependencies(manifest, dependencies, report)
         _validate_v3_migration_projection(manifest, report)
         _validate_v3_sequences(manifest, records, report)
@@ -1408,8 +1436,13 @@ def _database_entity_digest(
     count = queryset.count()
     stream = _DigestTextStream()
     fields = _expected_serialized_fields(spec, dataset_version=dataset_version)
-    if dataset_version == 3:
-        _serialize_v3_queryset(queryset, stream, spec=spec)
+    if dataset_version >= 3:
+        _serialize_v3_queryset(
+            queryset,
+            stream,
+            spec=spec,
+            dataset_version=dataset_version,
+        )
     else:
         _serialize_queryset(queryset, stream, fields=fields)
     return count, stream.digest.hexdigest()
@@ -1539,10 +1572,12 @@ def _database_v1_restrictions_match() -> bool:
 def _embedded_v3_rows_are_resolvable() -> bool:
     checked_tables: set[str] = set()
     quoted = connection.ops.quote_name
-    for spec in V3_ENTITY_SPECS:
+    for spec in ENTITY_SPECS:
         for model_field in spec.model._meta.local_many_to_many:
             if (
-                model_field.name not in V3_ENTITY_FIELDS[spec.name]
+                model_field.name not in ENTITY_FIELDS_BY_VERSION[
+                    DATASET_VERSION
+                ][spec.name]
                 or not model_field.remote_field.through._meta.auto_created
             ):
                 continue
@@ -1576,8 +1611,15 @@ def _embedded_v3_rows_are_resolvable() -> bool:
 
 
 def _v3_target_structure_matches_manifest(manifest: dict[str, Any]) -> bool:
+    dataset_version = manifest.get('format_version')
+    if dataset_version not in MODEL_SCHEMA_SIGNATURE_BY_VERSION:
+        return False
     report = ValidationReport(dataset='<target-database>', manifest=manifest)
-    _validate_v3_manifest_shape(manifest, report)
+    _validate_v3_manifest_shape(
+        manifest,
+        report,
+        dataset_version=dataset_version,
+    )
     dependencies = manifest.get('dependencies')
     references = (
         dependencies.get('references')
@@ -1632,8 +1674,8 @@ def database_matches_manifest(
         return False
     if not _embedded_v3_rows_are_resolvable():
         return False
-    if dataset_version == 3:
-        if manifest.get('schema_fingerprint') != _schema_fingerprint(3):
+    if dataset_version >= 3:
+        if manifest.get('schema_fingerprint') != _schema_fingerprint(dataset_version):
             return False
         if not _v3_target_structure_matches_manifest(manifest):
             return False
@@ -1717,7 +1759,7 @@ def _required_sequence_floors(
     source_version = manifest['format_version']
     manifest_sequences = (
         manifest['identity']['sequences']
-        if source_version == 3
+        if source_version >= 3
         else {}
     )
     floors: dict[str, int] = {}
@@ -1729,7 +1771,7 @@ def _required_sequence_floors(
             max_pk=Max(pk_field.name),
         )['max_pk'] or 0
         required = int(max_live_pk) + 1
-        if source_version == 3:
+        if source_version >= 3:
             required = max(
                 required,
                 manifest_sequences[spec.name]['next_value_floor'],

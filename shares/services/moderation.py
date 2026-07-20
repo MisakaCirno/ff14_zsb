@@ -112,6 +112,7 @@ def _notify_author_restriction_released(*, share, moderator, reason):
 def approve_share(*, share_id, moderator):
     share = Share.objects.select_for_update().select_related('author').get(
         share_id=share_id,
+        deleted_at__isnull=True,
     )
     if share.status != Share.Status.PENDING:
         return ShareModerationResult(share=share, outcome='already_processed')
@@ -165,6 +166,7 @@ def reject_share(*, share_id, moderator, reason):
     reason = _required_reason(reason)
     share = Share.objects.select_for_update().select_related('author').get(
         share_id=share_id,
+        deleted_at__isnull=True,
     )
     if share.status != Share.Status.PENDING:
         return ShareModerationResult(share=share, outcome='already_processed')
@@ -219,6 +221,7 @@ def release_share_restriction(*, share_id, moderator, reason):
     reason = _required_reason(reason)
     share = Share.objects.select_for_update().select_related('author').get(
         share_id=share_id,
+        deleted_at__isnull=True,
     )
     if not share.is_restricted:
         return ShareModerationResult(share=share, outcome='already_clear')
@@ -263,6 +266,7 @@ def confirm_share_restriction(
     reason = _required_reason(reason)
     share = Share.objects.select_for_update().select_related('author').get(
         share_id=share_id,
+        deleted_at__isnull=True,
     )
     if share.updated_at != expected_version:
         return ShareModerationResult(share=share, outcome='stale')
@@ -363,7 +367,10 @@ def resolve_report(*, report_id, action, moderator, reason):
         raise ValueError(f'Unsupported report action: {action}')
     reason = _required_reason(reason)
     share_id = Report.objects.values_list('share_id', flat=True).get(pk=report_id)
-    share = Share.objects.select_for_update().select_related('author').get(pk=share_id)
+    share = Share.objects.select_for_update().select_related('author').get(
+        pk=share_id,
+        deleted_at__isnull=True,
+    )
     report = Report.objects.select_for_update().select_related('reporter').get(
         pk=report_id,
         share_id=share.pk,
@@ -427,6 +434,7 @@ def resolve_share_reports(*, share_id, action, moderator, reason):
     reason = _required_reason(reason)
     share = Share.objects.select_for_update().select_related('author').get(
         share_id=share_id,
+        deleted_at__isnull=True,
     )
     reports = tuple(
         Report.objects.select_for_update()

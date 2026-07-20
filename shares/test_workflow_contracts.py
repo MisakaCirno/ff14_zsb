@@ -585,7 +585,10 @@ class ShareWriteWorkflowTests(TestCase):
         response = self.client.post(reverse('delete_share', args=[share.share_id]))
 
         self.assertRedirects(response, reverse('my_shares'))
-        self.assertFalse(Share.objects.filter(pk=share.pk).exists())
+        self.assertTrue(Share.objects.filter(pk=share.pk).exists())
+        share.refresh_from_db()
+        self.assertIsNotNone(share.deleted_at)
+        self.assertEqual(share.deletion_origin, Share.DeletionOrigin.OWNER)
 
 
 class InteractionWorkflowTests(TestCase):

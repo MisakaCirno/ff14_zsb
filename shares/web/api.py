@@ -30,7 +30,10 @@ def read_only_json_api(view_func):
 @read_only_json_api
 def get_share_code(request, share_id):
     try:
-        share = Share.objects.get(share_id=share_id)
+        share = Share.objects.get(
+            share_id=share_id,
+            deleted_at__isnull=True,
+        )
     except Share.DoesNotExist:
         return JsonResponse({'error': 'Share not found'}, status=404)
     if not can_view_share(request.user, share):
@@ -46,7 +49,10 @@ def get_share_code(request, share_id):
 @read_only_json_api
 def get_collection_codes(request, collection_id):
     try:
-        collection = Collection.objects.get(id=collection_id)
+        collection = Collection.objects.get(
+            id=collection_id,
+            deleted_at__isnull=True,
+        )
     except Collection.DoesNotExist:
         return JsonResponse({'error': 'Collection not found'}, status=404)
     if not can_view_collection(request.user, collection):

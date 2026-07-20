@@ -42,8 +42,8 @@ class AnnouncementAdmin(admin.ModelAdmin):
 @admin.register(Share)
 class ShareAdmin(admin.ModelAdmin):
     form = ShareAdminForm
-    list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'status', 'restriction_state', 'views', 'copies', 'created_at']
-    list_filter = ['visibility', 'status', 'restriction_state', 'created_at', 'author']
+    list_display = ['title', 'share_id', 'get_author_display', 'visibility', 'status', 'restriction_state', 'deleted_at', 'views', 'copies', 'created_at']
+    list_filter = ['deleted_at', 'visibility', 'status', 'restriction_state', 'created_at', 'author']
     search_fields = ['title', 'share_id', 'description', 'author__username', 'author__profile__nickname']
     readonly_fields = [
         'share_id',
@@ -59,6 +59,10 @@ class ShareAdmin(admin.ModelAdmin):
         'updated_at',
         'views',
         'copies',
+        'deleted_at',
+        'deleted_by',
+        'deletion_origin',
+        'deletion_reason',
     ]
     date_hierarchy = 'created_at'
     list_per_page = 20
@@ -85,6 +89,10 @@ class ShareAdmin(admin.ModelAdmin):
             'fields': ('views', 'copies', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
+        ('回收站', {
+            'fields': ('deleted_at', 'deleted_by', 'deletion_origin', 'deletion_reason'),
+            'classes': ('collapse',),
+        }),
     )
     
     def get_author_display(self, obj):
@@ -96,7 +104,26 @@ class ShareAdmin(admin.ModelAdmin):
     get_author_display.short_description = '作者'
     get_author_display.admin_order_field = 'author__username'
     
-    actions = ['make_public', 'make_private']
+    actions = ['make_public', 'make_private', 'restore_deleted_shares']
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.action(permissions=['change'], description='恢复所选回收站分享')
+    def restore_deleted_shares(self, request, queryset):
+        from shares.services.deletion import restore_share_from_trash
+
+        restored = 0
+        share_ids = queryset.filter(
+            deleted_at__isnull=False,
+        ).values_list('pk', flat=True)
+        for share_id in share_ids.iterator(chunk_size=100):
+            result = restore_share_from_trash(
+                share_pk=share_id,
+                actor=request.user,
+            )
+            restored += int(result.changed)
+        self.message_user(request, f'已恢复 {restored} 个分享。')
 
     @staticmethod
     def _visibility_change_details(visibility):
@@ -248,6 +275,7 @@ class ShareAdmin(admin.ModelAdmin):
         return counts
 
     def _run_visibility_action(self, request, queryset, *, visibility):
+        queryset = queryset.filter(deleted_at__isnull=True)
         totals = self._empty_visibility_counts()
         database = queryset.db
         batches = iter(self._visibility_action_batches(queryset))
@@ -398,6 +426,9 @@ class UserAdmin(BaseUserAdmin):
     list_display = ['username', 'get_nickname', 'email', 'is_staff', 'is_active', 'date_joined']
     list_filter = ['is_staff', 'is_active', 'date_joined']
     search_fields = ['username', 'email', 'profile__nickname']
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
         if request.method == 'POST' and object_id is not None:

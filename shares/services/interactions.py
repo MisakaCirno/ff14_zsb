@@ -25,6 +25,7 @@ INTERACTION_POLICY_FIELDS = (
     'visibility',
     'status',
     'restriction_state',
+    'deleted_at',
 )
 
 

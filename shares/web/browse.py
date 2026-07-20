@@ -226,7 +226,11 @@ def user_public_profile(request, username):
     ).order_by('-created_at', '-pk')
     if current_tab == 'collections':
         queryset = annotate_collection_cards(
-            Collection.objects.filter(author=author, is_public=True),
+            Collection.objects.filter(
+                author=author,
+                is_public=True,
+                deleted_at__isnull=True,
+            ),
         ).order_by('-updated_at', '-pk')
         context['collections'] = Paginator(queryset, 12).get_page(
             request.GET.get('page')

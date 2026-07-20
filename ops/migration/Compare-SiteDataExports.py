@@ -17,14 +17,25 @@ from uuid import uuid4
 
 
 DATASET_FORMAT = "ffxivshare-jsonl"
-DATASET_VERSION = 3
 DATASET_CODEC = "canonical-jsonl-utc-microseconds"
-SCHEMA_FINGERPRINT = (
-    "5748cb65c7617cef02e2141435c80530b6736b1bd4c5ab91419772a374ad55c2"
-)
-MODEL_SCHEMA_SIGNATURE = (
-    "9b91a3b943d2986115508db51c216d94040053ec2c8e19b900acd2e0ddfdd685"
-)
+DATASET_CONTRACTS = {
+    3: {
+        "schema_fingerprint": (
+            "5748cb65c7617cef02e2141435c80530b6736b1bd4c5ab91419772a374ad55c2"
+        ),
+        "model_schema_signature": (
+            "9b91a3b943d2986115508db51c216d94040053ec2c8e19b900acd2e0ddfdd685"
+        ),
+    },
+    4: {
+        "schema_fingerprint": (
+            "b8bbd3882b870c1873a1bf3b5dd4a7400e03d8da89a4d86bead037f5541bda1b"
+        ),
+        "model_schema_signature": (
+            "bdd2b55012b63037477304e3de7a2168ddb741b6faf12c8dc83d22a24368de85"
+        ),
+    },
+}
 REPORT_FORMAT = "ffxivshare-site-data-export-comparison"
 REPORT_VERSION = 1
 MANIFEST_FILENAME = "manifest.json"
@@ -120,6 +131,7 @@ class ContractError(RuntimeError):
 
 @dataclass(frozen=True)
 class DatasetSummary:
+    dataset_version: int
     manifest_sha256: str
     validation_report_sha256: str | None
     application_version: str
@@ -611,7 +623,12 @@ def _validate_generated_at(value: Any) -> bool:
     return parsed.tzinfo is not None and parsed.utcoffset() == UTC.utcoffset(parsed)
 
 
-def _validate_validation_report(value: Any, counts: dict[str, int]) -> None:
+def _validate_validation_report(
+    value: Any,
+    counts: dict[str, int],
+    *,
+    dataset_version: int,
+) -> None:
     report = _exact_keys(
         value,
         {
@@ -630,7 +647,7 @@ def _validate_validation_report(value: Any, counts: dict[str, int]) -> None:
     _require(report["format"] == DATASET_FORMAT, "validation_report_format")
     _require(
         _is_nonnegative_integer(report["format_version"])
-        and report["format_version"] == DATASET_VERSION,
+        and report["format_version"] == dataset_version,
         "validation_report_version",
     )
     _require(_validate_generated_at(report["generated_at"]), "validation_report_time")
@@ -676,15 +693,20 @@ def _inspect_dataset(root: Path) -> DatasetSummary:
         "manifest_shape",
     )
     _require(manifest["format"] == DATASET_FORMAT, "dataset_format")
+    dataset_version = manifest["format_version"]
     _require(
-        _is_nonnegative_integer(manifest["format_version"])
-        and manifest["format_version"] == DATASET_VERSION,
+        _is_nonnegative_integer(dataset_version)
+        and dataset_version in DATASET_CONTRACTS,
         "dataset_version",
     )
+    contract = DATASET_CONTRACTS[dataset_version]
     _require(manifest["codec"] == DATASET_CODEC, "dataset_codec")
-    _require(manifest["schema_fingerprint"] == SCHEMA_FINGERPRINT, "schema_fingerprint")
     _require(
-        manifest["model_schema_signature"] == MODEL_SCHEMA_SIGNATURE,
+        manifest["schema_fingerprint"] == contract["schema_fingerprint"],
+        "schema_fingerprint",
+    )
+    _require(
+        manifest["model_schema_signature"] == contract["model_schema_signature"],
         "model_schema_signature",
     )
     _require(isinstance(manifest["application_version"], str), "application_version")
@@ -727,7 +749,11 @@ def _inspect_dataset(root: Path) -> DatasetSummary:
         max_primary_keys[entity_name] = max_pk
 
     if validation_report is not None:
-        _validate_validation_report(validation_report, counts)
+        _validate_validation_report(
+            validation_report,
+            counts,
+            dataset_version=dataset_version,
+        )
 
     dependencies = _validate_dependencies(manifest["dependencies"])
     session = _validate_session(manifest["session_projection"])
@@ -743,6 +769,7 @@ def _inspect_dataset(root: Path) -> DatasetSummary:
     inventory_after = _directory_inventory(root)
     _require(inventory_after == inventory_before, "dataset_changed")
     return DatasetSummary(
+        dataset_version=dataset_version,
         manifest_sha256=manifest_sha256,
         validation_report_sha256=validation_report_sha256,
         application_version=manifest["application_version"],
@@ -764,7 +791,7 @@ def _compare_summaries(
 ) -> tuple[list[str], dict[str, bool]]:
     issues: list[str] = []
     checks = {
-        "frozen_v3_contract": True,
+        "frozen_v3_contract": source.dataset_version == target.dataset_version,
         "entity_projection": source.entities == target.entities,
         "dependency_projection": True,
         "table_projection": source.table_semantics == target.table_semantics,
@@ -775,6 +802,8 @@ def _compare_summaries(
         "sequence_projection": True,
         "session_projection": True,
     }
+    if source.dataset_version != target.dataset_version:
+        issues.append("comparison.dataset_version")
     source_content_types = {
         tuple(item) for item in source.dependencies["content_types"]
     }
@@ -833,6 +862,7 @@ def _artifact(summary: DatasetSummary | None) -> dict[str, Any]:
         return {"contract_valid": False}
     artifact = {
         "contract_valid": True,
+        "dataset_version": summary.dataset_version,
         "manifest_sha256": summary.manifest_sha256,
         "application_version": summary.application_version,
         "exported_at": summary.exported_at,
@@ -927,7 +957,7 @@ def compare_exports(source_root: Path, target_root: Path, output: Path) -> bool:
 def _parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Compare two independently validated, immutable v3 site-data exports."
+            "Compare two independently validated, immutable canonical site-data exports."
         )
     )
     parser.add_argument("--source", required=True)

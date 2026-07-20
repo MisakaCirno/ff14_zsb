@@ -37,7 +37,8 @@ class AnnouncementPermissionNameMigrationTests(TransactionTestCase):
         executor.migrate([self.migrate_to])
 
     def tearDown(self):
-        MigrationExecutor(connection).migrate([self.migrate_to])
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
         super().tearDown()
 
     def test_updates_only_names_and_preserves_permission_relations(self):

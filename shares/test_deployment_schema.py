@@ -76,7 +76,7 @@ class DeploymentSchemaInspectionTests(SimpleTestCase):
             self.assertFalse(Path(f'{self.database_path}{suffix}').exists())
 
     def test_missing_leaf_requires_upgrade_without_guessing(self):
-        missing = ('shares', '0028_normalize_announcement_column_order')
+        missing = ('shares', '0029_add_recoverable_content_deletion')
         self.assertIn(missing, self.expected_order)
         self.create_history(
             migration for migration in self.expected_order if migration != missing

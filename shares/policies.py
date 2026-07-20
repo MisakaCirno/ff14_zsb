@@ -22,6 +22,8 @@ def is_owner(user, obj):
 
 def can_view_share(user, share):
     """Apply the direct-link visibility policy for one share."""
+    if share.deleted_at is not None:
+        return False
     if is_moderator(user) or is_owner(user, share):
         return True
     if share.is_restricted:
@@ -38,6 +40,7 @@ def viewable_share_queryset(user, queryset=None):
     queryset = queryset if queryset is not None else Share.objects.all()
     if not isinstance(queryset, QuerySet):
         raise TypeError('queryset must be a Django QuerySet')
+    queryset = queryset.filter(deleted_at__isnull=True)
     if is_moderator(user):
         return queryset
 
@@ -52,7 +55,14 @@ def viewable_share_queryset(user, queryset=None):
 
 
 def can_view_collection(user, collection):
-    return collection.is_public or is_owner(user, collection) or is_moderator(user)
+    return (
+        collection.deleted_at is None
+        and (
+            collection.is_public
+            or is_owner(user, collection)
+            or is_moderator(user)
+        )
+    )
 
 
 def viewable_collection_queryset(user, queryset=None):
@@ -60,6 +70,7 @@ def viewable_collection_queryset(user, queryset=None):
     queryset = queryset if queryset is not None else Collection.objects.all()
     if not isinstance(queryset, QuerySet):
         raise TypeError('queryset must be a Django QuerySet')
+    queryset = queryset.filter(deleted_at__isnull=True)
     if is_moderator(user):
         return queryset
 
@@ -74,6 +85,7 @@ def public_share_queryset(queryset=None):
     if not isinstance(queryset, QuerySet):
         raise TypeError('queryset must be a Django QuerySet')
     return queryset.filter(
+        deleted_at__isnull=True,
         restriction_state=Share.RestrictionState.CLEAR,
         visibility=Share.Visibility.PUBLIC,
         status=Share.Status.APPROVED,

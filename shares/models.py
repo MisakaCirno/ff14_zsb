@@ -75,6 +75,10 @@ class Share(models.Model):
         ENTERTAINMENT = 'entertainment', '娱乐'
         COMBAT = 'combat', '战斗'
 
+    class DeletionOrigin(models.TextChoices):
+        OWNER = 'owner', '作者删除'
+        MODERATOR = 'moderator', '管理员删除'
+
     category = models.CharField(
         max_length=20,
         choices=Category.choices,
@@ -123,6 +127,23 @@ class Share(models.Model):
     copies = models.IntegerField(default=0, verbose_name='复制次数')
     likes = models.ManyToManyField(User, related_name='liked_shares', blank=True, verbose_name='点赞用户')
     favorites = models.ManyToManyField(User, related_name='favorited_shares', blank=True, verbose_name='收藏用户')
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='移入回收站时间')
+    deleted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deleted_shares',
+        verbose_name='删除操作人',
+    )
+    deletion_origin = models.CharField(
+        max_length=10,
+        choices=DeletionOrigin.choices,
+        blank=True,
+        default='',
+        verbose_name='删除来源',
+    )
+    deletion_reason = models.TextField(blank=True, verbose_name='删除说明')
 
     class Meta:
         ordering = ['-created_at']
@@ -134,6 +155,10 @@ class Share(models.Model):
             models.Index(
                 fields=['author', '-created_at'],
                 name='share_author_idx',
+            ),
+            models.Index(
+                fields=['deleted_at', '-created_at'],
+                name='share_deleted_idx',
             ),
         ]
         constraints = [
@@ -217,6 +242,22 @@ class Share(models.Model):
                 ),
                 name='share_rejected_restricted',
             ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        deleted_at__isnull=True,
+                        deleted_by__isnull=True,
+                        deletion_origin='',
+                        deletion_reason='',
+                    )
+                    | (
+                        models.Q(deleted_at__isnull=False)
+                        & models.Q(deletion_origin__in=['owner', 'moderator'])
+                        & ~models.Q(deletion_reason='')
+                    )
+                ),
+                name='share_deletion_metadata',
+            ),
         ]
         verbose_name = '战术板分享'
         verbose_name_plural = '战术板分享'
@@ -271,6 +312,10 @@ class Share(models.Model):
     @property
     def is_restricted(self):
         return self.restriction_state != self.RestrictionState.CLEAR
+
+    @property
+    def is_deleted(self):
+        return self.deleted_at is not None
 
 
 class Report(models.Model):
@@ -434,6 +479,16 @@ class Collection(models.Model):
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
     is_public = models.BooleanField(default=True, verbose_name='是否公开')
     shares = models.ManyToManyField(Share, through='CollectionItem', related_name='collections', verbose_name='包含的分享')
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='移入回收站时间')
+    deleted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='deleted_collections',
+        verbose_name='删除操作人',
+    )
+    deletion_reason = models.TextField(blank=True, verbose_name='删除说明')
 
     class Meta:
         ordering = ['-updated_at']
@@ -445,6 +500,26 @@ class Collection(models.Model):
             models.Index(
                 fields=['author', '-updated_at', '-id'],
                 name='collection_owner_updated_idx',
+            ),
+            models.Index(
+                fields=['deleted_at', '-updated_at'],
+                name='collection_deleted_idx',
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        deleted_at__isnull=True,
+                        deleted_by__isnull=True,
+                        deletion_reason='',
+                    )
+                    | (
+                        models.Q(deleted_at__isnull=False)
+                        & ~models.Q(deletion_reason='')
+                    )
+                ),
+                name='collection_deletion_metadata',
             ),
         ]
         verbose_name = '合集'
@@ -506,6 +581,7 @@ class ShareLog(models.Model):
         REMOVE_FROM_COLLECTION = 'remove_collection', '移出合集'
         REPORT_HANDLE = 'report_handle', '处理举报'
         DELETE = 'delete', '删除分享' 
+        RESTORE = 'restore', '恢复分享'
         OTHER = 'other', '其他操作'
 
     action = models.CharField(max_length=20, choices=ActionType.choices, verbose_name='操作类型')

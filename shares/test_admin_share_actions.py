@@ -479,18 +479,21 @@ class ShareAdminActionTests(TestCase):
         viewer_actions = self.model_admin.get_actions(viewer_request)
         self.assertNotIn('make_public', viewer_actions)
         self.assertNotIn('make_private', viewer_actions)
+        self.assertNotIn('restore_deleted_shares', viewer_actions)
 
         staff_request = request_factory.get(self.changelist_url)
         staff_request.user = self.staff
         staff_actions = self.model_admin.get_actions(staff_request)
         self.assertIn('make_public', staff_actions)
         self.assertIn('make_private', staff_actions)
+        self.assertIn('restore_deleted_shares', staff_actions)
 
         superuser_request = request_factory.get(self.changelist_url)
         superuser_request.user = self.superuser
         superuser_actions = self.model_admin.get_actions(superuser_request)
         self.assertIn('make_public', superuser_actions)
         self.assertIn('make_private', superuser_actions)
+        self.assertIn('restore_deleted_shares', superuser_actions)
 
         share = self.create_share('forged-action', visibility=Share.Visibility.PUBLIC)
         messages = self.run_action(self.viewer, 'make_private', [share])

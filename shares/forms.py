@@ -209,7 +209,10 @@ class CreateShareForm(ShareForm):
         self.user = user
         super().__init__(*args, **kwargs)
         if user is not None and user.is_authenticated:
-            collections = Collection.objects.filter(author=user).order_by('-updated_at', '-pk')
+            collections = Collection.objects.filter(
+                author=user,
+                deleted_at__isnull=True,
+            ).order_by('-updated_at', '-pk')
             self.fields['collection_id'].queryset = collections
             self.show_collection_field = bool(
                 collections.exists()

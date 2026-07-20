@@ -86,6 +86,7 @@ def create_share_from_form(*, form, actor):
                 collection = Collection.objects.select_for_update().get(
                     pk=selected_collection.pk,
                     author=actor,
+                    deleted_at__isnull=True,
                 )
             except Collection.DoesNotExist as exc:
                 raise CollectionUnavailableError from exc
@@ -110,6 +111,7 @@ def update_share_from_form(*, form, actor):
     share = Share.objects.select_for_update().get(
         pk=form.instance.pk,
         author=actor,
+        deleted_at__isnull=True,
     )
     expected_version = form.cleaned_data.get('version')
     if expected_version is None or share.updated_at != expected_version:

@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models.functions import Substr
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.vary import vary_on_headers
 
 from shares.forms import CreateShareForm, EditShareForm
@@ -26,9 +27,14 @@ from shares.services.shares import (
     create_share_from_form,
     update_share_from_form,
 )
+from shares.services.deletion import (
+    ContentDeletionPermissionError,
+    move_share_to_trash,
+    restore_share_from_trash,
+)
 
 
-_MY_CONTENT_TABS = {'my_shares', 'collections', 'likes', 'favorites'}
+_MY_CONTENT_TABS = {'my_shares', 'collections', 'likes', 'favorites', 'trash'}
 _DETAIL_LOG_PREVIEW_SIZE = 25
 
 
@@ -81,7 +87,10 @@ def share_detail(request, share_id):
         share_logs = tuple(log_preview[:_DETAIL_LOG_PREVIEW_SIZE])
     has_user_collections = False
     if detail.actions.can_add_to_collection:
-        has_user_collections = Collection.objects.filter(author=request.user).exists()
+        has_user_collections = Collection.objects.filter(
+            author=request.user,
+            deleted_at__isnull=True,
+        ).exists()
     context.update({
         'related_collections': related_collections,
         'has_user_collections': has_user_collections,
@@ -120,7 +129,12 @@ def create_share(request):
 
 @login_required
 def edit_share(request, share_id):
-    share = get_object_or_404(Share, share_id=share_id, author=request.user)
+    share = get_object_or_404(
+        Share,
+        share_id=share_id,
+        author=request.user,
+        deleted_at__isnull=True,
+    )
     if request.method == 'POST':
         form = EditShareForm(request.POST, instance=share)
         if form.is_valid():
@@ -150,16 +164,46 @@ def edit_share(request, share_id):
 
 @login_required
 def delete_share(request, share_id):
-    share = get_object_or_404(Share, share_id=share_id)
+    share = get_object_or_404(
+        Share,
+        share_id=share_id,
+        deleted_at__isnull=True,
+    )
     if request.user != share.author and not is_moderator(request.user):
         messages.error(request, '您没有权限删除此分享')
         return redirect('share_detail', share_id=share_id)
     if request.method == 'POST':
         is_author = request.user == share.author
-        share.delete()
-        messages.success(request, '分享已删除')
+        try:
+            move_share_to_trash(share_pk=share.pk, actor=request.user)
+        except (Share.DoesNotExist, ContentDeletionPermissionError):
+            return render(request, '404.html', status=404)
+        messages.success(request, '分享已移入回收站，可随时恢复')
         return redirect('my_shares' if is_author else 'index')
     return render(request, 'shares/delete.html', {'share': share})
+
+
+@login_required
+def restore_share(request, share_id):
+    if request.method != 'POST':
+        return render(request, '404.html', status=404)
+    share = get_object_or_404(
+        Share,
+        share_id=share_id,
+        deleted_at__isnull=False,
+    )
+    try:
+        result = restore_share_from_trash(
+            share_pk=share.pk,
+            actor=request.user,
+        )
+    except (Share.DoesNotExist, ContentDeletionPermissionError):
+        return render(request, '404.html', status=404)
+    if result.changed:
+        messages.success(request, '分享已从回收站恢复')
+    else:
+        messages.info(request, '分享已经恢复，无需重复操作')
+    return redirect(f'{reverse("my_shares")}?tab=trash')
 
 
 @login_required
@@ -170,9 +214,34 @@ def my_shares(request):
 
     context = {'current_tab': tab}
     page_number = request.GET.get('page')
+    if tab == 'trash':
+        deleted_shares = annotate_share_cards(
+            Share.objects.filter(
+                author=request.user,
+                deleted_at__isnull=False,
+            ),
+            request.user,
+        ).order_by('-deleted_at', '-pk')
+        deleted_collections = annotate_collection_cards(
+            Collection.objects.filter(
+                author=request.user,
+                deleted_at__isnull=False,
+            ),
+        ).order_by('-deleted_at', '-pk')
+        context['deleted_shares'] = Paginator(deleted_shares, 12).get_page(
+            request.GET.get('share_page')
+        )
+        context['deleted_collections'] = Paginator(
+            deleted_collections,
+            12,
+        ).get_page(request.GET.get('collection_page'))
+        return render(request, 'shares/my_shares.html', context)
     if tab == 'collections':
         queryset = annotate_collection_cards(
-            Collection.objects.filter(author=request.user),
+            Collection.objects.filter(
+                author=request.user,
+                deleted_at__isnull=True,
+            ),
         ).order_by('-updated_at', '-pk')
         context['collections'] = Paginator(queryset, 12).get_page(page_number)
         return render(request, 'shares/my_shares.html', context)
@@ -190,7 +259,10 @@ def my_shares(request):
         )
         ordering = ('-created_at', '-pk')
     else:
-        queryset = Share.objects.filter(author=request.user)
+        queryset = Share.objects.filter(
+            author=request.user,
+            deleted_at__isnull=True,
+        )
         ordering = (
             ('created_at', 'pk')
             if request.GET.get('order') == 'desc'

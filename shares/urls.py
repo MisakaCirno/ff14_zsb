@@ -20,6 +20,7 @@ urlpatterns = [
     path('create/', content.create_share, name='create_share'),
     path('share/<str:share_id>/edit/', content.edit_share, name='edit_share'),
     path('share/<str:share_id>/delete/', content.delete_share, name='delete_share'),
+    path('share/<str:share_id>/restore/', content.restore_share, name='restore_share'),
     path('my-shares/', content.my_shares, name='my_shares'),
     path('search/', browse.search, name='search'),
     
@@ -65,6 +66,7 @@ urlpatterns = [
     path('collections/<int:collection_id>/', collections.collection_detail, name='collection_detail'),
     path('collections/<int:collection_id>/edit/', collections.edit_collection, name='edit_collection'),
     path('collections/<int:collection_id>/delete/', collections.delete_collection, name='delete_collection'),
+    path('collections/<int:collection_id>/restore/', collections.restore_collection, name='restore_collection'),
     path('share/<str:share_id>/collections/', collections.select_collection_for_share, name='select_collection_for_share'),
     path('share/<str:share_id>/add-to-collection/', collections.add_share_to_collection, name='add_share_to_collection'),
     path('share/<str:share_id>/like/', interactions.toggle_like, name='toggle_like'),

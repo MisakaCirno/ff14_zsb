@@ -62,7 +62,8 @@ class AnnouncementStructureMigrationTests(TransactionTestCase):
         executor.migrate([self.migrate_to])
 
     def tearDown(self):
-        MigrationExecutor(connection).migrate([self.migrate_to])
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())
         super().tearDown()
 
     def test_normalizes_column_order_without_losing_data_or_sequence_floor(self):

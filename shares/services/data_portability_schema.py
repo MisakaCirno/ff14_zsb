@@ -18,8 +18,8 @@ from django.apps import apps
 
 
 DATASET_FORMAT = 'ffxivshare-jsonl'
-DATASET_VERSION = 3
-SUPPORTED_DATASET_VERSIONS = frozenset({1, 2, DATASET_VERSION})
+DATASET_VERSION = 4
+SUPPORTED_DATASET_VERSIONS = frozenset({1, 2, 3, DATASET_VERSION})
 MANIFEST_FILENAME = 'manifest.json'
 VALIDATION_REPORT_FILENAME = 'validation-report.json'
 IMPORT_REPORT_FILENAME = 'import-report.json'
@@ -28,6 +28,9 @@ V3_CODEC = 'canonical-jsonl-utc-microseconds'
 V3_SESSION_PROJECTION_POLICY = 'force_logout_at_cutover'
 V3_MODEL_SCHEMA_SIGNATURE = (
     '9b91a3b943d2986115508db51c216d94040053ec2c8e19b900acd2e0ddfdd685'
+)
+V4_MODEL_SCHEMA_SIGNATURE = (
+    'bdd2b55012b63037477304e3de7a2168ddb741b6faf12c8dc83d22a24368de85'
 )
 V3_NATURAL_KEY_PROTOCOL = MappingProxyType({
     'auth.group': ('name',),
@@ -76,10 +79,12 @@ V3_ENTITY_SPECS = (
         'admin_log_entries.jsonl',
     ),
 )
+V4_ENTITY_SPECS = V3_ENTITY_SPECS
 ENTITY_SPECS_BY_VERSION = MappingProxyType({
     1: V1_ENTITY_SPECS,
     2: V2_ENTITY_SPECS,
     3: V3_ENTITY_SPECS,
+    4: V4_ENTITY_SPECS,
 })
 ENTITY_SPECS = ENTITY_SPECS_BY_VERSION[DATASET_VERSION]
 ENTITY_BY_NAME = {spec.name: spec for spec in ENTITY_SPECS}
@@ -215,10 +220,32 @@ V3_ENTITY_FIELDS = MappingProxyType({
         'change_message',
     }),
 })
+V4_ENTITY_FIELDS = MappingProxyType({
+    **V3_ENTITY_FIELDS,
+    'shares': frozenset({
+        *V3_ENTITY_FIELDS['shares'],
+        'deleted_at',
+        'deleted_by',
+        'deletion_origin',
+        'deletion_reason',
+    }),
+    'collections': frozenset({
+        *V3_ENTITY_FIELDS['collections'],
+        'deleted_at',
+        'deleted_by',
+        'deletion_reason',
+    }),
+})
 ENTITY_FIELDS_BY_VERSION = MappingProxyType({
     1: V1_ENTITY_FIELDS,
     2: V2_ENTITY_FIELDS,
     3: V3_ENTITY_FIELDS,
+    4: V4_ENTITY_FIELDS,
+})
+ENTITY_FIELDS = ENTITY_FIELDS_BY_VERSION[DATASET_VERSION]
+MODEL_SCHEMA_SIGNATURE_BY_VERSION = MappingProxyType({
+    3: V3_MODEL_SCHEMA_SIGNATURE,
+    4: V4_MODEL_SCHEMA_SIGNATURE,
 })
 
 for frozen_version, frozen_specs in ENTITY_SPECS_BY_VERSION.items():
@@ -250,7 +277,7 @@ def _schema_fingerprint(dataset_version: int) -> str:
     payload = {
         'format': DATASET_FORMAT,
         'format_version': dataset_version,
-        'codec': V3_CODEC if dataset_version == 3 else 'django-jsonl-legacy',
+        'codec': V3_CODEC if dataset_version >= 3 else 'django-jsonl-legacy',
         'entities': [
             {
                 'name': spec.name,
@@ -261,9 +288,11 @@ def _schema_fingerprint(dataset_version: int) -> str:
             for spec in specs
         ],
     }
-    if dataset_version == 3:
+    if dataset_version >= 3:
         payload['semantic_contract'] = {
-            'model_schema_signature': V3_MODEL_SCHEMA_SIGNATURE,
+            'model_schema_signature': MODEL_SCHEMA_SIGNATURE_BY_VERSION[
+                dataset_version
+            ],
             'datetime': 'utc-with-exactly-six-microseconds',
             'foreign_keys': 'natural-key-when-available-otherwise-primary-key',
             'json': 'utf8-sorted-keys-no-nonfinite-numbers',

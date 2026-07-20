@@ -67,7 +67,10 @@ def _record_counter(request, share, *, cookie_name, rule_name, field_name):
     if share.share_id not in recorded_ids:
         limit = consume_rate_limit(rule_name, f'ip:{get_client_ip(request)}')
         if limit.allowed:
-            Share.objects.filter(pk=share.pk).update(**{field_name: F(field_name) + 1})
+            Share.objects.filter(
+                pk=share.pk,
+                deleted_at__isnull=True,
+            ).update(**{field_name: F(field_name) + 1})
             share.refresh_from_db()
             recorded_ids.append(share.share_id)
             recorded_ids = recorded_ids[-100:]

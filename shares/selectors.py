@@ -214,7 +214,7 @@ def _interaction_count_subquery(through_model):
 
 def share_detail_queryset(user):
     """Return shares with all single-record detail presentation fields loaded."""
-    queryset = Share.objects.select_related(
+    queryset = Share.objects.filter(deleted_at__isnull=True).select_related(
         'author',
         'author__profile',
     ).annotate(
@@ -254,10 +254,14 @@ def site_message_list_queryset(user, mailbox='inbox'):
 def admin_task_counts():
     return {
         'pending_reviews_count': Share.objects.filter(
-            Q(status=Share.Status.PENDING)
-            | ~Q(restriction_state=Share.RestrictionState.CLEAR)
+            Q(
+                Q(status=Share.Status.PENDING)
+                | ~Q(restriction_state=Share.RestrictionState.CLEAR)
+            ),
+            deleted_at__isnull=True,
         ).count(),
         'pending_reports_count': Report.objects.filter(
             status=Report.Status.PENDING,
+            share__deleted_at__isnull=True,
         ).values('share_id').distinct().count(),
     }

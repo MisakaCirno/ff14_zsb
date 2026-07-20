@@ -420,6 +420,12 @@ def _validate_new_columns(
             'reviewed_by_id': None,
             'deleted_at': None,
             'deleted_by_id': None,
+            'deletion_origin': '',
+            'deletion_reason': '',
+        },
+        'shares_collection': {
+            'deleted_at': None,
+            'deleted_by_id': None,
             'deletion_reason': '',
         },
     }

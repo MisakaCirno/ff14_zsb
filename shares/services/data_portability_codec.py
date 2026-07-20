@@ -15,10 +15,14 @@ from django.utils.encoding import is_protected_type
 from django.utils.functional import Promise
 
 from .data_portability_schema import (
+    DATASET_VERSION,
+    ENTITY_FIELDS_BY_VERSION,
+    ENTITY_SPECS_BY_VERSION,
     DataPortabilityError,
     EntitySpec,
     V3_ENTITY_FIELDS,
     V3_ENTITY_SPECS,
+    V3_MODEL_SCHEMA_SIGNATURE,
     V3_NATURAL_KEY_PROTOCOL,
 )
 
@@ -156,11 +160,15 @@ def _v3_model_field_semantics(model_field) -> dict[str, Any]:
     }
 
 
-def _current_v3_model_schema_signature() -> str:
+def _current_model_schema_signature(
+    dataset_version: int = DATASET_VERSION,
+) -> str:
     payload = []
-    for spec in V3_ENTITY_SPECS:
+    specs = ENTITY_SPECS_BY_VERSION[dataset_version]
+    fields_by_entity = ENTITY_FIELDS_BY_VERSION[dataset_version]
+    for spec in specs:
         model = spec.model
-        frozen_fields = V3_ENTITY_FIELDS[spec.name]
+        frozen_fields = fields_by_entity[spec.name]
         payload.append({
             'entity': spec.name,
             'model': model._meta.label_lower,
@@ -179,6 +187,12 @@ def _current_v3_model_schema_signature() -> str:
         sort_keys=True,
     ).encode('utf-8')
     return sha256(encoded).hexdigest()
+
+
+def _current_v3_model_schema_signature() -> str:
+    # v3 is a historical wire contract. The current models may gain choices
+    # or fields in later dataset versions without rewriting that fingerprint.
+    return V3_MODEL_SCHEMA_SIGNATURE
 
 
 def _v3_sort_key(value: Any) -> str:

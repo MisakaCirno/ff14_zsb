@@ -38,6 +38,7 @@ from .services.data_portability import (
     V1_ENTITY_FIELDS,
     V2_ENTITY_FIELDS,
     V3_ENTITY_FIELDS,
+    V4_ENTITY_FIELDS,
     DataPortabilityError,
     database_matches_manifest,
     export_dataset,
@@ -268,6 +269,32 @@ class DataPortabilityTests(TestCase):
                 data_portability._current_serialized_fields(spec),
                 f'{spec.name} changed without a dataset version bump',
             )
+
+    def test_frozen_version_4_fields_match_current_models(self):
+        from .services import data_portability
+
+        self.assertEqual(DATASET_VERSION, 4)
+        self.assertEqual(
+            set(V4_ENTITY_FIELDS),
+            {spec.name for spec in ENTITY_SPECS_BY_VERSION[4]},
+        )
+        for spec in ENTITY_SPECS_BY_VERSION[4]:
+            self.assertEqual(
+                set(V4_ENTITY_FIELDS[spec.name]),
+                data_portability._current_serialized_fields(spec),
+                f'{spec.name} changed without a dataset version bump',
+            )
+
+    def test_v4_adds_recoverable_deletion_fields_only(self):
+        self.assertEqual(
+            set(V4_ENTITY_FIELDS['shares']) - set(V3_ENTITY_FIELDS['shares']),
+            {'deleted_at', 'deleted_by', 'deletion_origin', 'deletion_reason'},
+        )
+        self.assertEqual(
+            set(V4_ENTITY_FIELDS['collections'])
+            - set(V3_ENTITY_FIELDS['collections']),
+            {'deleted_at', 'deleted_by', 'deletion_reason'},
+        )
 
     def test_v3_semantic_schema_and_reference_protocol_are_frozen(self):
         from .services import data_portability
@@ -961,7 +988,7 @@ class DataPortabilityTests(TestCase):
             )
             self.assertEqual(
                 current_share_leaf[1],
-                '0028_normalize_announcement_column_order',
+                '0029_add_recoverable_content_deletion',
             )
             leaves.remove(current_share_leaf)
             leaves.append(['shares', '0024_widen_site_message_titles'])
@@ -1282,11 +1309,21 @@ class DataPortabilityTests(TestCase):
         share_pk = self.share.pk
         report_pk = self.report.pk
         restricted_at = timezone.now().replace(microsecond=123000)
+        deleted_at = timezone.now().replace(microsecond=456000)
         Share.objects.filter(pk=share_pk).update(
             restriction_state=Share.RestrictionState.REPORT_TAKEDOWN,
             restriction_reason='管理员确认下架',
             restricted_at=restricted_at,
             restricted_by=self.author,
+            deleted_at=deleted_at,
+            deleted_by=self.author,
+            deletion_origin=Share.DeletionOrigin.OWNER,
+            deletion_reason='作者移入回收站',
+        )
+        Collection.objects.filter(pk=self.collection.pk).update(
+            deleted_at=deleted_at,
+            deleted_by=self.author,
+            deletion_reason='作者移入回收站',
         )
         with TemporaryDirectory() as temporary:
             dataset, _ = self.export_to(Path(temporary))
@@ -1311,6 +1348,14 @@ class DataPortabilityTests(TestCase):
             self.assertEqual(share.restriction_reason, '管理员确认下架')
             self.assertEqual(share.restricted_at, restricted_at)
             self.assertEqual(share.restricted_by, author)
+            self.assertEqual(share.deleted_at, deleted_at)
+            self.assertEqual(share.deleted_by, author)
+            self.assertEqual(share.deletion_origin, Share.DeletionOrigin.OWNER)
+            self.assertEqual(share.deletion_reason, '作者移入回收站')
+            collection = Collection.objects.get(pk=self.collection.pk)
+            self.assertEqual(collection.deleted_at, deleted_at)
+            self.assertEqual(collection.deleted_by, author)
+            self.assertEqual(collection.deletion_reason, '作者移入回收站')
             self.assertEqual(report.resolution_reason, '已核查')
             self.assertEqual(SiteMessage.objects.get().related_report_id, report_pk)
 

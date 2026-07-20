@@ -151,3 +151,35 @@ class DatabaseUpgradeSemanticTests(SimpleTestCase):
                 report['tables']['shares_userprofile']['allowed_added_rows'],
                 1,
             )
+
+    def test_recoverable_deletion_metadata_must_start_empty(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source.sqlite3'
+            candidate = root / 'candidate.sqlite3'
+            with closing(sqlite3.connect(source)) as database:
+                database.execute(
+                    'CREATE TABLE shares_share ('
+                    'id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL)'
+                )
+                database.execute(
+                    'INSERT INTO shares_share (title) VALUES (?)',
+                    ('existing user content',),
+                )
+                database.commit()
+            shutil.copyfile(source, candidate)
+            with closing(sqlite3.connect(candidate)) as database:
+                database.execute(
+                    "ALTER TABLE shares_share ADD COLUMN deletion_origin "
+                    "TEXT NOT NULL DEFAULT ''"
+                )
+                database.execute(
+                    "UPDATE shares_share SET deletion_origin = 'owner'"
+                )
+                database.commit()
+
+            with self.assertRaisesRegex(
+                DatabaseUpgradeSemanticError,
+                'deletion_origin has an unexpected migration value',
+            ):
+                compare_sqlite_upgrade(source, candidate)

@@ -229,6 +229,7 @@ PENDING_MIGRATIONS = (
     ("shares", "0026_sync_announcement_permission_names"),
     ("shares", "0027_classify_legacy_private_shares"),
     ("shares", "0028_normalize_announcement_column_order"),
+    ("shares", "0029_add_recoverable_content_deletion"),
 )
 SQLITE_SEQUENCE_MINIMUM_HEADROOM = 1_000_000
 SQLITE_SEQUENCE_REBUILD_FLOORS = {
@@ -1282,7 +1283,7 @@ run_command(
         reviewer,
         "--notes",
         (
-            "Reviewed the complete shares/0019 through shares/0028 plan as "
+            "Reviewed the complete shares/0019 through shares/0029 plan as "
             "lossless for this deployed-0018 synthetic E2E source."
         ),
         "--output",

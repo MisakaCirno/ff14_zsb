@@ -13,6 +13,8 @@ from django.utils import timezone
 
 from .data_portability_codec import _format_v3_datetime
 from .data_portability_schema import (
+    ENTITY_FIELDS,
+    ENTITY_SPECS,
     DataPortabilityError,
     EntitySpec,
     V3_ENTITY_FIELDS,
@@ -29,12 +31,12 @@ SQLITE_INTERNAL_TABLES = frozenset({
 
 
 def _v3_static_table_categories() -> dict[str, list[str]]:
-    direct = sorted(spec.model._meta.db_table for spec in V3_ENTITY_SPECS)
+    direct = sorted(spec.model._meta.db_table for spec in ENTITY_SPECS)
     embedded = set()
-    for spec in V3_ENTITY_SPECS:
+    for spec in ENTITY_SPECS:
         for model_field in spec.model._meta.local_many_to_many:
             if (
-                model_field.name in V3_ENTITY_FIELDS[spec.name]
+                model_field.name in ENTITY_FIELDS[spec.name]
                 and model_field.remote_field.through._meta.auto_created
             ):
                 embedded.add(model_field.remote_field.through._meta.db_table)
@@ -358,7 +360,7 @@ def _sequence_next_floor(spec: EntitySpec) -> dict[str, Any] | None:
 
 def _build_sequence_projection() -> dict[str, dict[str, Any]]:
     projection = {}
-    for spec in V3_ENTITY_SPECS:
+    for spec in ENTITY_SPECS:
         sequence = _sequence_next_floor(spec)
         if sequence is not None:
             projection[spec.name] = sequence
