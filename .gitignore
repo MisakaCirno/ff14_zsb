@@ -50,3 +50,8 @@ Thumbs.db
 
 # ENV
 .env
+
+# Production review artifacts (keep outside Git)
+/capture-*.zip
+/config-review-*.zip
+/inventory-*.json
