@@ -40,6 +40,7 @@ foreach ($path in @($startPath, $nginxPath)) {
 $startSource = [System.IO.File]::ReadAllText($startPath)
 foreach ($requiredText in @(
     'venv\Scripts\python.exe',
+    'manage.py check_deployment_schema --require-current',
     '"%PYTHON%" -B -m waitress',
     '--listen=127.0.0.1:8000',
     '--threads=4',

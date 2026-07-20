@@ -28,6 +28,15 @@ set "PYTHONUNBUFFERED=1"
 set "PYTHONDONTWRITEBYTECODE=1"
 set "PYTHONUTF8=1"
 
+echo Checking whether the database schema matches this Git commit...
+"%PYTHON%" -B manage.py check_deployment_schema --require-current
+if errorlevel 1 (
+    echo [ERROR] Waitress was not started.
+    echo Run the approved maintenance upgrade workflow if migrations are pending.
+    pause
+    exit /b 1
+)
+
 echo Starting FFXIVShare on http://127.0.0.1:8000/
 "%PYTHON%" -B -m waitress ^
     --listen=127.0.0.1:8000 ^
