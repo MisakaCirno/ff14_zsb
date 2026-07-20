@@ -105,6 +105,13 @@ try {
                 -RepositoryRoot $PSScriptRoot
         }
 
+        Invoke-CheckedStep 'Direct Git release readiness unit tests' {
+            & $PythonExecutable `
+                -I `
+                -B `
+                (Join-Path $PSScriptRoot 'ops\release\test_direct_git_release_readiness.py')
+        }
+
         Invoke-CheckedStep 'WinSW service contract checks' {
             & (Join-Path $PSScriptRoot 'ops\windows\Test-WinSWServiceContract.ps1')
         }

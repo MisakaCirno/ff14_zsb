@@ -43,6 +43,16 @@ function Test-Listener {
     }
 }
 
+function Get-GitHead {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $head = (& git.exe -C $Root rev-parse HEAD 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $head -notmatch '^[a-f0-9]{40}$') {
+        throw 'Could not resolve one immutable Git HEAD.'
+    }
+    return $head
+}
+
 function Get-SchemaStatus {
     param(
         [Parameter(Mandatory = $true)][string]$PythonExecutable,
@@ -140,6 +150,10 @@ $UpgradeParent = Get-AbsoluteLocalPath `
 if (Test-Listener -Port 8000) {
     throw 'Port 8000 is already listening. Refusing to start a duplicate writer.'
 }
+
+# Bind runtime metadata and database backups to the exact checked-out commit.
+# Process environment values take precedence over any stale APP_VERSION in .env.
+$env:APP_VERSION = Get-GitHead -Root $RepositoryRoot
 
 $schema = Get-SchemaStatus `
     -PythonExecutable $pythonExecutable `

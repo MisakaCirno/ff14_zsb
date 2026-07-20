@@ -24,12 +24,23 @@ if ([string]::IsNullOrWhiteSpace($RepositoryRoot)) {
 }
 $RepositoryRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $rootStartPath = Join-Path $RepositoryRoot 'start_ffxivshare.bat'
+$rootPreflightPath = Join-Path $RepositoryRoot 'preflight_ffxivshare.bat'
 $startPath = Join-Path $RepositoryRoot 'ops\release\Start-DirectGitWaitress.bat'
 $launcherPath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitLauncher.ps1'
 $upgradePath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitDatabaseUpgrade.ps1'
+$readinessWrapperPath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitReleaseReadiness.ps1'
+$readinessPath = Join-Path $RepositoryRoot 'ops\release\Test-DirectGitReleaseReadiness.py'
 $nginxPath = Join-Path $RepositoryRoot 'ops\nginx\ffxivshare.direct-git.locations.conf.example'
 
-foreach ($path in @($rootStartPath, $startPath, $launcherPath, $upgradePath, $nginxPath)) {
+foreach ($path in @(
+    $rootStartPath,
+    $rootPreflightPath,
+    $startPath,
+    $launcherPath,
+    $upgradePath,
+    $readinessWrapperPath,
+    $nginxPath
+)) {
     Assert-Contract `
         -Condition (Test-Path -LiteralPath $path -PathType Leaf) `
         -Message "Direct Git runtime file is missing: $path"
@@ -39,11 +50,25 @@ foreach ($path in @($rootStartPath, $startPath, $launcherPath, $upgradePath, $ng
         -Condition ($nonAscii.Count -eq 0) `
         -Message "Direct Git runtime file must remain ASCII-compatible: $path"
 }
+Assert-Contract `
+    -Condition (Test-Path -LiteralPath $readinessPath -PathType Leaf) `
+    -Message "Direct Git readiness checker is missing: $readinessPath"
 
 $rootStartSource = [System.IO.File]::ReadAllText($rootStartPath)
 Assert-Contract `
     -Condition $rootStartSource.Contains('ops\release\Start-DirectGitWaitress.bat') `
     -Message 'Root start script does not delegate to the unified launcher.'
+$rootPreflightSource = [System.IO.File]::ReadAllText($rootPreflightPath)
+foreach ($requiredText in @(
+    'Invoke-DirectGitReleaseReadiness.ps1',
+    'FFXIVSHARE_TARGET_COMMIT',
+    'Enter the approved 40-character target commit SHA:',
+    '-TargetCommit "%TARGET_COMMIT%"'
+)) {
+    Assert-Contract `
+        -Condition $rootPreflightSource.Contains($requiredText) `
+        -Message "Root preflight script is missing: $requiredText"
+}
 
 $startSource = [System.IO.File]::ReadAllText($startPath)
 foreach ($requiredText in @(
@@ -64,6 +89,7 @@ foreach ($requiredText in @(
     '[2] Do not upgrade; keep the application stopped (default)',
     'Read-Host',
     '-Confirm:$false',
+    '$env:APP_VERSION = Get-GitHead -Root $RepositoryRoot',
     '-m waitress',
     '--listen=127.0.0.1:8000',
     '--threads=4',
@@ -78,6 +104,22 @@ foreach ($requiredText in @(
         -Message "Direct Git launcher is missing: $requiredText"
 }
 
+$readinessWrapperSource = [System.IO.File]::ReadAllText($readinessWrapperPath)
+foreach ($requiredText in @(
+    'Test-DirectGitReleaseReadiness.py',
+    'FFXIVShare-R20\Readiness',
+    'FFXIVSHARE_ENV_FILE',
+    "'-I', '-B', '-X', 'utf8'",
+    '--repository-root',
+    '--environment-file',
+    '--output',
+    '--target-commit'
+)) {
+    Assert-Contract `
+        -Condition $readinessWrapperSource.Contains($requiredText) `
+        -Message "Direct Git readiness wrapper is missing: $requiredText"
+}
+
 foreach ($forbiddenPattern in @(
     '(?i)manage\.py\s+migrate',
     '(?i)manage\.py\s+collectstatic',
@@ -88,8 +130,10 @@ foreach ($forbiddenPattern in @(
     Assert-Contract `
         -Condition (
             -not [regex]::IsMatch($rootStartSource, $forbiddenPattern) -and
+            -not [regex]::IsMatch($rootPreflightSource, $forbiddenPattern) -and
             -not [regex]::IsMatch($startSource, $forbiddenPattern) -and
-            -not [regex]::IsMatch($launcherSource, $forbiddenPattern)
+            -not [regex]::IsMatch($launcherSource, $forbiddenPattern) -and
+            -not [regex]::IsMatch($readinessWrapperSource, $forbiddenPattern)
         ) `
         -Message "Direct Git start path contains a forbidden mutation: $forbiddenPattern"
 }
