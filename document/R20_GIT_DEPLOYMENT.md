@@ -52,6 +52,16 @@ Get-FileHash -LiteralPath $Output -Algorithm SHA256
 
 本阶段不要求把应用迁移到 `releases/current` 目录。WinSW 仍是可选的后续运行方式改进，但不与首次安全升级捆绑。
 
+#### 启动时无需人工判断 migration
+
+正式切换后，日常只运行 `ops/release/Start-DirectGitWaitress.bat`。它在启动 Waitress 前调用 `check_deployment_schema --require-current`，以 SQLite `immutable=1` 只读连接比较代码 migration 图和数据库 `django_migrations`：
+
+- 完全一致：正常启动 Waitress；
+- 存在 pending migration：拒绝启动，并明确提示运行维护升级流程；
+- 出现未知 migration、依赖断裂或 SQLite sidecar：视为状态异常，保持停止并要求检查。
+
+检查不会执行 migration，也不会创建 WAL/SHM/journal。操作者不需要根据代码改动猜测是否升级；始终先运行普通启动入口，只有收到确定的“Database upgrade required”结果时才使用维护升级脚本。
+
 ### C. 短维护窗口与切换
 
 严格按运行单顺序执行：
@@ -105,6 +115,6 @@ R19 已完成。2026-07-20 已取得并验证线上只读环境清单及启动/N
 - SQLite 为仓库根目录 `db.sqlite3`，检查时没有 WAL/SHM/journal；媒体目录不存在；
 - 正式 `/n/` 由 Nginx 独立转发到 Bun，主站升级不需要停止或修改它。
 
-仓库已新增 `ops/release/Start-DirectGitWaitress.bat`：它只启动 Waitress，不激活环境、不执行 migration、依赖安装、Git 更新或静态构建；代理信任和 traceback 参数与当前生产安全契约一致。`ops/nginx/ffxivshare.direct-git.locations.conf.example` 只替换主站、静态和健康检查块，不定义 `/n/`。
+仓库已新增 `ops/release/Start-DirectGitWaitress.bat`：它先只读判断 schema 是否匹配，再启动 Waitress；不激活环境、不执行 migration、依赖安装、Git 更新或静态构建。代理信任和 traceback 参数与当前生产安全契约一致。`ops/nginx/ffxivshare.direct-git.locations.conf.example` 只替换主站、静态和健康检查块，不定义 `/n/`。
 
 R20 当前进入阶段 B。下一步是确认线上 `.env` 仅包含哪些键（不采集值）、Node/npm 是否满足前端构建要求，并准备固定目标 commit 的依赖与候选数据库流程；仍未进入维护窗口。
