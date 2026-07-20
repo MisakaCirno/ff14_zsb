@@ -96,4 +96,15 @@ Get-FileHash -LiteralPath $Output -Algorithm SHA256
 
 ## 当前进度
 
-R19 已完成。R20 当前处于阶段 A：只读环境检查器已进入仓库，等待从线上生成真实环境清单。收到清单前不编写带有服务控制或线上路径修改的最终部署脚本，也不进入维护窗口。
+R19 已完成。2026-07-20 已取得并验证线上只读环境清单及启动/Nginx 配置审查包，阶段 A 完成。实际拓扑为：
+
+- Windows Server 2022 单机；Nginx 在 `0.0.0.0:80/443`，Waitress 在 `127.0.0.1:8000`，独立 Bun 渲染器在 `[::1]:3000`；
+- 没有 Windows 服务、计划任务或自动启动要求，操作者手动运行 BAT；
+- 主站由仓库根目录的未跟踪 `start_waitress_migrate.bat` 启动，该文件会在每次启动前直接执行 `migrate`，正式切换后不得继续使用；
+- 线上 Git 为 `master` / `origin/master`，当前 commit `244c32734e9fab5af05bf544a654615eeab31404`；本机 `dev_init.bat` 修改和两个未跟踪启动 BAT 必须保留，不得自动清理；
+- SQLite 为仓库根目录 `db.sqlite3`，检查时没有 WAL/SHM/journal；媒体目录不存在；
+- 正式 `/n/` 由 Nginx 独立转发到 Bun，主站升级不需要停止或修改它。
+
+仓库已新增 `ops/release/Start-DirectGitWaitress.bat`：它只启动 Waitress，不激活环境、不执行 migration、依赖安装、Git 更新或静态构建；代理信任和 traceback 参数与当前生产安全契约一致。`ops/nginx/ffxivshare.direct-git.locations.conf.example` 只替换主站、静态和健康检查块，不定义 `/n/`。
+
+R20 当前进入阶段 B。下一步是确认线上 `.env` 仅包含哪些键（不采集值）、Node/npm 是否满足前端构建要求，并准备固定目标 commit 的依赖与候选数据库流程；仍未进入维护窗口。
