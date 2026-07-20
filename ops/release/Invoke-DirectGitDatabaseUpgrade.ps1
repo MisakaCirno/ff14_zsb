@@ -199,6 +199,7 @@ $verifiedCandidate = Join-Path $runRoot 'candidate-verified.sqlite3'
 $atomicBackup = Join-Path $runRoot 'source-atomic-backup.sqlite3'
 $failedReplacement = Join-Path $runRoot 'failed-replacement.sqlite3'
 $restrictionReport = Join-Path $evidenceRoot 'restriction-preflight.json'
+$semanticReport = Join-Path $evidenceRoot 'database-semantic-comparison.json'
 $resultPath = Join-Path $evidenceRoot 'upgrade-result.json'
 
 $sourceItem = Get-Item -LiteralPath $DatabasePath -Force
@@ -246,6 +247,15 @@ try {
         ) `
         -LogPath (Join-Path $logsRoot 'restriction-preflight.log') `
         -Description 'Candidate restriction preflight' | Out-Null
+    Invoke-LoggedPython `
+        -PythonExecutable $pythonExecutable `
+        -WorkingDirectory $RepositoryRoot `
+        -ArgumentList @(
+            '-B', 'manage.py', 'verify_database_upgrade_semantics',
+            $sourceRollback, $candidate, '--output', $semanticReport
+        ) `
+        -LogPath (Join-Path $logsRoot 'database-semantic-comparison.log') `
+        -Description 'Candidate semantic data comparison' | Out-Null
     Invoke-LoggedPython `
         -PythonExecutable $pythonExecutable `
         -WorkingDirectory $RepositoryRoot `
@@ -304,6 +314,7 @@ try {
         source_rollback = $sourceRollback
         atomic_backup = $atomicBackup
         restriction_report = $restrictionReport
+        semantic_comparison_report = $semanticReport
         database_upgrade_completed = $true
         database_switch_completed = $true
         safe_to_start = $true
