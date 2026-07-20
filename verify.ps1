@@ -100,6 +100,11 @@ try {
                 -RepositoryRoot $PSScriptRoot
         }
 
+        Invoke-CheckedStep 'Direct Git runtime contracts' {
+            & (Join-Path $PSScriptRoot 'ops\release\Test-DirectGitRuntimeContracts.ps1') `
+                -RepositoryRoot $PSScriptRoot
+        }
+
         Invoke-CheckedStep 'WinSW service contract checks' {
             & (Join-Path $PSScriptRoot 'ops\windows\Test-WinSWServiceContract.ps1')
         }
