@@ -75,6 +75,11 @@ SQL_CHANGE_EXCEPTIONS = {
         "destination_sql_sha256": "140870626a45265777ac1b093442a476b865e52faed90c9e28c7d0c8a16f8606",
         "reason": "0021 replaces legacy collection uniqueness with named constraints",
     },
+    ("table", "shares_collection", "shares_collection"): {
+        "source_sql_sha256": "2007976ac8ff259d2239a6cccf2c746eba9c94d09366ee8f670b1bde2d8abc3c",
+        "destination_sql_sha256": "3627cc389848f589416c9386802821c45cd98b3a5fca5cb452d7b26ca79a820d",
+        "reason": "0029 adds recoverable deletion metadata and constraints",
+    },
     ("table", "shares_report", "shares_report"): {
         "source_sql_sha256": "3fb8df1f2da3fd7eebb32b22ed204305b4248b7768b46574ed09fdd5066e493a",
         "destination_sql_sha256": "36623641ece690da65ac2f679d1b49638da7310175ed435483578822c95bf3b6",
@@ -82,8 +87,8 @@ SQL_CHANGE_EXCEPTIONS = {
     },
     ("table", "shares_share", "shares_share"): {
         "source_sql_sha256": "b7dfabad0e0a46d924c81f8cab7582920e978d35a056c7d9ba088135764cd2c8",
-        "destination_sql_sha256": "5a40804373ecb71ef6ae37a7cb3c8dcad44932ab923808ae03e6ff1ef95eaec9",
-        "reason": "0019-0022 add review and restriction provenance with constraints",
+        "destination_sql_sha256": "b2779c4d0b035812b7ece7f1f5d0de4f98a7ee2c23e446ae76efc318e6e14308",
+        "reason": "0019-0030 add review, restriction, recoverable deletion, and moderator takedown constraints",
     },
     ("table", "shares_sharelog", "shares_sharelog"): {
         "source_sql_sha256": "c0a7c8c77a57b60d9f1828fb4b0d1870a8e1564bda6017fbe01ca9b42292cee6",
@@ -109,6 +114,7 @@ MISSING_OBJECT_EXCEPTIONS = {
 ADDED_OBJECT_EXCEPTIONS = {
     ("index", "announcement_active_idx", "shares_announcement"): "28d25b981a1bbc3686490d2fdd1ed568a448d7e0da4af11aa22d830a448414b3",
     ("index", "collection_author_idx", "shares_collection"): "b278b88e7168e7533047215aaf5d6523da1994b5189ce1a58e4aa88dd1dbf49d",
+    ("index", "collection_deleted_idx", "shares_collection"): "c080bea32ca41dae5751d8b2a72bfd2bc1e60b6f812378d1bdc8c92d812fd7b3",
     ("index", "collection_item_order_idx", "shares_collectionitem"): "d873cf4ab52d8e629ea1d13f076bb3f2aed54e7afb886dd830db826c22d31630",
     ("index", "collection_owner_updated_idx", "shares_collection"): "bb1b243310e4024ad3f17ad3774781357f5635a6c7094429cbe4a8b2e1dfc633",
     ("index", "message_inbox_idx", "shares_sitemessage"): "dde7815006e2b14794dfb333f35d1f963fc507efeb4cc4b1d104ea8caaa406aa",
@@ -116,9 +122,12 @@ ADDED_OBJECT_EXCEPTIONS = {
     ("index", "report_queue_idx", "shares_report"): "942fd2a94b07e6c9574a017ca6a749b85f87dd567ea099f349896215d7d9c80b",
     ("index", "report_reporter_idx", "shares_report"): "a59516847c0ffad08272e37fbd6b14844d0884b63b2d2945f6236e4136c49a45",
     ("index", "share_author_idx", "shares_share"): "1730849dac13ef8607e9acfe416d969a5bb82a50ced639e4f9f05a90add6f3c0",
+    ("index", "share_deleted_idx", "shares_share"): "2fea77a9fefbb434d5fa5b80056ba8b7fd5bfa291dbc049fda701e0ed1a31499",
     ("index", "share_feed_idx", "shares_share"): "d6ffd2ac17093b8541fb692f1974ddd7ef135f331693ea8d77d5234d550d54a6",
     ("index", "share_log_share_idx", "shares_sharelog"): "85b5301238d6022a92603b8e7fdef989f5aa9740503b480adfff2e8cd95b4952",
     ("index", "share_log_user_idx", "shares_sharelog"): "99fd46e8a38cfa100e2afcfd2237aee81ba6f9c9345e0f7343f05e049485b7fb",
+    ("index", "shares_collection_deleted_by_id_60e3d77f", "shares_collection"): "189a8734c7711bdc759c79aa36fb829c047768e22bf4c1b67a12865a90d301ae",
+    ("index", "shares_share_deleted_by_id_814c5bbd", "shares_share"): "04897036b3ced15c20e855831ddccec800d41ad8c3d84bc5b64caa2b8e2a2d51",
     ("index", "shares_share_restricted_by_id_3fe4e29c", "shares_share"): "202ee10d1c210891decdb0c234eaaf6fd8299d77f904bd7b35b5d9b329fb1cd1",
     ("index", "shares_share_reviewed_by_id_12967517", "shares_share"): "70d9021b33b8508d5bddf7bc2b27c90dfd7226f930d97b7f5abc6df776895c40",
     ("index", "shares_site_recipie_ea589e_idx", "shares_sitemessage"): "bef46fa07edd74396c8e2731342f94a2cdf24a82200fcd5cd66c6dd35f92f1d0",
@@ -2773,12 +2782,15 @@ def _validate_runtime_identity_checkpoint(
     return report
 
 
+SUPPORTED_PORTABLE_VALIDATION_VERSIONS = frozenset({3, 4, 5})
+
+
 def _validate_validation_report(path: Path) -> None:
     report = _load_json(path, maximum_size=32 * 1024 * 1024)
     if (
         not isinstance(report, dict)
         or report.get("format") != "ffxivshare-jsonl"
-        or report.get("format_version") != 3
+        or report.get("format_version") not in SUPPORTED_PORTABLE_VALIDATION_VERSIONS
         or report.get("valid") is not True
         or report.get("errors") != []
         or report.get("quarantined_records") != []

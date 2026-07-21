@@ -10,6 +10,7 @@ class LegacyViewFacadeTests(SimpleTestCase):
             'add_share_to_collection',
             'admin_approve_share',
             'admin_reject_share',
+            'admin_takedown_share',
             'admin_report_list',
             'admin_report_logs',
             'admin_resolve_report',

@@ -87,6 +87,7 @@ class ShareDetailActionsViewModel:
     can_add_to_collection: bool
     can_report: bool
     can_view_logs: bool
+    can_takedown: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +165,7 @@ def _share_detail_badges(share, *, can_see_rejected_state):
     if share.is_restricted and can_see_rejected_state:
         restriction_labels = {
             Share.RestrictionState.REPORT_TAKEDOWN: '举报下架',
+            Share.RestrictionState.MODERATOR_TAKEDOWN: '管理员下架',
             Share.RestrictionState.REVIEW_REJECTED: '审核限制',
             Share.RestrictionState.LEGACY_PRIVATE: '历史状态待确认',
         }
@@ -198,6 +200,9 @@ def _share_detail_notice(share, *, can_see_rejected_state):
         report_takedown = (
             share.restriction_state == Share.RestrictionState.REPORT_TAKEDOWN
         )
+        moderator_takedown = (
+            share.restriction_state == Share.RestrictionState.MODERATOR_TAKEDOWN
+        )
         legacy_private = (
             share.restriction_state == Share.RestrictionState.LEGACY_PRIVATE
         )
@@ -206,6 +211,14 @@ def _share_detail_notice(share, *, can_see_rejected_state):
             message = (
                 '此分享因举报处理被限制访问。编辑不会自动解除限制；'
                 '管理员复核并解除后，分享仍会按照当前可见范围开放。'
+            )
+            tone = 'danger'
+        elif moderator_takedown:
+            title = '分享已由管理员下架'
+            message = (
+                '此分享已由管理员主动下架，当前仅作者和管理员可以访问。'
+                '作者可根据下方说明修改内容并重新提交审核；管理员解除限制后，'
+                '分享仍会按照当前可见范围开放。'
             )
             tone = 'danger'
         elif legacy_private:
@@ -333,6 +346,11 @@ def build_share_detail_view_model(
                 and not share.is_restricted
             ),
             can_view_logs=moderator,
+            can_takedown=(
+                moderator
+                and share.status == Share.Status.APPROVED
+                and not share.is_restricted
+            ),
         ),
         likes_count=share.likes_count,
         favorites_count=share.favorites_count,

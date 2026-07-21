@@ -230,6 +230,7 @@ PENDING_MIGRATIONS = (
     ("shares", "0027_classify_legacy_private_shares"),
     ("shares", "0028_normalize_announcement_column_order"),
     ("shares", "0029_add_recoverable_content_deletion"),
+    ("shares", "0030_add_moderator_takedown"),
 )
 SQLITE_SEQUENCE_MINIMUM_HEADROOM = 1_000_000
 SQLITE_SEQUENCE_REBUILD_FLOORS = {
@@ -546,6 +547,82 @@ def set_source_sqlite_sequence_floors(database: Path) -> None:
                 (source_floor, table),
             )
             assert update.rowcount == 1, (table, update.rowcount)
+        connection.commit()
+    except BaseException:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def restore_historical_announcement_layout(database: Path) -> None:
+    """Make the generated 0018 fixture match the deployed historical table SQL."""
+    canonical_sql = (
+        'CREATE TABLE "shares_announcement" '
+        '("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, '
+        '"title" varchar(200) NOT NULL, "content" text NOT NULL, '
+        '"is_active" bool NOT NULL, "created_at" datetime NOT NULL, '
+        '"updated_at" datetime NOT NULL)'
+    )
+    legacy_sql = (
+        'CREATE TABLE "shares_announcement" '
+        '("id" integer NOT NULL PRIMARY KEY AUTOINCREMENT, '
+        '"title" varchar(200) NOT NULL, "is_active" bool NOT NULL, '
+        '"created_at" datetime NOT NULL, "updated_at" datetime NOT NULL, '
+        '"content" text NOT NULL)'
+    )
+    rebuild_table = 'shares_announcement_e2e_canonical'
+    columns = '"id", "title", "is_active", "created_at", "updated_at", "content"'
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        table_rows = connection.execute(
+            "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?",
+            ("shares_announcement",),
+        ).fetchall()
+        assert table_rows == [(canonical_sql,)], table_rows
+        related_objects = connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_schema "
+            "WHERE tbl_name = ? AND type != 'table' AND sql IS NOT NULL "
+            "ORDER BY type, name",
+            ("shares_announcement",),
+        ).fetchall()
+        assert related_objects == [], related_objects
+        conflicts = connection.execute(
+            "SELECT type, name, tbl_name FROM sqlite_schema "
+            "WHERE lower(name) = lower(?) OR lower(tbl_name) = lower(?)",
+            (rebuild_table, rebuild_table),
+        ).fetchall()
+        assert not conflicts, conflicts
+        sequence_row = connection.execute(
+            "SELECT seq FROM sqlite_sequence WHERE name = ?",
+            ("shares_announcement",),
+        ).fetchone()
+        assert sequence_row is not None and type(sequence_row[0]) is int
+        sequence_floor = sequence_row[0]
+
+        connection.execute(
+            f'ALTER TABLE "shares_announcement" RENAME TO "{rebuild_table}"'
+        )
+        connection.execute(legacy_sql)
+        connection.execute(
+            f'INSERT INTO "shares_announcement" ({columns}) '
+            f'SELECT {columns} FROM "{rebuild_table}"'
+        )
+        connection.execute(f'DROP TABLE "{rebuild_table}"')
+        current_sequence = connection.execute(
+            "SELECT seq FROM sqlite_sequence WHERE name = ?",
+            ("shares_announcement",),
+        ).fetchone()
+        assert current_sequence is not None and type(current_sequence[0]) is int
+        connection.execute(
+            "UPDATE sqlite_sequence SET seq = ? WHERE name = ?",
+            (max(sequence_floor, current_sequence[0]), "shares_announcement"),
+        )
+        assert connection.execute(
+            "SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?",
+            ("shares_announcement",),
+        ).fetchall() == [(legacy_sql,)]
         connection.commit()
     except BaseException:
         connection.rollback()
@@ -991,6 +1068,7 @@ run_command(
     cwd=repository,
     env=setup_env,
 )
+restore_historical_announcement_layout(source_database)
 set_source_sqlite_sequence_floors(source_database)
 source_sequence_fixture = assert_source_sqlite_sequence_fixture(source_database)
 

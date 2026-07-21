@@ -14,6 +14,7 @@ from .models import Report, Share, ShareLog
 from .services.moderation import (
     confirm_share_restriction,
     release_share_restriction,
+    takedown_share,
 )
 
 
@@ -269,3 +270,24 @@ class ShareRestrictionPreflightTests(TestCase):
             if item['check'] == 'invalid_restriction_metadata'
         )
         self.assertEqual(check['share_ids'], [share.share_id])
+
+    def test_moderator_takedown_log_is_complete_restriction_evidence(self):
+        share = self.create_share('moderator-takedown')
+
+        result = takedown_share(
+            share_id=share.share_id,
+            moderator=self.admin,
+            reason='管理员主动复核后下架',
+        )
+
+        self.assertTrue(result.changed)
+        stdout = StringIO()
+        call_command(
+            'preflight_share_restrictions',
+            strict=True,
+            stdout=stdout,
+            stderr=StringIO(),
+        )
+        payload = self.command_payload(stdout)
+        self.assertTrue(payload['valid'])
+        self.assertTrue(payload['ready_for_cutover'])

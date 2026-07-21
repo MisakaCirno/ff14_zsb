@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}管理员下架 - {{ share.title }}{% endblock %}
+
+{% block content %}
+<div class="container moderation-page moderation-report-page">
+    {% include 'shares/includes/page_header.html' with icon='bi bi-shield-x' eyebrow='内容治理' title='管理员下架' summary='下架会立即停止对外访问，但保留分享内容、审核结论、互动数据与审计记录。' only %}
+
+    <section class="ui-panel moderation-panel moderation-report-submit" aria-labelledby="moderator-takedown-title">
+        <div class="moderation-report-subject">
+            <p class="moderation-report-subject__eyebrow">准备下架</p>
+            <h2 class="moderation-report-subject__title" id="moderator-takedown-title">{{ share.title }}</h2>
+            <p class="moderation-report-subject__meta">
+                分享 ID：{{ share.share_id }} · 当前审核状态：{{ share.get_status_display }}
+            </p>
+        </div>
+
+        <form method="post" class="moderation-report-form">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger" role="alert">
+                {% for error in form.non_field_errors %}<p class="mb-0">{{ error }}</p>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="moderation-report-field">
+                <label for="{{ form.reason.id_for_label }}" class="form-label">
+                    {{ form.reason.label }} <span class="text-danger" aria-hidden="true">*</span>
+                </label>
+                {{ form.reason }}
+                <p class="form-text" id="moderator-takedown-reason-help">{{ form.reason.help_text }}</p>
+                {% if form.reason.errors %}
+                <ul class="moderation-report-field__errors" id="moderator-takedown-reason-errors" role="alert">
+                    {% for error in form.reason.errors %}<li>{{ error }}</li>{% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+
+            <div class="alert alert-warning" role="note">
+                作者会在站内信和分享管理页面看到完整说明。编辑内容不会自动恢复公开访问；管理员审核通过或手动解除限制后才会重新开放。
+            </div>
+
+            <div class="moderation-action-grid moderation-report-form__actions">
+                <button type="submit" class="btn btn-danger">
+                    <i class="bi bi-shield-x" aria-hidden="true"></i>
+                    确认下架并通知作者
+                </button>
+                <a href="{% url 'share_detail' share.share_id %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-circle" aria-hidden="true"></i>
+                    取消并返回分享
+                </a>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

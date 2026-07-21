@@ -35,6 +35,14 @@ DATASET_CONTRACTS = {
             "bdd2b55012b63037477304e3de7a2168ddb741b6faf12c8dc83d22a24368de85"
         ),
     },
+    5: {
+        "schema_fingerprint": (
+            "83c5ca15872d7c9beb284161efceb301d0ee2287fb34ccf1f1941b781c00ca12"
+        ),
+        "model_schema_signature": (
+            "dd7d306a6fc075fae33f17cec09b30c8cf15406dfc5440fc79d83e0cddbd1900"
+        ),
+    },
 }
 REPORT_FORMAT = "ffxivshare-site-data-export-comparison"
 REPORT_VERSION = 1

@@ -51,6 +51,10 @@ def build_share_restriction_preflight():
         share_id=OuterRef('pk'),
         action=ShareLog.ActionType.RESTRICTION_CONFIRM,
     ).order_by('-created_at', '-pk')
+    latest_moderator_takedown = ShareLog.objects.filter(
+        share_id=OuterRef('pk'),
+        action=ShareLog.ActionType.MODERATOR_TAKEDOWN,
+    ).order_by('-created_at', '-pk')
 
     evidence = Share.objects.annotate(
         latest_resolved_at=_latest_value(latest_resolved, 'resolved_at'),
@@ -63,11 +67,20 @@ def build_share_restriction_preflight():
         latest_release_pk=_latest_value(latest_release, 'pk'),
         latest_confirm_at=_latest_value(latest_confirm, 'created_at'),
         latest_confirm_pk=_latest_value(latest_confirm, 'pk'),
+        latest_moderator_takedown_at=_latest_value(
+            latest_moderator_takedown,
+            'created_at',
+        ),
+        latest_moderator_takedown_pk=_latest_value(
+            latest_moderator_takedown,
+            'pk',
+        ),
     )
 
     resolved_report_without_takedown = []
     active_reject_without_restriction = []
     active_reject_wrong_restriction = []
+    moderator_takedown_wrong_restriction = []
     rejected_without_restriction = []
     restriction_without_active_evidence = []
     private_clear_without_classification = []
@@ -94,6 +107,8 @@ def build_share_restriction_preflight():
         'latest_release_pk',
         'latest_confirm_at',
         'latest_confirm_pk',
+        'latest_moderator_takedown_at',
+        'latest_moderator_takedown_pk',
     ).iterator(chunk_size=1000)
 
     for row in evidence_rows:
@@ -103,6 +118,7 @@ def build_share_restriction_preflight():
         reject_key = _log_key(row, 'reject')
         release_key = _log_key(row, 'release')
         confirm_key = _log_key(row, 'confirm')
+        moderator_takedown_key = _log_key(row, 'moderator_takedown')
 
         keep_times = [
             value for value in (
@@ -123,9 +139,21 @@ def build_share_restriction_preflight():
             and not _is_after(approve_key, reject_key)
             and not _is_after(release_key, reject_key)
         )
+        moderator_takedown_active = (
+            moderator_takedown_key is not None
+            and not _is_after(release_key, moderator_takedown_key)
+        )
 
-        if report_evidence_active:
+        if (
+            report_evidence_active
+            and not (
+                moderator_takedown_active
+                and row['latest_moderator_takedown_at'] > latest_keep_at
+            )
+        ):
             expected_state = Share.RestrictionState.REPORT_TAKEDOWN
+        elif moderator_takedown_active:
+            expected_state = Share.RestrictionState.MODERATOR_TAKEDOWN
         elif reject_evidence_active or row['status'] == Share.Status.REJECTED:
             expected_state = Share.RestrictionState.REVIEW_REJECTED
         else:
@@ -152,9 +180,13 @@ def build_share_restriction_preflight():
                     rejected_without_restriction.append(share_id)
             elif state != Share.RestrictionState.REVIEW_REJECTED:
                 active_reject_wrong_restriction.append(share_id)
+        elif expected_state == Share.RestrictionState.MODERATOR_TAKEDOWN:
+            if state != Share.RestrictionState.MODERATOR_TAKEDOWN:
+                moderator_takedown_wrong_restriction.append(share_id)
         elif state in {
             Share.RestrictionState.REPORT_TAKEDOWN,
             Share.RestrictionState.REVIEW_REJECTED,
+            Share.RestrictionState.MODERATOR_TAKEDOWN,
         }:
             restriction_without_active_evidence.append(share_id)
 
@@ -218,6 +250,11 @@ def build_share_restriction_preflight():
         blocking_errors,
         check='active_reject_evidence_wrong_restriction',
         share_ids=active_reject_wrong_restriction,
+    )
+    _append_check(
+        blocking_errors,
+        check='moderator_takedown_evidence_wrong_restriction',
+        share_ids=moderator_takedown_wrong_restriction,
     )
     _append_check(
         blocking_errors,

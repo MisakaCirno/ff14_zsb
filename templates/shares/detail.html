@@ -283,7 +283,7 @@
         </div>
 
         <aside class="share-detail-sidebar" aria-label="分享辅助信息">
-            {% if detail.actions.can_add_to_collection or detail.actions.can_edit or detail.actions.can_delete or detail.actions.can_report %}
+            {% if detail.actions.can_add_to_collection or detail.actions.can_edit or detail.actions.can_delete or detail.actions.can_report or detail.actions.can_takedown %}
             <section class="ui-panel share-detail-side-panel" aria-labelledby="share-detail-actions-title">
                 <header class="share-detail-side-panel__header">
                     <i class="bi bi-sliders" aria-hidden="true"></i>
@@ -311,6 +311,12 @@
                     <a href="{% url 'report_share' share.share_id %}" class="btn btn-outline-danger">
                         <i class="bi bi-flag" aria-hidden="true"></i>
                         举报此分享
+                    </a>
+                    {% endif %}
+                    {% if detail.actions.can_takedown %}
+                    <a href="{% url 'admin_takedown_share' share.share_id %}" class="btn btn-outline-danger">
+                        <i class="bi bi-shield-x" aria-hidden="true"></i>
+                        管理员下架
                     </a>
                     {% endif %}
                     {% if detail.actions.can_delete %}

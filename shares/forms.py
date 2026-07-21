@@ -102,6 +102,32 @@ class ReportResolutionForm(forms.Form):
     )
 
 
+class ModeratorTakedownForm(forms.Form):
+    """管理员主动下架已上线分享时填写给作者的说明。"""
+    reason = forms.CharField(
+        label='下架说明',
+        help_text='说明会写入审计日志，并通过站内信发送给分享作者。',
+        min_length=2,
+        max_length=STAFF_REASON_MAX_LENGTH,
+        widget=forms.Textarea(attrs={
+            'aria-describedby': 'moderator-takedown-reason-help',
+            'class': 'form-control',
+            'rows': 4,
+            'placeholder': '请具体说明需要修改的内容，以及重新开放前应满足的要求。',
+        }),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.is_bound and self.errors.get('reason'):
+            reason_attrs = self.fields['reason'].widget.attrs
+            reason_attrs['aria-invalid'] = 'true'
+            reason_attrs['aria-describedby'] = (
+                'moderator-takedown-reason-help '
+                'moderator-takedown-reason-errors'
+            )
+
+
 class RestrictionReleaseForm(forms.Form):
     """管理员解除活动内容限制时填写审计说明。"""
     reason = forms.CharField(

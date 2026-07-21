@@ -124,31 +124,31 @@ class ShareDetailPresentationTests(TestCase):
                 'anonymous',
                 self.share,
                 AnonymousUser(),
-                ShareDetailActionsViewModel(False, False, False, False, False),
+                ShareDetailActionsViewModel(False, False, False, False, False, False),
             ),
             (
                 'owner',
                 self.share,
                 self.author,
-                ShareDetailActionsViewModel(True, True, True, False, False),
+                ShareDetailActionsViewModel(True, True, True, False, False, False),
             ),
             (
                 'authenticated viewer',
                 self.share,
                 self.other,
-                ShareDetailActionsViewModel(False, False, False, True, False),
+                ShareDetailActionsViewModel(False, False, False, True, False, False),
             ),
             (
                 'moderator',
                 self.share,
                 self.staff,
-                ShareDetailActionsViewModel(False, True, False, True, True),
+                ShareDetailActionsViewModel(False, True, False, True, True, True),
             ),
             (
                 'moderator owner',
                 self.staff_share,
                 self.staff_author,
-                ShareDetailActionsViewModel(True, True, True, False, True),
+                ShareDetailActionsViewModel(True, True, True, False, True, True),
             ),
         )
 

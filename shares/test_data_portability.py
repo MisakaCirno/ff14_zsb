@@ -39,6 +39,7 @@ from .services.data_portability import (
     V2_ENTITY_FIELDS,
     V3_ENTITY_FIELDS,
     V4_ENTITY_FIELDS,
+    V5_ENTITY_FIELDS,
     DataPortabilityError,
     database_matches_manifest,
     export_dataset,
@@ -270,20 +271,35 @@ class DataPortabilityTests(TestCase):
                 f'{spec.name} changed without a dataset version bump',
             )
 
-    def test_frozen_version_4_fields_match_current_models(self):
+    def test_frozen_version_5_fields_match_current_models(self):
         from .services import data_portability
 
-        self.assertEqual(DATASET_VERSION, 4)
+        self.assertEqual(DATASET_VERSION, 5)
         self.assertEqual(
-            set(V4_ENTITY_FIELDS),
-            {spec.name for spec in ENTITY_SPECS_BY_VERSION[4]},
+            set(V5_ENTITY_FIELDS),
+            {spec.name for spec in ENTITY_SPECS_BY_VERSION[5]},
         )
-        for spec in ENTITY_SPECS_BY_VERSION[4]:
+        for spec in ENTITY_SPECS_BY_VERSION[5]:
             self.assertEqual(
-                set(V4_ENTITY_FIELDS[spec.name]),
+                set(V5_ENTITY_FIELDS[spec.name]),
                 data_portability._current_serialized_fields(spec),
                 f'{spec.name} changed without a dataset version bump',
             )
+
+    def test_v5_changes_moderation_semantics_without_adding_fields(self):
+        self.assertEqual(V5_ENTITY_FIELDS, V4_ENTITY_FIELDS)
+
+    def test_v5_semantic_schema_and_fingerprint_are_frozen(self):
+        from .services import data_portability
+
+        self.assertEqual(
+            data_portability._current_model_schema_signature(5),
+            'dd7d306a6fc075fae33f17cec09b30c8cf15406dfc5440fc79d83e0cddbd1900',
+        )
+        self.assertEqual(
+            data_portability._schema_fingerprint(5),
+            '83c5ca15872d7c9beb284161efceb301d0ee2287fb34ccf1f1941b781c00ca12',
+        )
 
     def test_v4_adds_recoverable_deletion_fields_only(self):
         self.assertEqual(
@@ -988,7 +1004,7 @@ class DataPortabilityTests(TestCase):
             )
             self.assertEqual(
                 current_share_leaf[1],
-                '0029_add_recoverable_content_deletion',
+                '0030_add_moderator_takedown',
             )
             leaves.remove(current_share_leaf)
             leaves.append(['shares', '0024_widen_site_message_titles'])

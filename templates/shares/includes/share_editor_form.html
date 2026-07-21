@@ -51,6 +51,8 @@
             <p>
                 {% if share.restriction_state == 'report_takedown' %}
                 该分享已因举报处理下架。
+                {% elif share.restriction_state == 'moderator_takedown' %}
+                该分享已由管理员主动下架。
                 {% elif share.restriction_state == 'legacy_private' %}
                 该分享来自旧版私密数据，原状态来源仍待管理员确认。
                 {% else %}

@@ -108,6 +108,59 @@ def _notify_author_restriction_released(*, share, moderator, reason):
     )
 
 
+def _notify_author_moderator_takedown(*, share, moderator, reason):
+    if not share.author:
+        return
+    send_site_message(
+        recipient=share.author,
+        sender=moderator,
+        message_type=SiteMessage.MessageType.SHARE_TAKEDOWN,
+        title=f'分享「{share.title}」已由管理员下架',
+        content=(
+            f'你的分享「{share.title}」已由管理员主动下架，当前仅你和管理员可以访问。'
+            f'\n\n管理员说明：{reason}'
+            '\n\n你可以根据说明修改内容并重新提交审核；编辑本身不会立即解除限制。'
+        ),
+        related_share=share,
+        metadata={'action_url': share.get_absolute_url()},
+    )
+
+
+@transaction.atomic
+def takedown_share(*, share_id, moderator, reason):
+    """Restrict an already-published share without rewriting its review result."""
+    reason = _required_reason(reason)
+    share = Share.objects.select_for_update().select_related('author').get(
+        share_id=share_id,
+        deleted_at__isnull=True,
+    )
+    if share.is_restricted:
+        return ShareModerationResult(share=share, outcome='already_restricted')
+    if share.status != Share.Status.APPROVED:
+        return ShareModerationResult(share=share, outcome='requires_review')
+
+    _apply_restriction(
+        share,
+        state=Share.RestrictionState.MODERATOR_TAKEDOWN,
+        reason=reason,
+        moderator=moderator,
+        restricted_at=timezone.now(),
+    )
+    share.save(update_fields=[*_restriction_update_fields(), 'updated_at'])
+    log_share_action(
+        moderator,
+        share,
+        ShareLog.ActionType.MODERATOR_TAKEDOWN,
+        f'管理员主动下架分享。说明：{reason}',
+    )
+    _notify_author_moderator_takedown(
+        share=share,
+        moderator=moderator,
+        reason=reason,
+    )
+    return ShareModerationResult(share=share, outcome='changed')
+
+
 @transaction.atomic
 def approve_share(*, share_id, moderator):
     share = Share.objects.select_for_update().select_related('author').get(
@@ -183,7 +236,10 @@ def reject_share(*, share_id, moderator, reason):
         'reviewed_by',
         'updated_at',
     ]
-    if share.restriction_state != Share.RestrictionState.REPORT_TAKEDOWN:
+    if share.restriction_state not in {
+        Share.RestrictionState.REPORT_TAKEDOWN,
+        Share.RestrictionState.MODERATOR_TAKEDOWN,
+    }:
         _apply_restriction(
             share,
             state=Share.RestrictionState.REVIEW_REJECTED,

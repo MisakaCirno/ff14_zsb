@@ -69,6 +69,7 @@ class Share(models.Model):
         CLEAR = 'clear', '无限制'
         REVIEW_REJECTED = 'review_rejected', '审核拒绝限制'
         REPORT_TAKEDOWN = 'report_takedown', '举报下架限制'
+        MODERATOR_TAKEDOWN = 'moderator_takedown', '管理员下架限制'
         LEGACY_PRIVATE = 'legacy_private', '历史私密待确认'
 
     class Category(models.TextChoices):
@@ -215,6 +216,7 @@ class Share(models.Model):
                     'clear',
                     'review_rejected',
                     'report_takedown',
+                    'moderator_takedown',
                     'legacy_private',
                 ]),
                 name='share_restriction_state_valid',
@@ -575,6 +577,7 @@ class ShareLog(models.Model):
         EDIT = 'edit', '编辑分享'
         REVIEW_APPROVE = 'approve', '审核通过'
         REVIEW_REJECT = 'reject', '审核拒绝'
+        MODERATOR_TAKEDOWN = 'moderator_takedown', '管理员下架'
         RESTRICTION_CONFIRM = 'confirm_restriction', '确认维持内容限制'
         RESTRICTION_RELEASE = 'release_restriction', '解除内容限制'
         ADD_TO_COLLECTION = 'add_collection', '加入合集'

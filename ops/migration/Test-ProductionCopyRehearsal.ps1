@@ -869,6 +869,26 @@ def validation_report() -> dict[str, object]:
     }
 
 
+for supported_version in (3, 4, 5):
+    supported_report = validation_report()
+    supported_report["format_version"] = supported_version
+    supported_path = test_root / f"validation-v{supported_version}.json"
+    write_json(supported_path, supported_report)
+    module._validate_validation_report(supported_path)
+
+for unsupported_version in (2, 6):
+    unsupported_report = validation_report()
+    unsupported_report["format_version"] = unsupported_version
+    unsupported_path = test_root / f"validation-v{unsupported_version}.json"
+    write_json(unsupported_path, unsupported_report)
+    try:
+        module._validate_validation_report(unsupported_path)
+    except module.RehearsalError as exc:
+        assert str(exc) == "dataset_validation_report_invalid"
+    else:
+        raise AssertionError("Unsupported portable dataset validation version accepted")
+
+
 def import_report(status: str, target_state: str) -> dict[str, object]:
     return {
         **validation_report(),

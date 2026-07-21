@@ -70,6 +70,7 @@ from .data_portability_schema import (
     V3_NATURAL_KEY_PROTOCOL,
     V3_SESSION_PROJECTION_POLICY,
     V4_ENTITY_FIELDS,
+    V5_ENTITY_FIELDS,
     DataPortabilityError,
     EntitySpec,
     _entity_by_name_for_version,

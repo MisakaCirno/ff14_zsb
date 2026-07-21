@@ -11,6 +11,7 @@ from django.views.decorators.http import require_POST
 
 from shares.forms import (
     AdminReviewRejectForm,
+    ModeratorTakedownForm,
     ReportForm,
     ReportResolutionForm,
     RestrictionConfirmationForm,
@@ -26,6 +27,7 @@ from shares.services.moderation import (
     release_share_restriction,
     resolve_report,
     resolve_share_reports,
+    takedown_share,
 )
 
 
@@ -322,6 +324,46 @@ def admin_review_list(request):
         request,
         'shares/admin_review_list.html',
         _review_queue_context(page_number=request.GET.get('page')),
+    )
+
+
+@user_passes_test(is_moderator)
+def admin_takedown_share(request, share_id):
+    share = get_object_or_404(
+        Share.objects.select_related('author'),
+        share_id=share_id,
+        deleted_at__isnull=True,
+    )
+    if request.method == 'POST':
+        form = ModeratorTakedownForm(request.POST)
+        if form.is_valid():
+            result = takedown_share(
+                share_id=share_id,
+                moderator=request.user,
+                reason=form.cleaned_data['reason'].strip(),
+            )
+            if result.outcome == 'already_restricted':
+                messages.info(request, f'分享 "{result.share.title}" 已处于限制状态')
+            elif result.outcome == 'requires_review':
+                messages.warning(request, '待审核或已拒绝的分享应通过审核流程处理')
+            else:
+                messages.success(request, f'分享 "{result.share.title}" 已下架，作者已收到说明')
+            return redirect('share_detail', share_id=share_id)
+        response_status = 400
+    else:
+        if share.is_restricted:
+            messages.info(request, f'分享 "{share.title}" 已处于限制状态')
+            return redirect('share_detail', share_id=share_id)
+        if share.status != Share.Status.APPROVED:
+            messages.warning(request, '待审核或已拒绝的分享应通过审核流程处理')
+            return redirect('admin_review_list')
+        form = ModeratorTakedownForm()
+        response_status = 200
+    return render(
+        request,
+        'shares/admin_takedown_share.html',
+        _admin_context(share=share, form=form),
+        status=response_status,
     )
 
 
@@ -815,6 +857,7 @@ def admin_review_logs(request):
         ).filter(action__in=[
             ShareLog.ActionType.REVIEW_APPROVE,
             ShareLog.ActionType.REVIEW_REJECT,
+            ShareLog.ActionType.MODERATOR_TAKEDOWN,
             ShareLog.ActionType.RESTRICTION_CONFIRM,
             ShareLog.ActionType.RESTRICTION_RELEASE,
         ]).select_related('user', 'share'),
