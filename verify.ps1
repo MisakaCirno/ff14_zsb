@@ -105,6 +105,10 @@ try {
                 -RepositoryRoot $PSScriptRoot
         }
 
+        Invoke-CheckedStep 'Direct Git update workflow tests' {
+            & (Join-Path $PSScriptRoot 'ops\release\Test-DirectGitUpdateWorkflow.ps1')
+        }
+
         Invoke-CheckedStep 'Direct Git release readiness unit tests' {
             & $PythonExecutable `
                 -I `

@@ -26,6 +26,8 @@ $RepositoryRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $rootStartPath = Join-Path $RepositoryRoot 'start_ffxivshare.bat'
 $rootPreflightPath = Join-Path $RepositoryRoot 'preflight_ffxivshare.bat'
 $startPath = Join-Path $RepositoryRoot 'ops\release\Start-DirectGitWaitress.bat'
+$preparePath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitUpdateAndPrepare.ps1'
+$prepareTestPath = Join-Path $RepositoryRoot 'ops\release\Test-DirectGitUpdateWorkflow.ps1'
 $launcherPath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitLauncher.ps1'
 $upgradePath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitDatabaseUpgrade.ps1'
 $readinessWrapperPath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitReleaseReadiness.ps1'
@@ -36,6 +38,8 @@ foreach ($path in @(
     $rootStartPath,
     $rootPreflightPath,
     $startPath,
+    $preparePath,
+    $prepareTestPath,
     $launcherPath,
     $upgradePath,
     $readinessWrapperPath,
@@ -72,6 +76,7 @@ foreach ($requiredText in @(
 
 $startSource = [System.IO.File]::ReadAllText($startPath)
 foreach ($requiredText in @(
+    'Invoke-DirectGitUpdateAndPrepare.ps1',
     'Invoke-DirectGitLauncher.ps1',
     'powershell.exe -NoProfile -ExecutionPolicy Bypass',
     '-RepositoryRoot "%PROJECT_DIR%"'
@@ -79,6 +84,50 @@ foreach ($requiredText in @(
     Assert-Contract `
         -Condition $startSource.Contains($requiredText) `
         -Message "Direct Git start script is missing: $requiredText"
+}
+Assert-Contract `
+    -Condition (
+        $startSource.IndexOf('-File "%PREPARER%"') -lt
+        $startSource.IndexOf('-File "%LAUNCHER%"')
+    ) `
+    -Message 'Release preparation must complete before the application launcher.'
+
+$prepareSource = [System.IO.File]::ReadAllText($preparePath)
+foreach ($requiredText in @(
+    'Assert-CriticalWorktreeClean',
+    'FFXIVSHARE_SKIP_UPDATE',
+    "'fetch'",
+    "'merge'",
+    "'--ff-only'",
+    '[1] Update, prepare, and start (default)',
+    '[2] Start the current version without updating',
+    'pip',
+    'install',
+    "'ci', '--prefix', 'frontend'",
+    "'--prefix', 'frontend', 'run', 'build'",
+    "'collectstatic'",
+    'Invoke-DirectGitReleaseReadiness.ps1',
+    'prepared-commit.txt',
+    'Test-PreparedState',
+    'Set-PreparedState'
+)) {
+    Assert-Contract `
+        -Condition $prepareSource.Contains($requiredText) `
+        -Message "Direct Git update workflow is missing: $requiredText"
+}
+foreach ($forbiddenPattern in @(
+    '(?i)\bgit(?:\.exe)?\s+(?:reset|clean|stash|checkout|switch)',
+    '(?i)manage\.py[''"]?\s*,?\s*[''"]?migrate',
+    '(?i)\bStart-Service\b',
+    '(?i)\bStop-Service\b',
+    '(?i)\bRestart-Service\b',
+    '(?i)\bnginx(?:\.exe)?\b',
+    '(?i)\bbun(?:\.exe)?\b',
+    '(?i)\bdb\.sqlite3\b'
+)) {
+    Assert-Contract `
+        -Condition (-not [regex]::IsMatch($prepareSource, $forbiddenPattern)) `
+        -Message "Direct Git update workflow contains a forbidden operation: $forbiddenPattern"
 }
 
 $launcherSource = [System.IO.File]::ReadAllText($launcherPath)
