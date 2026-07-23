@@ -1642,58 +1642,103 @@ def _v3_target_structure_matches_manifest(manifest: dict[str, Any]) -> bool:
     return _embedded_v3_rows_are_resolvable()
 
 
-def database_matches_manifest(
+def database_manifest_mismatches(
     manifest: dict[str, Any],
     *,
     require_sequence_floors: bool = True,
-) -> bool:
+) -> list[str]:
+    mismatches: list[str] = []
     dataset_version = manifest.get('format_version')
     if (
         not isinstance(dataset_version, int)
         or isinstance(dataset_version, bool)
         or dataset_version not in SUPPORTED_DATASET_VERSIONS
     ):
-        return False
+        return [f'unsupported manifest format_version: {dataset_version!r}']
     specs = _entity_specs_for_version(dataset_version)
     metadata_by_entity = manifest.get('entities', {})
     if not isinstance(metadata_by_entity, dict):
-        return False
-    if set(metadata_by_entity) != {spec.name for spec in specs}:
-        return False
+        return ['manifest entities must be an object']
+    expected_entities = {spec.name for spec in specs}
+    actual_entities = set(metadata_by_entity)
+    missing_entities = sorted(expected_entities - actual_entities)
+    extra_entities = sorted(actual_entities - expected_entities)
+    if missing_entities:
+        mismatches.append(
+            'manifest entities missing: ' + ', '.join(missing_entities)
+        )
+    if extra_entities:
+        mismatches.append(
+            'manifest entities unexpected: ' + ', '.join(extra_entities)
+        )
+    if mismatches:
+        return mismatches
     Session = apps.get_model('sessions.Session')
     LogEntry = apps.get_model('admin.LogEntry')
     if Session._default_manager.exists():
-        return False
+        mismatches.append('target contains session rows')
     if dataset_version < 3 and LogEntry._default_manager.exists():
-        return False
+        mismatches.append('legacy target contains admin log rows')
     inventory = _v3_table_inventory()
-    if (
-        inventory['missing_required']
-        or inventory['unsupported_objects']
-        or any(inventory['unknown_counts'].values())
-    ):
-        return False
+    if inventory['missing_required']:
+        mismatches.append(
+            'target tables missing: '
+            + ', '.join(inventory['missing_required'])
+        )
+    if inventory['unsupported_objects']:
+        mismatches.append(
+            'target contains unsupported database objects: '
+            + ', '.join(
+                f'{name}({object_type})'
+                for name, object_type in inventory['unsupported_objects'].items()
+            )
+        )
+    unknown_nonempty = {
+        name: count
+        for name, count in inventory['unknown_counts'].items()
+        if count
+    }
+    if unknown_nonempty:
+        mismatches.append(
+            'target contains unknown non-empty tables: '
+            + ', '.join(
+                f'{name}={count}'
+                for name, count in sorted(unknown_nonempty.items())
+            )
+        )
     if not _embedded_v3_rows_are_resolvable():
-        return False
+        mismatches.append('target contains unresolvable many-to-many rows')
     if dataset_version >= 3:
         if manifest.get('schema_fingerprint') != _schema_fingerprint(dataset_version):
-            return False
+            mismatches.append('manifest schema fingerprint differs from the target')
         if not _v3_target_structure_matches_manifest(manifest):
-            return False
+            mismatches.append(
+                'manifest dependencies or target structure do not match'
+            )
         identity = manifest.get('identity')
         sequences = identity.get('sequences') if isinstance(identity, dict) else None
         if not isinstance(sequences, dict):
-            return False
+            mismatches.append('manifest sequence identity is missing or invalid')
     for spec in specs:
         metadata = metadata_by_entity.get(spec.name, {})
         count, digest = _database_entity_digest(
             spec,
             dataset_version=dataset_version,
         )
-        if count != metadata.get('count') or digest != metadata.get('sha256'):
-            return False
+        expected_count = metadata.get('count')
+        expected_digest = metadata.get('sha256')
+        if count != expected_count:
+            mismatches.append(
+                f'{spec.name}: count mismatch '
+                f'(expected {expected_count!r}, actual {count})'
+            )
+        if digest != expected_digest:
+            mismatches.append(
+                f'{spec.name}: sha256 mismatch '
+                f'(expected {expected_digest!r}, actual {digest})'
+            )
     if dataset_version == 1 and not _database_v1_restrictions_match():
-        return False
+        mismatches.append('version 1 derived restrictions differ')
     if require_sequence_floors:
         try:
             bindings = _preflight_sequence_bindings(specs)
@@ -1707,10 +1752,24 @@ def database_matches_manifest(
                     postgres_sequence_name=bindings[spec.name],
                 )
                 if actual < required:
-                    return False
+                    mismatches.append(
+                        f'{spec.name}: sequence floor mismatch '
+                        f'(required at least {required}, actual {actual})'
+                    )
         except (DataPortabilityError, KeyError, TypeError):
-            return False
-    return True
+            mismatches.append('manifest sequence floors are invalid')
+    return mismatches
+
+
+def database_matches_manifest(
+    manifest: dict[str, Any],
+    *,
+    require_sequence_floors: bool = True,
+) -> bool:
+    return not database_manifest_mismatches(
+        manifest,
+        require_sequence_floors=require_sequence_floors,
+    )
 
 
 def _database_has_portable_data() -> bool:
@@ -2257,14 +2316,17 @@ def _import_dataset_locked(
                     raise DataPortabilityError(
                         'One or more records could not be imported.'
                     )
-                if not database_matches_manifest(
+                content_mismatches = database_manifest_mismatches(
                     validation.manifest,
                     require_sequence_floors=False,
-                ):
-                    validation.errors.append(
-                        'Post-import counts or SHA-256 digests do not match the manifest.'
+                )
+                if content_mismatches:
+                    message = (
+                        'Post-import content verification failed: '
+                        + '; '.join(content_mismatches[:5])
                     )
-                    raise DataPortabilityError('Post-import content verification failed.')
+                    validation.errors.append(message)
+                    raise DataPortabilityError(message)
                 transaction_body_completed = True
         except Exception as exc:
             validation.quarantined_records.extend(import_quarantine)

@@ -41,6 +41,7 @@ from .services.data_portability import (
     V4_ENTITY_FIELDS,
     V5_ENTITY_FIELDS,
     DataPortabilityError,
+    database_manifest_mismatches,
     database_matches_manifest,
     export_dataset,
     import_dataset as _import_dataset,
@@ -624,6 +625,27 @@ class DataPortabilityTests(TestCase):
             for metadata in manifest['entities'].values():
                 self.assertEqual(len(metadata['sha256']), 64)
                 self.assertTrue((dataset / metadata['file']).is_file())
+
+    def test_database_manifest_mismatches_identifies_changed_entity_digest(self):
+        with TemporaryDirectory() as temporary:
+            _, manifest = self.export_to(Path(temporary))
+            Share.objects.filter(pk=self.share.pk).update(
+                title='数据库内容已发生变化'
+            )
+
+            mismatches = database_manifest_mismatches(manifest)
+
+        share_mismatches = [
+            item
+            for item in mismatches
+            if item.startswith('shares: sha256 mismatch ')
+        ]
+        self.assertEqual(len(share_mismatches), 1)
+        self.assertIn(
+            manifest['entities']['shares']['sha256'],
+            share_mismatches[0],
+        )
+        self.assertFalse(database_matches_manifest(manifest))
 
     def test_real_v3_exports_compare_after_forced_session_logout(self):
         Session.objects.create(
