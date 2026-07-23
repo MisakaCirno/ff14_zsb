@@ -38,10 +38,27 @@
     </aside>
     {% endif %}
 
+    <div id="browse-explorer" class="browse-explorer" data-browse-explorer>
+        <div id="browse-explorer-loading"
+             class="browse-explorer__loading htmx-indicator"
+             role="status"
+             aria-live="polite">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+            <span>正在更新</span>
+        </div>
+
     <section class="browse-toolbar" aria-labelledby="browse-toolbar-title" data-browse-toolbar>
         <h2 class="visually-hidden" id="browse-toolbar-title">浏览筛选与排序</h2>
         <div class="browse-toolbar__topline">
-            <nav class="browse-toolbar__categories" aria-label="分享分类">
+            <nav class="browse-toolbar__categories"
+                 aria-label="分享分类"
+                 hx-boost="true"
+                 hx-target="#browse-explorer"
+                 hx-select="#browse-explorer"
+                 hx-swap="outerHTML"
+                 hx-push-url="true"
+                 hx-sync="#browse-explorer:replace"
+                 hx-indicator="#browse-explorer-loading">
                 <a href="{% querystring category=None feed=feed_mode page=None partial=None continuation=None %}"
                    class="browse-category-chip{% if not current_category %} active{% endif %}"
                    {% if not current_category %}aria-current="true"{% endif %}>
@@ -63,12 +80,21 @@
             </nav>
 
             <div class="browse-toolbar__summary">
-                <span class="browse-toolbar__count">{{ shares.paginator.count }} 份分享</span>
+                <span class="browse-toolbar__count" role="status" aria-live="polite">{{ shares.paginator.count }} 份分享</span>
             </div>
         </div>
 
         <div class="browse-toolbar__controls">
-            <form method="get" action="{{ request.path }}" class="browse-toolbar__switches" aria-label="敏感内容显示方式">
+            <form method="get" action="{{ request.path }}"
+                  class="browse-toolbar__switches"
+                  aria-label="敏感内容显示方式"
+                  hx-get="{{ request.path }}"
+                  hx-target="#browse-explorer"
+                  hx-select="#browse-explorer"
+                  hx-swap="outerHTML"
+                  hx-push-url="true"
+                  hx-sync="#browse-explorer:replace"
+                  hx-indicator="#browse-explorer-loading">
                 {% if search_query %}
                 <input type="hidden" name="q" value="{{ search_query }}">
                 {% endif %}
@@ -104,7 +130,14 @@
                         <i class="bi bi-sort-down" aria-hidden="true"></i>
                         <span>内容排序</span>
                     </div>
-                    <div class="dropdown browse-toolbar__sort">
+                    <div class="dropdown browse-toolbar__sort"
+                         hx-boost="true"
+                         hx-target="#browse-explorer"
+                         hx-select="#browse-explorer"
+                         hx-swap="outerHTML"
+                         hx-push-url="true"
+                         hx-sync="#browse-explorer:replace"
+                         hx-indicator="#browse-explorer-loading">
                         <button class="btn btn-outline-secondary dropdown-toggle" type="button" id="sortDropdown" data-bs-toggle="dropdown" aria-expanded="false" aria-labelledby="browse-sort-label sortDropdown">
                             <span>{% if sort_by == 'latest' %}最新发布{% elif sort_by == 'likes' %}最多点赞{% elif sort_by == 'views' %}最多查看{% elif sort_by == 'favorites' %}最多收藏{% elif sort_by == 'copies' %}最多复制{% else %}排序{% endif %}</span>
                         </button>
@@ -162,8 +195,17 @@
         </div>
 
         {% if feed_mode == 'paginated' %}
-        {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='首页分享分页' nav_class='mt-5' pagination_class='pagination-lg' %}
+        <div hx-boost="true"
+             hx-target="#browse-explorer"
+             hx-select="#browse-explorer"
+             hx-swap="outerHTML"
+             hx-push-url="true"
+             hx-sync="#browse-explorer:replace"
+             hx-indicator="#browse-explorer-loading">
+            {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='首页分享分页' nav_class='mt-5' pagination_class='pagination-lg' %}
+        </div>
         {% endif %}
     </section>
+    </div>
 </div>
 {% endblock %}

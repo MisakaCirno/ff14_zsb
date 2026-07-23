@@ -1974,11 +1974,20 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
         for hook in (
             'data-browse-page',
+            'data-browse-explorer',
             'data-browse-toolbar',
             'data-browse-results',
         ):
             self.assertIn(hook, source)
 
+        self.assertIn('id="browse-explorer"', source)
+        self.assertIn('hx-target="#browse-explorer"', source)
+        self.assertIn('hx-select="#browse-explorer"', source)
+        self.assertIn('hx-push-url="true"', source)
+        self.assertIn('hx-sync="#browse-explorer:replace"', source)
+        self.assertIn('hx-indicator="#browse-explorer-loading"', source)
+        self.assertIn('hx-get="{{ request.path }}"', source)
+        self.assertGreaterEqual(source.count('hx-boost="true"'), 3)
         self.assertIn('aria-labelledby="browse-toolbar-title"', source)
         self.assertIn('aria-labelledby="browse-results-title"', source)
         self.assertIn('aria-label="敏感内容显示方式"', source)
@@ -2007,6 +2016,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('aria-pressed="{% if feed_mode ==', source)
         self.assertIn("@import './browse-page.css';", main_styles)
         self.assertIn('.browse-toolbar__controls', browse_styles)
+        self.assertIn('.browse-explorer__loading.htmx-request', browse_styles)
         self.assertIn('.browse-toolbar__utilities', browse_styles)
         self.assertIn('.browse-toolbar__setting', browse_styles)
         self.assertNotIn('.browse-filter-panel', browse_styles)

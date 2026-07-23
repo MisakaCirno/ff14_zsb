@@ -177,6 +177,39 @@
   box-shadow: var(--app-shadow-surface);
 }
 
+.browse-explorer {
+  position: relative;
+  display: grid;
+  gap: var(--app-space-5);
+  min-width: 0;
+}
+
+.browse-explorer__loading {
+  position: absolute;
+  top: var(--app-space-2);
+  right: var(--app-space-3);
+  z-index: calc(var(--app-z-sticky) + 1);
+  display: inline-flex;
+  gap: var(--app-space-2);
+  align-items: center;
+  min-height: 2.25rem;
+  padding: var(--app-space-1) var(--app-space-3);
+  color: var(--app-color-text-muted);
+  font-size: var(--app-text-xs);
+  font-weight: var(--app-font-semibold);
+  pointer-events: none;
+  background: var(--app-color-surface);
+  border: 1px solid var(--app-color-border);
+  border-radius: var(--app-radius-control);
+  box-shadow: var(--app-shadow-surface);
+  opacity: 0;
+  transition: opacity var(--app-motion-fast) var(--app-ease-standard);
+}
+
+.browse-explorer__loading.htmx-request {
+  opacity: 1;
+}
+
 .browse-toolbar__topline,
 .browse-toolbar__summary,
 .browse-toolbar__controls {
@@ -475,7 +508,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .browse-announcement {
+  .browse-announcement,
+  .browse-explorer__loading {
     animation: none !important;
     transition: none !important;
   }

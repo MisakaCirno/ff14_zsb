@@ -24,6 +24,8 @@ class InfiniteScrollFrontendContractTests(SimpleTestCase):
         self.assertIn('data-infinite-scroll-sentinel', page_source)
         self.assertIn('hx-swap="outerHTML"', page_source)
         self.assertIn('hx-sync="this:drop"', page_source)
+        self.assertNotIn('hx-push-url', page_source)
+        self.assertNotIn('hx-select', page_source)
         self.assertIn(
             'data-infinite-scroll-end role="status" tabindex="-1"',
             page_source,

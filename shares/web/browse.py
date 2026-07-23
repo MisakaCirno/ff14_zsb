@@ -7,6 +7,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.cache import add_never_cache_headers
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST, require_safe
 from django.views.decorators.vary import vary_on_headers
@@ -42,6 +43,13 @@ _BROWSE_ORDERINGS = {
 }
 _CONTENT_DISPLAY_MODES = {'hide', 'mask', 'show'}
 _DEFAULT_CONTENT_DISPLAY_MODE = 'mask'
+
+
+def _is_browse_explorer_request(request):
+    return (
+        is_htmx_request(request)
+        and request.headers.get('HX-Target') == 'browse-explorer'
+    )
 
 
 def _content_display_mode(request, parameter, legacy_parameter):
@@ -120,7 +128,7 @@ def set_home_feed_mode(request):
     return redirect('index')
 
 
-@vary_on_headers('HX-Request', 'Cookie')
+@vary_on_headers('HX-Request', 'HX-Target', 'Cookie')
 @require_safe
 def index(request):
     queryset, browse_options = _prepare_browse_shares(
@@ -128,10 +136,17 @@ def index(request):
         public_share_queryset(),
     )
     shares = Paginator(queryset, 12).get_page(request.GET.get('page'))
-    if is_htmx_request(request) or request.GET.get('partial') == 'shares':
+    is_browse_explorer_request = _is_browse_explorer_request(request)
+    if (
+        not is_browse_explorer_request
+        and (
+            is_htmx_request(request)
+            or request.GET.get('partial') == 'shares'
+        )
+    ):
         return render_share_cards_response(request, shares, browse_options)
     feed_mode = get_home_feed_mode(request)
-    return render(request, 'shares/index.html', {
+    response = render(request, 'shares/index.html', {
         'shares': shares,
         **browse_options,
         'latest_announcement': Announcement.objects.filter(
@@ -156,9 +171,12 @@ def index(request):
         ),
         'share_cards_next_query': build_share_cards_next_query(request, shares),
     })
+    if is_browse_explorer_request:
+        add_never_cache_headers(response)
+    return response
 
 
-@vary_on_headers('HX-Request', 'Cookie')
+@vary_on_headers('HX-Request', 'HX-Target', 'Cookie')
 @require_safe
 def search(request):
     query = request.GET.get('q', '').strip()
@@ -181,9 +199,16 @@ def search(request):
     ).distinct()
     queryset, browse_options = _prepare_browse_shares(request, queryset)
     shares = Paginator(queryset, 12).get_page(request.GET.get('page'))
-    if is_htmx_request(request) or request.GET.get('partial') == 'shares':
+    is_browse_explorer_request = _is_browse_explorer_request(request)
+    if (
+        not is_browse_explorer_request
+        and (
+            is_htmx_request(request)
+            or request.GET.get('partial') == 'shares'
+        )
+    ):
         return render_share_cards_response(request, shares, browse_options)
-    return render(request, 'shares/index.html', {
+    response = render(request, 'shares/index.html', {
         'shares': shares,
         'search_query': query,
         **browse_options,
@@ -206,6 +231,9 @@ def search(request):
         ),
         'share_cards_next_query': build_share_cards_next_query(request, shares),
     })
+    if is_browse_explorer_request:
+        add_never_cache_headers(response)
+    return response
 
 
 def user_public_profile(request, username):

@@ -248,6 +248,74 @@ class HomeFeedModeTests(TestCase):
         self.assertIn('HX-Request', response.headers['Vary'])
         self.assertIn('Cookie', response.headers['Vary'])
 
+    def test_hx_browse_explorer_request_returns_atomic_filter_state(self):
+        response = self.client.get(
+            reverse('index'),
+            {
+                'category': Share.Category.COMBAT,
+                'spoiler': 'hide',
+                'nsfw': 'show',
+            },
+            HTTP_HX_REQUEST='true',
+            HTTP_HX_TARGET='browse-explorer',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="browse-explorer"', count=1)
+        self.assertContains(
+            response,
+            'class="browse-category-chip active"',
+            count=1,
+        )
+        self.assertContains(
+            response,
+            '<option value="hide" selected>隐藏</option>',
+            html=True,
+        )
+        self.assertContains(
+            response,
+            '<option value="show" selected>显示</option>',
+            html=True,
+        )
+        self.assertContains(response, 'data-browse-results')
+        self.assertEqual(
+            response.context['current_category'],
+            Share.Category.COMBAT,
+        )
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        self.assertIn('HX-Target', response.headers['Vary'])
+
+    def test_hx_search_browse_explorer_preserves_search_state(self):
+        Share.objects.create(
+            title='局部搜索结果',
+            strategy_code='[stgy:partial-search]',
+            author=self.user,
+            visibility=Share.Visibility.PUBLIC,
+            status=Share.Status.APPROVED,
+        )
+
+        response = self.client.get(
+            reverse('search'),
+            {
+                'q': '局部搜索',
+                'spoiler': 'mask',
+                'nsfw': 'hide',
+            },
+            HTTP_HX_REQUEST='true',
+            HTTP_HX_TARGET='browse-explorer',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="browse-explorer"', count=1)
+        self.assertContains(response, '局部搜索结果')
+        self.assertContains(
+            response,
+            'name="q" value="局部搜索"',
+        )
+        self.assertEqual(response.context['search_query'], '局部搜索')
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        self.assertIn('HX-Target', response.headers['Vary'])
+
     def test_hx_infinite_continuation_replaces_sentinel_until_last_page(self):
         for index in range(13, 25):
             Share.objects.create(
