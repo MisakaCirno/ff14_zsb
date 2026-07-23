@@ -15,6 +15,7 @@ class LegacyViewFacadeTests(SimpleTestCase):
             'admin_report_logs',
             'admin_resolve_report',
             'admin_resolve_share_reports',
+            'admin_restriction_list',
             'admin_review_list',
             'admin_review_logs',
             'announcement_list',

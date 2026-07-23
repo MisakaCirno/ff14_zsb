@@ -132,6 +132,8 @@ class ShareEditorPageTests(TestCase):
         self.share.restricted_at = timezone.now()
         self.share.restricted_by = self.author
         self.share.visibility = Share.Visibility.PRIVATE
+        self.share.status = Share.Status.REJECTED
+        self.share.review_feedback = '复审后仍需修改标题'
         self.share.save(
             update_fields=[
                 'restriction_state',
@@ -139,6 +141,8 @@ class ShareEditorPageTests(TestCase):
                 'restricted_at',
                 'restricted_by',
                 'visibility',
+                'status',
+                'review_feedback',
             ],
         )
         self.client.force_login(self.author)
@@ -154,7 +158,9 @@ class ShareEditorPageTests(TestCase):
         )
         page_text = _visible_text(markup)
         self.assertIn('管理员确认的下架原因', page_text)
-        self.assertRegex(page_text, r'保存修改后.*?保持限制.*?重新审核')
+        self.assertIn('复审后仍需修改标题', page_text)
+        self.assertRegex(page_text, r'保存实际修改后.*?重新提交审核.*?审核通过')
+        self.assertIn('保存并重新提交审核', page_text)
         self.assertIn('按照你选择的可见范围开放', page_text)
         self.assertNotIn('其他用户才能访问', page_text)
         submit = probe.matching(attribute='data-share-editor-submit')

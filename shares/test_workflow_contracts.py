@@ -366,6 +366,85 @@ class ShareWriteWorkflowTests(TestCase):
                 self.assertIsNone(share.reviewed_at)
                 self.assertIsNone(share.reviewed_by)
 
+    def test_takedown_moves_through_resubmission_review_and_back_to_restrictions(self):
+        restricted_at = timezone.now()
+        share = self.create_share(
+            restriction_state=Share.RestrictionState.REPORT_TAKEDOWN,
+            restriction_reason='原下架原因',
+            restricted_at=restricted_at,
+            restricted_by=self.admin,
+        )
+        self.client.force_login(self.author)
+
+        self.client.post(
+            reverse('edit_share', args=[share.share_id]),
+            self.edit_form_data(share, title='第一次修正'),
+        )
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, Share.Status.PENDING)
+        self.client.force_login(self.admin)
+        review_page = self.client.get(reverse('admin_review_list'))
+        restriction_page = self.client.get(reverse('admin_restriction_list'))
+        self.assertIn(
+            share.pk,
+            [item['share'].pk for item in review_page.context['review_items']],
+        )
+        self.assertNotIn(
+            share.pk,
+            [item['share'].pk for item in restriction_page.context['review_items']],
+        )
+
+        self.client.post(
+            reverse('admin_reject_share', args=[share.share_id]),
+            {'reason': '仍需修正重复内容'},
+        )
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, Share.Status.REJECTED)
+        self.assertEqual(
+            share.restriction_state,
+            Share.RestrictionState.REPORT_TAKEDOWN,
+        )
+        review_page = self.client.get(reverse('admin_review_list'))
+        restriction_page = self.client.get(reverse('admin_restriction_list'))
+        self.assertNotIn(
+            share.pk,
+            [item['share'].pk for item in review_page.context['review_items']],
+        )
+        self.assertIn(
+            share.pk,
+            [item['share'].pk for item in restriction_page.context['review_items']],
+        )
+        self.assertContains(restriction_page, '仍需修正重复内容')
+
+        self.client.force_login(self.author)
+        self.client.post(
+            reverse('edit_share', args=[share.share_id]),
+            self.edit_form_data(share, title='第二次修正'),
+        )
+        self.client.force_login(self.admin)
+        self.client.post(
+            reverse('admin_approve_share', args=[share.share_id]),
+        )
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, Share.Status.APPROVED)
+        self.assertEqual(
+            share.restriction_state,
+            Share.RestrictionState.CLEAR,
+        )
+        review_page = self.client.get(reverse('admin_review_list'))
+        restriction_page = self.client.get(reverse('admin_restriction_list'))
+        self.assertNotIn(
+            share.pk,
+            [item['share'].pk for item in review_page.context['review_items']],
+        )
+        self.assertNotIn(
+            share.pk,
+            [item['share'].pk for item in restriction_page.context['review_items']],
+        )
+
     def test_legacy_private_cannot_use_private_classification_after_visibility_change(self):
         restricted_at = timezone.now()
         share = self.create_share(

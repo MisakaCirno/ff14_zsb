@@ -252,14 +252,23 @@ def site_message_list_queryset(user, mailbox='inbox'):
 
 
 def admin_task_counts():
-    return {
-        'pending_reviews_count': Share.objects.filter(
-            Q(
-                Q(status=Share.Status.PENDING)
-                | ~Q(restriction_state=Share.RestrictionState.CLEAR)
+    share_counts = Share.objects.filter(
+        deleted_at__isnull=True,
+    ).aggregate(
+        pending_reviews_count=Count(
+            'pk',
+            filter=Q(status=Share.Status.PENDING),
+        ),
+        restricted_shares_count=Count(
+            'pk',
+            filter=(
+                ~Q(restriction_state=Share.RestrictionState.CLEAR)
+                & ~Q(status=Share.Status.PENDING)
             ),
-            deleted_at__isnull=True,
-        ).count(),
+        ),
+    )
+    return {
+        **share_counts,
         'pending_reports_count': Report.objects.filter(
             status=Report.Status.PENDING,
             share__deleted_at__isnull=True,

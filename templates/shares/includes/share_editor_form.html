@@ -58,7 +58,11 @@
                 {% else %}
                 该分享尚未通过内容审核。
                 {% endif %}
-                限制原因：{{ share.restriction_reason }}。保存修改后仍会保持限制并进入重新审核；管理员完成审核或明确处理限制后，分享仍会按照你选择的可见范围开放。
+                限制原因：{{ share.restriction_reason }}。
+                {% if share.status == 'rejected' and share.restriction_state != 'review_rejected' and share.review_feedback %}
+                最近复审意见：{{ share.review_feedback }}。
+                {% endif %}
+                保存实际修改后会重新提交审核；审核通过将解除限制，并按照你选择的可见范围开放；审核未通过则继续保留在下架内容中。
             </p>
         </div>
     </aside>
@@ -293,7 +297,15 @@
                 data-share-editor-submit
                 {% if not editor_mode == 'create' or user.is_authenticated %}aria-describedby="{% if editor_mode == 'edit' and share.is_restricted %}share-editor-restriction-notice {% endif %}share-editor-public-review-notice"{% endif %}>
                 <i class="bi bi-check-circle" aria-hidden="true"></i>
-                <span>{% if editor_mode == 'create' %}创建分享{% else %}保存修改{% endif %}</span>
+                <span>
+                    {% if editor_mode == 'create' %}
+                    创建分享
+                    {% elif share.is_restricted %}
+                    保存并重新提交审核
+                    {% else %}
+                    保存修改
+                    {% endif %}
+                </span>
             </button>
             {% if editor_mode == 'create' %}
             <a href="{% url 'index' %}" class="btn btn-outline-secondary share-editor-actions__cancel">

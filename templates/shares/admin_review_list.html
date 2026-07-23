@@ -1,17 +1,17 @@
 {% extends 'base.html' %}
 
-{% block title %}审核列表{% endblock %}
+{% block title %}{{ page_title }}{% endblock %}
 
 {% block content %}
 <div class="container moderation-page">
-    {% include 'shares/includes/page_header.html' with icon='bi bi-shield-check' eyebrow='内容治理' title='审核与限制队列' summary='集中处理待审核分享、历史限制确认和受限内容复核。所有操作都会保留审计记录，并向相关用户发送站内通知。' only %}
+    {% include 'shares/includes/page_header.html' with icon='bi bi-shield-check' eyebrow='内容治理' title=header_title summary=header_summary only %}
 
     {% include 'shares/includes/admin_tabs.html' %}
 
     <div class="moderation-summary" role="status">
         <p>
             <i class="bi bi-collection" aria-hidden="true"></i>
-            共有 <strong>{{ shares.paginator.count }}</strong> 个待审核或受限分享
+            共有 <strong>{{ shares.paginator.count }}</strong> {{ count_label }}
         </p>
         {% if shares.has_other_pages %}
         <p>第 <strong>{{ shares.number }}</strong> / <strong>{{ shares.paginator.num_pages }}</strong> 页</p>
@@ -27,18 +27,17 @@
                 <span class="empty-state__icon" aria-hidden="true">
                     <i class="bi bi-check2-all"></i>
                 </span>
-                <h2 class="empty-state__title" id="moderation-review-empty-title">没有待审核或受限分享</h2>
-                <p class="empty-state__message">所有审核与内容限制都已处理完毕。</p>
+                <h2 class="empty-state__title" id="moderation-review-empty-title">{{ empty_title }}</h2>
+                <p class="empty-state__message">{{ empty_message }}</p>
             </div>
         </section>
         {% endfor %}
     </div>
 
-    {% include 'shares/includes/pagination.html' with page_obj=shares aria_label='审核队列分页' nav_class='mt-2' base_url=pagination_base_url %}
+    {% include 'shares/includes/pagination.html' with page_obj=shares aria_label=pagination_aria_label nav_class='mt-2' base_url=pagination_base_url %}
 
     {% if review_items %}
-    {% url 'admin_review_list' as review_queue_url %}
-    {% include 'shares/includes/moderation_review_resolution_modal.html' with resolution_error=review_resolution_error resolution_form=review_resolution_form resolution_error_id=review_resolution_error_id resolution_help_id=review_resolution_help_id resolution_version=review_resolution_version fallback_action=review_queue_url return_page=shares.number csrf_token=csrf_token only %}
+    {% include 'shares/includes/moderation_review_resolution_modal.html' with resolution_error=review_resolution_error resolution_form=review_resolution_form resolution_error_id=review_resolution_error_id resolution_help_id=review_resolution_help_id resolution_version=review_resolution_version fallback_action=pagination_base_url return_page=shares.number csrf_token=csrf_token only %}
     {% endif %}
 </div>
 {% endblock %}

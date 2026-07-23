@@ -45,6 +45,12 @@
                 <strong>{{ share.get_restriction_state_display }}：</strong>
                 <span id="reviewRestrictionReason{{ share.share_id }}">{{ share.restriction_reason_preview }}</span>
             </div>
+            {% if share.status == 'rejected' and share.restriction_state != 'review_rejected' and share.review_feedback_preview %}
+            <div class="alert alert-warning mb-0 py-2 small moderation-review-card__state-copy" role="note">
+                <strong>最近复审意见：</strong>
+                <span>{{ share.review_feedback_preview }}</span>
+            </div>
+            {% endif %}
             {% endif %}
 
             <section class="moderation-history" aria-labelledby="moderation-history-title-{{ share.share_id }}">
@@ -92,15 +98,6 @@
             <div class="moderation-action-grid" role="group" aria-label="恢复《{{ share.title }}》未完成的管理操作">
                 {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action=item.invalid_action confirmation_version=item.confirmation_version button_class='btn btn-sm btn-warning' button_icon='bi bi-arrow-clockwise' button_label='检查未完成的操作' only %}
             </div>
-            {% elif share.restriction_state == 'legacy_private' %}
-            <div class="moderation-action-grid" role="group" aria-label="确认《{{ share.title }}》的历史私密状态">
-                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='confirm' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-danger' button_icon='bi bi-shield-lock' button_label='确认为历史下架' only %}
-                {% if share.visibility == 'private' %}
-                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='release' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-success' button_icon='bi bi-person-lock' button_label='确认为作者私密' only %}
-                {% else %}
-                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">需通过审核后解除</span>
-                {% endif %}
-            </div>
             {% elif share.status == 'pending' %}
             <div class="moderation-action-grid" role="group" aria-label="审核《{{ share.title }}》">
                 <form method="post" action="{% url 'admin_approve_share' share.share_id %}">
@@ -112,6 +109,15 @@
                 </form>
                 {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='reject' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-danger' button_icon='bi bi-x-circle' button_label='拒绝' only %}
             </div>
+            {% elif share.restriction_state == 'legacy_private' %}
+            <div class="moderation-action-grid" role="group" aria-label="确认《{{ share.title }}》的历史私密状态">
+                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='confirm' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-danger' button_icon='bi bi-shield-lock' button_label='确认为历史下架' only %}
+                {% if share.visibility == 'private' %}
+                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='release' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-success' button_icon='bi bi-person-lock' button_label='确认为作者私密' only %}
+                {% else %}
+                <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">需通过审核后解除</span>
+                {% endif %}
+            </div>
             {% elif share.is_restricted and share.status == 'approved' %}
             <div class="moderation-action-grid" role="group" aria-label="复核《{{ share.title }}》的内容限制">
                 {% if share.restriction_state == 'report_takedown' %}
@@ -120,7 +126,7 @@
                 {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='release' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-success' button_icon='bi bi-unlock' button_label='解除限制' only %}
             </div>
             {% else %}
-            <p class="small text-muted mb-0">等待作者修改并重新提交审核。</p>
+            <p class="small text-muted mb-0">等待作者修改并重新提交审核；提交后会转入审核列表。</p>
             {% endif %}
         </footer>
     </article>

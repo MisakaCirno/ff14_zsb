@@ -247,6 +247,23 @@ class ShareDetailPresentationTests(TestCase):
         feedback_detail = self.detail_for(rejected, self.author)
         self.assertEqual(feedback_detail.notice.feedback, '请补充必要说明')
 
+    def test_rejected_takedown_prioritizes_latest_review_feedback_for_author(self):
+        share = Share.objects.create(
+            title='下架后复审未通过',
+            strategy_code='[stgy:takedown-review-feedback]',
+            author=self.author,
+            status=Share.Status.REJECTED,
+            review_feedback='仍需删除重复内容',
+            restriction_state=Share.RestrictionState.REPORT_TAKEDOWN,
+            restriction_reason='最初因重复内容下架',
+            restricted_at=timezone.now(),
+        )
+
+        detail = self.detail_for(share, self.author)
+
+        self.assertEqual(detail.notice.feedback, '仍需删除重复内容')
+        self.assertEqual(detail.notice.feedback_label, '最近复审意见')
+
     def test_legacy_private_notice_explains_fail_closed_classification(self):
         legacy = Share.objects.create(
             title='旧版私密详情',

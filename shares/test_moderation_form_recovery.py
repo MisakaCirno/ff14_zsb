@@ -159,7 +159,7 @@ class ModerationFormRecoveryTests(TestCase):
             'version': form['version'].value(),
         })
 
-        self.assertRedirects(retry, reverse('admin_review_list'))
+        self.assertRedirects(retry, reverse('admin_restriction_list'))
         share.refresh_from_db()
         self.assertEqual(share.restriction_reason, '保留这段人工复核说明')
         self.assertTrue(ShareLog.objects.filter(

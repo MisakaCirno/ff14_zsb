@@ -115,7 +115,10 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
         )
         self.assertIn('aria-current="page"', tabs_source)
         self.assertIn('moderation-tabs__indicator', tabs_source)
-        self.assertIn('有 {{ pending_reviews_count }} 个待审核或受限项目', tabs_source)
+        self.assertIn('有 {{ pending_reviews_count }} 个待审核项目', tabs_source)
+        self.assertIn("admin_restriction_list", tabs_source)
+        self.assertIn('下架内容', tabs_source)
+        self.assertIn('{{ restricted_shares_count }}', tabs_source)
         self.assertNotIn('New alerts', tabs_source)
         self.assertNotIn('style=', tabs_source)
 
@@ -220,7 +223,7 @@ class ReviewFrontendRenderingContractTests(TestCase):
             restricted_at=timezone.now(),
             restricted_by=self.admin,
         )
-        response = self.client.get(reverse('admin_review_list'))
+        response = self.client.get(reverse('admin_restriction_list'))
         item = next(
             item for item in response.context['review_items']
             if item['share'].pk == share.pk
@@ -239,7 +242,7 @@ class ReviewFrontendRenderingContractTests(TestCase):
             },
         )
 
-        self.assertRedirects(confirmation, reverse('admin_review_list'))
+        self.assertRedirects(confirmation, reverse('admin_restriction_list'))
         self.assertTrue(ShareLog.objects.filter(
             share=share,
             action=ShareLog.ActionType.RESTRICTION_CONFIRM,

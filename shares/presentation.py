@@ -235,14 +235,26 @@ def _share_detail_notice(share, *, can_see_rejected_state):
                 '管理员通过后，分享仍会按照当前可见范围开放。'
             )
             tone = 'danger'
+        show_latest_review = (
+            share.status == Share.Status.REJECTED
+            and bool(share.review_feedback)
+        )
         return ShareDetailNoticeViewModel(
             key=share.restriction_state,
             title=title,
             message=message,
             tone=tone,
             icon='bi bi-shield-lock-fill',
-            feedback=share.restriction_reason,
-            feedback_label='限制原因',
+            feedback=(
+                share.review_feedback
+                if show_latest_review
+                else share.restriction_reason
+            ),
+            feedback_label=(
+                '最近复审意见'
+                if show_latest_review
+                else '限制原因'
+            ),
         )
     if (
         share.status == Share.Status.PENDING

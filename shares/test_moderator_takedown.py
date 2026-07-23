@@ -219,7 +219,7 @@ class ModeratorTakedownWorkflowTests(TestCase):
             {'reason': '复核完成，可以恢复访问'},
         )
 
-        self.assertRedirects(response, reverse('admin_review_list'))
+        self.assertRedirects(response, reverse('admin_restriction_list'))
         self.share.refresh_from_db()
         self.assertEqual(self.share.status, Share.Status.APPROVED)
         self.assertEqual(

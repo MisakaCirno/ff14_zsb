@@ -71,6 +71,25 @@
   border-color: var(--app-color-primary);
 }
 
+.moderation-tabs__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding-inline: var(--app-space-1);
+  color: var(--app-color-text-muted);
+  background: var(--app-color-surface-muted);
+  border-radius: var(--app-radius-control);
+  font-size: var(--app-text-xs);
+  line-height: 1;
+}
+
+.moderation-tabs__link.active .moderation-tabs__count {
+  color: var(--app-color-primary);
+  background: var(--app-color-surface);
+}
+
 .moderation-summary {
   display: flex;
   flex-wrap: wrap;

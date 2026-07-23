@@ -411,7 +411,7 @@ class ModerationWorkflowContractTests(TestCase):
 
         response = self.client.post(url, {'reason': '管理员复核确认可恢复'})
 
-        self.assertRedirects(response, reverse('admin_review_list'))
+        self.assertRedirects(response, reverse('admin_restriction_list'))
         share.refresh_from_db()
         self.assertEqual(share.status, Share.Status.APPROVED)
         self.assertEqual(share.restriction_state, Share.RestrictionState.CLEAR)
@@ -459,7 +459,7 @@ class ModerationWorkflowContractTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, reverse('admin_review_list'))
+        self.assertRedirects(response, reverse('admin_restriction_list'))
         share.refresh_from_db()
         self.assertEqual(
             share.restriction_state,
@@ -496,8 +496,8 @@ class ModerationWorkflowContractTests(TestCase):
         first = self.client.post(url, payload)
         replay = self.client.post(url, payload)
 
-        self.assertRedirects(first, reverse('admin_review_list'))
-        self.assertRedirects(replay, reverse('admin_review_list'))
+        self.assertRedirects(first, reverse('admin_restriction_list'))
+        self.assertRedirects(replay, reverse('admin_restriction_list'))
         self.assertEqual(ShareLog.objects.filter(
             share=share,
             action=ShareLog.ActionType.RESTRICTION_CONFIRM,
@@ -589,7 +589,14 @@ class ModerationWorkflowContractTests(TestCase):
                     {'reason': '尝试绕过审核'},
                 )
 
-                self.assertRedirects(response, reverse('admin_review_list'))
+                self.assertRedirects(
+                    response,
+                    reverse(
+                        'admin_review_list'
+                        if status == Share.Status.PENDING
+                        else 'admin_restriction_list'
+                    ),
+                )
                 share.refresh_from_db()
                 self.assertEqual(share.status, status)
                 self.assertEqual(
@@ -643,7 +650,7 @@ class ModerationWorkflowContractTests(TestCase):
             message_type=SiteMessage.MessageType.SHARE_RESTORED,
         ).exists())
 
-    def test_review_queue_exposes_audited_release_for_approved_restriction(self):
+    def test_restriction_list_exposes_audited_release_for_approved_restriction(self):
         share = self.create_share(
             **self.restriction_fields(
                 state=Share.RestrictionState.REPORT_TAKEDOWN,
@@ -665,7 +672,7 @@ class ModerationWorkflowContractTests(TestCase):
         self.assertIsNone(log.user)
         self.client.force_login(self.admin)
 
-        response = self.client.get(reverse('admin_review_list'))
+        response = self.client.get(reverse('admin_restriction_list'))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, share.title)
@@ -682,7 +689,8 @@ class ModerationWorkflowContractTests(TestCase):
         self.assertContains(response, '举报下架限制')
         self.assertNotContains(response, '<i class="bi bi-hourglass-split"></i> 待审核')
         self.assertContains(response, '解除限制')
-        self.assertEqual(response.context['pending_reviews_count'], 1)
+        self.assertEqual(response.context['pending_reviews_count'], 0)
+        self.assertEqual(response.context['restricted_shares_count'], 1)
 
     def test_non_staff_user_cannot_open_moderation_queue(self):
         self.client.force_login(self.regular_user)

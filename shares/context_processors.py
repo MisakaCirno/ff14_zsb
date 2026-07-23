@@ -17,11 +17,14 @@ def admin_counts(request):
     if is_moderator(request.user):
         counts = admin_task_counts()
         pending_reviews_count = counts['pending_reviews_count']
+        restricted_shares_count = counts['restricted_shares_count']
         pending_reports_count = counts['pending_reports_count']
         context.update({
             'pending_reviews_count': pending_reviews_count,
+            'restricted_shares_count': restricted_shares_count,
             'pending_reports_count': pending_reports_count,
             'global_pending_reviews_count': pending_reviews_count,
+            'global_restricted_shares_count': restricted_shares_count,
             'global_pending_reports_count': pending_reports_count,
             'has_admin_actions': pending_reviews_count + pending_reports_count > 0
         })

@@ -10,7 +10,19 @@
                 <span class="moderation-tabs__label">审核列表</span>
                 {% if pending_reviews_count > 0 %}
                 <span class="moderation-tabs__indicator" aria-hidden="true"></span>
-                <span class="visually-hidden">有 {{ pending_reviews_count }} 个待审核或受限项目</span>
+                <span class="visually-hidden">有 {{ pending_reviews_count }} 个待审核项目</span>
+                {% endif %}
+            </a>
+        </li>
+        <li class="nav-item moderation-tabs__item">
+            <a
+                class="nav-link ui-segmented-nav__link moderation-tabs__link{% if active_tab == 'admin_restriction_list' %} active{% endif %}"
+                href="{% url 'admin_restriction_list' %}"
+                {% if active_tab == 'admin_restriction_list' %}aria-current="page"{% endif %}>
+                <i class="bi bi-shield-slash" aria-hidden="true"></i>
+                <span class="moderation-tabs__label">下架内容</span>
+                {% if restricted_shares_count > 0 %}
+                <span class="moderation-tabs__count" aria-label="{{ restricted_shares_count }} 个下架项目">{{ restricted_shares_count }}</span>
                 {% endif %}
             </a>
         </li>
