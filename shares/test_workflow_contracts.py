@@ -8,7 +8,7 @@ from unittest import skipUnless
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.db import close_old_connections, connection
+from django.db import close_old_connections, connection, connections
 from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -1235,7 +1235,7 @@ class InteractionConcurrencyTests(TransactionTestCase):
                 response = client.post(url, {'target_state': target_state})
                 return response.status_code, response.json()
             finally:
-                close_old_connections()
+                connections.close_all()
 
         with ThreadPoolExecutor(max_workers=len(clients)) as executor:
             futures = [executor.submit(send, client) for client in clients]
@@ -1264,7 +1264,7 @@ class InteractionConcurrencyTests(TransactionTestCase):
                     {'target_state': 'active'},
                 )
             finally:
-                close_old_connections()
+                connections.close_all()
 
         with (
             patch.object(
