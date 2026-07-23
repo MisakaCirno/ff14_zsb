@@ -605,20 +605,27 @@ print("Production-copy bootstrap contract tests passed.")
 try {
     Set-Content -LiteralPath $fixtureScript -Value $fixtureSource -Encoding UTF8
     $fixtureOutput = [System.Collections.Generic.List[string]]::new()
-    & $PythonExecutable `
-        -I `
-        -S `
-        -B `
-        -X utf8 `
-        $fixtureScript `
-        $bootstrap `
-        $temporaryRoot 2>&1 |
-        ForEach-Object {
-            $line = $_.ToString()
-            $fixtureOutput.Add($line)
-            Write-Host $line
-        }
-    $exitCode = $LASTEXITCODE
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $PythonExecutable `
+            -I `
+            -S `
+            -B `
+            -X utf8 `
+            $fixtureScript `
+            $bootstrap `
+            $temporaryRoot 2>&1 |
+            ForEach-Object {
+                $line = $_.ToString()
+                $fixtureOutput.Add($line)
+                Write-Host $line
+            }
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     $global:LASTEXITCODE = 0
     if ($exitCode -ne 0 -and $env:GITHUB_ACTIONS -eq 'true') {
         $details = (

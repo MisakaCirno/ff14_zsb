@@ -163,7 +163,7 @@ jobs:
 
       - name: Verify project on PostgreSQL
         shell: pwsh
-        run: .\verify.ps1 -Profile Fast -DjangoParallel 4 -PythonExecutable python
+        run: .\verify.ps1 -Profile Fast -DjangoParallel 1 -PythonExecutable python
 
   verify-release-windows:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

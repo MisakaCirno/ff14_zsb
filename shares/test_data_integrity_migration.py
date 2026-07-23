@@ -233,16 +233,16 @@ class DataIntegrityConstraintMigrationTests(TransactionTestCase):
             user_id=user.pk,
             nickname='保持不变的非法来源记录',
             bio='迁移必须先失败，不能猜测修复',
-            home_feed_mode='unsupported-mode',
+            home_feed_mode='invalid',
         )
         invalid_enums = Share.objects.create(
             share_id='bad-enums',
             title='invalid enum and counters',
             strategy_code='[stgy:bad-enums]',
             author_id=user.pk,
-            category='unknown-category',
-            visibility='unknown-visibility',
-            status='unknown-status',
+            category='invalid',
+            visibility='invalid',
+            status='invalid',
             views=-1,
             copies=-2,
         )
@@ -293,7 +293,7 @@ class DataIntegrityConstraintMigrationTests(TransactionTestCase):
             share_id=invalid_enums.pk,
             reporter_id=reporter.pk,
             reason='invalid report status',
-            status='unknown-status',
+            status='invalid',
             resolved_at=now,
         )
         pending_with_resolution = Report.objects.create(
@@ -440,15 +440,15 @@ class DataIntegrityConstraintMigrationTests(TransactionTestCase):
         invalid_writes = {
             'profile feed mode': lambda: UserProfile.objects.filter(
                 pk=author_profile.pk,
-            ).update(home_feed_mode='unsupported-mode'),
+            ).update(home_feed_mode='invalid'),
             'share category': lambda: Share.objects.filter(pk=approved.pk).update(
-                category='unsupported-category',
+                category='invalid',
             ),
             'share visibility': lambda: Share.objects.filter(pk=approved.pk).update(
-                visibility='unsupported-visibility',
+                visibility='invalid',
             ),
             'share status': lambda: Share.objects.filter(pk=approved.pk).update(
-                status='unsupported-status',
+                status='invalid',
             ),
             'negative views': lambda: Share.objects.filter(pk=approved.pk).update(
                 views=-1,
@@ -464,7 +464,7 @@ class DataIntegrityConstraintMigrationTests(TransactionTestCase):
             ).update(reviewed_at=None),
             'report status': lambda: Report.objects.filter(
                 pk=resolved_report.pk,
-            ).update(status='unsupported-status'),
+            ).update(status='invalid'),
             'pending report resolution data': lambda: Report.objects.filter(
                 pk=pending_report.pk,
             ).update(resolution_reason='not allowed while pending'),
