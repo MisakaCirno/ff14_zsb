@@ -1,3 +1,5 @@
+from unittest import skipUnless
+
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
@@ -5,6 +7,7 @@ from django.test import TransactionTestCase
 from shares.models import Announcement
 
 
+@skipUnless(connection.vendor == 'sqlite', 'SQLite-specific migration contract')
 class AnnouncementStructureMigrationTests(TransactionTestCase):
     maxDiff = None
     migrate_from = ('shares', '0027_classify_legacy_private_shares')

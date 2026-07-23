@@ -149,6 +149,13 @@ class DeploymentSchemaInspectionTests(SimpleTestCase):
 
 
 class DeploymentSchemaCommandTests(SimpleTestCase):
+    sqlite_databases = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': 'C:\\site.sqlite3',
+        },
+    }
+
     def current_report(self, **updates):
         report = {
             'format': 'ffxivshare-deployment-schema-status',
@@ -176,6 +183,10 @@ class DeploymentSchemaCommandTests(SimpleTestCase):
         'shares.management.commands.check_deployment_schema.'
         'inspect_sqlite_deployment_schema'
     )
+    @patch(
+        'shares.management.commands.check_deployment_schema.settings.DATABASES',
+        sqlite_databases,
+    )
     def test_require_current_allows_safe_database(self, inspect):
         inspect.return_value = self.current_report()
 
@@ -192,6 +203,10 @@ class DeploymentSchemaCommandTests(SimpleTestCase):
     @patch(
         'shares.management.commands.check_deployment_schema.'
         'inspect_sqlite_deployment_schema'
+    )
+    @patch(
+        'shares.management.commands.check_deployment_schema.settings.DATABASES',
+        sqlite_databases,
     )
     def test_require_current_rejects_pending_migrations(self, inspect):
         inspect.return_value = self.current_report(

@@ -1,3 +1,5 @@
+from unittest import skipUnless
+
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.exceptions import IrreversibleError
@@ -74,6 +76,7 @@ class ModeratorTakedownMigrationTests(TransactionTestCase):
         choices = dict(Share._meta.get_field('restriction_state').choices)
         self.assertEqual(choices['moderator_takedown'], '管理员下架限制')
 
+    @skipUnless(connection.vendor == 'sqlite', 'SQLite-specific sequence contract')
     def test_forward_migration_preserves_share_sequence_high_water_mark(self):
         sequence_floor = self._unused_sequence_floor()
         self._set_share_sequence(sequence_floor)
@@ -82,6 +85,7 @@ class ModeratorTakedownMigrationTests(TransactionTestCase):
 
         self.assertEqual(self._share_sequence(), sequence_floor)
 
+    @skipUnless(connection.vendor == 'sqlite', 'SQLite-specific sequence contract')
     def test_reverse_migration_preserves_share_sequence_high_water_mark(self):
         MigrationExecutor(connection).migrate([self.migrate_to])
         sequence_floor = self._unused_sequence_floor()
