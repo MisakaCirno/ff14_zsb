@@ -76,6 +76,7 @@ import re
 import shutil
 import signal
 import stat
+import subprocess
 import sys
 
 
@@ -251,13 +252,19 @@ opaque_source = test_root / "does-not-exist" / "production.sqlite3"
 os.environ["FFXIVSHARE_PRODUCTION_SECRET"] = "must-not-reach-inner"
 
 
-def config_for(name: str, exit_code: int, *, tamper: bool = False):
+def config_for(
+    name: str,
+    exit_code: int,
+    *,
+    tamper: bool = False,
+    run_parent: Path | None = None,
+):
     output = outputs / f"{name}.json"
     return (
         module.BootstrapConfig(
             repository_root=repository,
             python_executable=Path(sys.executable).resolve(),
-            run_root=runs / name,
+            run_root=(run_parent or runs) / name,
             mode="approved-rehearsal",
             inner_entrypoint=entrypoint,
             inner_arguments=(
@@ -570,15 +577,33 @@ assert tamper_completion["execution_bundle_unchanged"] is False
 assert tamper_output.is_file()
 
 # The ordinary private user-profile chain is a positive regression for the
-# default C:\ Authenticated Users:(AD) ACE. A shared temporary parent remains a
-# deliberate fail-closed case because another principal could affect a new child.
+# default C:\ Authenticated Users:(AD) ACE. The fail-closed case grants an
+# explicit untrusted ACE instead of assuming the runner's temporary ACL.
 if os.name == "nt":
     positive_parent = Path.home() / "ffxivshare-bootstrap-prospective-run"
     assert (
         module._secure_run_root(positive_parent, parent_only=True)
         == "windows_parent_chain_delete_write_acl_review_passed"
     )
-    acl_config, _acl_output = config_for("windows-acl-fail-closed", 0)
+    insecure_parent = test_root / "windows-insecure-parent"
+    insecure_parent.mkdir()
+    grant = subprocess.run(
+        [
+            "icacls.exe",
+            str(insecure_parent),
+            "/grant",
+            "*S-1-1-0:(OI)(CI)M",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert grant.returncode == 0, (grant.stdout, grant.stderr)
+    acl_config, _acl_output = config_for(
+        "windows-acl-fail-closed",
+        0,
+        run_parent=insecure_parent,
+    )
     try:
         module.run_bootstrap(acl_config)
     except module.BootstrapConfigurationError:
