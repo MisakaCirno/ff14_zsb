@@ -454,20 +454,21 @@ fast_arguments = proposal_arguments(
     proposal_id="proposal-contract-fast-proposal",
 )
 
-# The real Windows ACL hook must remain fail-closed for the shared temporary
-# parent used by Codex. Positive test runs use a callback scoped to their unique
-# synthetic RunRoot and its approval directory only.
+# The real Windows ACL hook must remain fail-closed for an explicitly untrusted
+# parent. Do not depend on the system temporary directory ACL: hosted runners
+# may correctly make that directory private.
 if os.name == "nt":
-    real_acl_config = config_for(acl_probe_root, fast_arguments)
+    acl_probe_root.mkdir()
+    set_dacl(acl_probe_root, "D:P(A;OICI;FA;;;S-1-1-0)")
+    real_acl_run_root = acl_probe_root / "run"
+    real_acl_config = config_for(real_acl_run_root, fast_arguments)
     try:
         bootstrap.run_bootstrap(real_acl_config)
     except bootstrap.BootstrapConfigurationError:
         pass
     else:
         raise AssertionError("The production Windows ACL hook did not fail closed")
-    if acl_probe_root.exists():
-        assert not (acl_probe_root / "code").exists()
-        assert not (acl_probe_root / "evidence" / "bootstrap.json").exists()
+    assert not real_acl_run_root.exists()
 
 
 def scoped_acl(run_root: Path):
@@ -1007,16 +1008,46 @@ print("Production-copy policy-proposal contract tests passed.")
 $scriptExitCode = 1
 try {
     Set-Content -LiteralPath $fixtureScript -Value $fixtureSource -Encoding UTF8
-    & $PythonExecutable `
-        -I -S -B -X utf8 `
-        $fixtureScript `
-        $bootstrap `
-        $RepositoryRoot `
-        $temporaryRoot `
-        $aclProbeRoot `
-        $(if ($IncludeSlow) { '1' } else { '0' })
-    $pythonExitCode = $LASTEXITCODE
+    $fixtureOutput = [System.Collections.Generic.List[string]]::new()
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & $PythonExecutable `
+            -I -S -B -X utf8 `
+            $fixtureScript `
+            $bootstrap `
+            $RepositoryRoot `
+            $temporaryRoot `
+            $aclProbeRoot `
+            $(if ($IncludeSlow) { '1' } else { '0' }) 2>&1 |
+            ForEach-Object {
+                $line = $_.ToString()
+                $fixtureOutput.Add($line)
+                Write-Host $line
+            }
+        $pythonExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     $global:LASTEXITCODE = 0
+    if ($pythonExitCode -ne 0 -and $env:GITHUB_ACTIONS -eq 'true') {
+        $details = (
+            $fixtureOutput |
+            Select-Object -Last 40
+        ) -join "`n"
+        if ($details.Length -gt 6000) {
+            $details = $details.Substring($details.Length - 6000)
+        }
+        $escapedDetails = $details.
+            Replace('%', '%25').
+            Replace("`r", '%0D').
+            Replace("`n", '%0A')
+        Write-Host (
+            '::error title=Production-copy policy proposal details::' +
+            $escapedDetails
+        )
+    }
     Assert-Contract `
         -Condition ($pythonExitCode -eq 0) `
         -Message "Policy-proposal contract failed with exit code $pythonExitCode."
