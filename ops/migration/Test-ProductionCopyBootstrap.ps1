@@ -597,6 +597,8 @@ if os.name == "nt":
         check=False,
         capture_output=True,
         text=True,
+        encoding="mbcs",
+        errors="replace",
     )
     assert grant.returncode == 0, (grant.stdout, grant.stderr)
     acl_config, _acl_output = config_for(
