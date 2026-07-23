@@ -604,9 +604,39 @@ print("Production-copy bootstrap contract tests passed.")
 
 try {
     Set-Content -LiteralPath $fixtureScript -Value $fixtureSource -Encoding UTF8
-    & $PythonExecutable -I -S -B -X utf8 $fixtureScript $bootstrap $temporaryRoot
+    $fixtureOutput = [System.Collections.Generic.List[string]]::new()
+    & $PythonExecutable `
+        -I `
+        -S `
+        -B `
+        -X utf8 `
+        $fixtureScript `
+        $bootstrap `
+        $temporaryRoot 2>&1 |
+        ForEach-Object {
+            $line = $_.ToString()
+            $fixtureOutput.Add($line)
+            Write-Host $line
+        }
     $exitCode = $LASTEXITCODE
     $global:LASTEXITCODE = 0
+    if ($exitCode -ne 0 -and $env:GITHUB_ACTIONS -eq 'true') {
+        $details = (
+            $fixtureOutput |
+            Select-Object -Last 40
+        ) -join "`n"
+        if ($details.Length -gt 6000) {
+            $details = $details.Substring($details.Length - 6000)
+        }
+        $escapedDetails = $details.
+            Replace('%', '%25').
+            Replace("`r", '%0D').
+            Replace("`n", '%0A')
+        Write-Host (
+            '::error title=Production-copy bootstrap details::' +
+            $escapedDetails
+        )
+    }
     Assert-Contract `
         -Condition ($exitCode -eq 0) `
         -Message "Production-copy bootstrap contract failed with exit code $exitCode."
