@@ -91,14 +91,11 @@
   line-height: 1.35;
 }
 
-.browse-card__category-icon .bi {
+.browse-card__category-svg {
   display: block;
-  line-height: 1;
-}
-
-.browse-card__category-icon .bi::before {
-  display: block;
-  vertical-align: 0;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
 }
 
 .browse-card--browse .browse-card__title-link {

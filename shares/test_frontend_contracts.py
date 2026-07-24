@@ -701,8 +701,17 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             card_source,
         )
         self.assertIn('aria-label="{{ share.get_category_display }}"', card_source)
-        self.assertIn('bi bi-palette', card_source)
-        self.assertIn('bi bi-shield-shaded', card_source)
+        self.assertEqual(card_source.count('class="browse-card__category-svg"'), 2)
+        self.assertIn('viewBox="0 0 16 16"', card_source)
+        self.assertIn('focusable="false"', card_source)
+        self.assertNotIn(
+            'class="bi bi-shield-shaded" aria-hidden="true"></i>',
+            card_source,
+        )
+        self.assertNotIn(
+            'class="bi bi-palette" aria-hidden="true"></i>',
+            card_source,
+        )
         self.assertIn('data-copies-count>{{ share.copies }}', card_source)
         self.assertIn('data-managed-share', card_source)
         self.assertIn("{% if card_variant == 'management' %}", card_source)
@@ -748,6 +757,15 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 'height: 1.35em;',
                 'place-items: center;',
                 'color: var(--app-color-text-muted);',
+            ),
+        )
+        self.assert_css_rule_contains(
+            card_styles,
+            '.browse-card__category-svg',
+            (
+                'display: block;',
+                'width: 1rem;',
+                'height: 1rem;',
             ),
         )
         self.assert_css_rule_contains(
