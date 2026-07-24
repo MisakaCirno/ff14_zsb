@@ -681,6 +681,9 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
     def test_public_share_cards_use_explicit_accessible_variants(self):
         card_source = self.read_template('shares/includes/share_card.html')
+        date_source = self.read_template(
+            'shares/includes/share_card_date.html'
+        )
         list_source = self.read_template('shares/includes/share_cards.html')
         profile_source = self.read_template('shares/user_public_profile.html')
         my_content_source = self.read_template('shares/my_shares.html')
@@ -724,6 +727,15 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
         self.assertIn('data-copies-count>{{ share.copies }}', card_source)
         self.assertIn('data-managed-share', card_source)
+        self.assertNotIn('bi bi-calendar3', card_source)
+        self.assertIn(
+            "includes/share_card_date.html' with date_value=",
+            card_source,
+        )
+        for date_format in ('Y-m-d', 'y-m-d', 'y-m', 'y'):
+            self.assertIn(f'date:"{date_format}"', date_source)
+        self.assertIn('class="visually-hidden"', date_source)
+        self.assertIn('aria-hidden="true"', date_source)
         self.assertIn("{% if card_variant == 'management' %}", card_source)
         self.assertIn("{% elif card_variant == 'collection' %}", card_source)
         self.assertNotIn("card_variant == 'profile'", card_source)
@@ -791,12 +803,17 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('border: 1px solid var(--app-color-border);', card_styles)
         self.assertIn('border-color: var(--app-color-border-strong);', card_styles)
         self.assertIn('.browse-card__actions', card_styles)
+        self.assertIn('.browse-card__date-format--full', card_styles)
+        self.assertIn('.browse-card__date-format--compact', card_styles)
+        self.assertIn('.browse-card__date-format--month', card_styles)
+        self.assertIn('.browse-card__date-format--year', card_styles)
         self.assertIn('.browse-card__action-icon--favorite', card_styles)
         self.assertIn('.browse-card__action-icon--like', card_styles)
         self.assertIn('.browse-card__action-icon--copy', card_styles)
         self.assertIn('.management-card__actions', card_styles)
         self.assertIn('@container browse-card (max-width: 18rem)', card_styles)
         self.assertIn('@container browse-card (max-width: 15rem)', card_styles)
+        self.assertIn('@container browse-card (max-width: 11rem)', card_styles)
         self.assertIn("import { performShareCopy } from './share-copy'", action_source)
         self.assertIn("icon.setAttribute('aria-hidden', 'true')", copy_source)
         self.assertIn('updateSnapshotCopyCounters(snapshot, value)', copy_source)

@@ -1,0 +1,10 @@
+<time
+    class="browse-card__date"
+    datetime="{{ date_value|date:'c' }}"
+    title="{% if date_context %}{{ date_context }}：{% endif %}{{ date_value|date:'Y-m-d' }}">
+    <span class="visually-hidden">{{ date_value|date:"Y年m月d日" }}</span>
+    <span class="browse-card__date-format browse-card__date-format--full" aria-hidden="true">{{ date_value|date:"Y-m-d" }}</span>
+    <span class="browse-card__date-format browse-card__date-format--compact" aria-hidden="true">{{ date_value|date:"y-m-d" }}</span>
+    <span class="browse-card__date-format browse-card__date-format--month" aria-hidden="true">{{ date_value|date:"y-m" }}</span>
+    <span class="browse-card__date-format browse-card__date-format--year" aria-hidden="true">{{ date_value|date:"y" }}</span>
+</time>

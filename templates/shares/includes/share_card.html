@@ -51,11 +51,10 @@
                 </span>
                 {% endif %}
                 <span class="browse-card__meta-item">
-                    <i class="bi bi-calendar3" aria-hidden="true"></i>
                     {% if card_variant == 'collection' %}
-                    <time datetime="{{ item.added_at|date:'c' }}" title="加入合集时间">{{ item.added_at|date:"Y-m-d" }}</time>
+                    {% include 'shares/includes/share_card_date.html' with date_value=item.added_at date_context='加入合集时间' only %}
                     {% else %}
-                    <time datetime="{{ share.created_at|date:'c' }}">{{ share.created_at|date:"Y-m-d" }}</time>
+                    {% include 'shares/includes/share_card_date.html' with date_value=share.created_at only %}
                     {% endif %}
                 </span>
                 {% if card_variant == 'management' %}

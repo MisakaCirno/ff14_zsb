@@ -140,6 +140,19 @@
   min-width: 0;
 }
 
+.browse-card__date {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.browse-card__date-format {
+  display: none;
+}
+
+.browse-card__date-format--full {
+  display: inline;
+}
+
 .browse-card__author-wrap {
   flex: 1 1 auto;
 }
@@ -297,14 +310,40 @@
 }
 
 @container browse-card (max-width: 18rem) {
+  .browse-card__date-format--full {
+    display: none;
+  }
+
+  .browse-card__date-format--compact {
+    display: inline;
+  }
+
   .browse-card__actions {
     grid-template-columns: 1fr;
   }
 }
 
 @container browse-card (max-width: 15rem) {
+  .browse-card__date-format--compact {
+    display: none;
+  }
+
+  .browse-card__date-format--month {
+    display: inline;
+  }
+
   .management-card__actions {
     grid-template-columns: 1fr;
+  }
+}
+
+@container browse-card (max-width: 11rem) {
+  .browse-card__date-format--month {
+    display: none;
+  }
+
+  .browse-card__date-format--year {
+    display: inline;
   }
 }
 
