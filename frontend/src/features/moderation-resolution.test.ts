@@ -152,6 +152,26 @@ describe('moderation resolution modal', () => {
     expect(submit.disabled).toBe(true)
   })
 
+  it('closes the active modal before a boosted resolution request swaps the queue', () => {
+    const modal = document.querySelector<HTMLElement>(
+      '[data-moderation-resolution-modal]',
+    )!
+    const form = modal.querySelector<HTMLFormElement>('form')!
+    const hide = vi.fn()
+    window.bootstrap = {
+      Modal: {
+        getOrCreateInstance: vi.fn(() => ({ hide, show: vi.fn() })),
+      },
+    }
+    initializeModerationResolution()
+
+    document.dispatchEvent(new CustomEvent('htmx:beforeRequest', {
+      detail: { elt: form },
+    }))
+
+    expect(hide).toHaveBeenCalledOnce()
+  })
+
   it('reopens a server-invalid report action without clearing its reason and focuses errors', () => {
     const modal = document.querySelector<HTMLElement>('[data-moderation-resolution-modal]')!
     const form = modal.querySelector<HTMLFormElement>('form')!

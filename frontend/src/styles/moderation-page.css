@@ -250,6 +250,20 @@
   min-width: 0;
 }
 
+.moderation-action-status {
+  display: inline-flex;
+  gap: var(--app-space-1);
+  align-items: center;
+  justify-content: center;
+  min-height: 2rem;
+  padding: var(--app-space-1) var(--app-space-2);
+  color: var(--app-color-danger);
+  font-size: var(--app-text-sm);
+  font-weight: var(--app-font-semibold);
+  background: var(--app-color-danger-soft);
+  border-radius: var(--app-radius-control);
+}
+
 .moderation-action-grid form,
 .moderation-action-grid .btn,
 .moderation-review-card__footer > .btn {

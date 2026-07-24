@@ -100,7 +100,7 @@
             </div>
             {% elif share.status == 'pending' %}
             <div class="moderation-action-grid" role="group" aria-label="审核《{{ share.title }}》">
-                <form method="post" action="{% url 'admin_approve_share' share.share_id %}">
+                <form method="post" action="{% url 'admin_approve_share' share.share_id %}" hx-boost="true">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-success">
                         <i class="bi bi-check-circle" aria-hidden="true"></i>
@@ -120,10 +120,17 @@
             </div>
             {% elif share.is_restricted and share.status == 'approved' %}
             <div class="moderation-action-grid" role="group" aria-label="复核《{{ share.title }}》的内容限制">
-                {% if share.restriction_state == 'report_takedown' %}
-                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='confirm' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-outline-danger' button_icon='bi bi-shield-check' button_label='确认维持' only %}
+                {% if share.restriction_state == 'report_takedown' and share.restriction_is_confirmed %}
+                <span class="moderation-action-status">
+                    <i class="bi bi-shield-check" aria-hidden="true"></i>
+                    已确认维持，等待作者修改后重新提交
+                </span>
+                {% else %}
+                    {% if share.restriction_state == 'report_takedown' %}
+                    {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='confirm' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-outline-danger' button_icon='bi bi-shield-check' button_label='确认维持' only %}
+                    {% endif %}
+                    {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='release' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-success' button_icon='bi bi-unlock' button_label='解除限制' only %}
                 {% endif %}
-                {% include 'shares/includes/moderation_review_resolution_trigger.html' with share=share action='release' confirmation_version=item.confirmation_version button_class='btn btn-sm btn-success' button_icon='bi bi-unlock' button_label='解除限制' only %}
             </div>
             {% else %}
             <p class="small text-muted mb-0">等待作者修改并重新提交审核；提交后会转入审核列表。</p>

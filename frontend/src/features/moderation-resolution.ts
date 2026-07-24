@@ -6,6 +6,12 @@ interface BootstrapModalEvent extends Event {
   relatedTarget?: EventTarget | null
 }
 
+interface HtmxBeforeRequestDetail {
+  elt?: Element
+}
+
+let resolutionLifecycleInitialized = false
+
 function resolutionTriggerFrom(event: Event): HTMLElement | null {
   const relatedTarget = (event as BootstrapModalEvent).relatedTarget
   return relatedTarget instanceof HTMLElement
@@ -196,6 +202,24 @@ function initializeResolutionModal(modal: HTMLElement): void {
 }
 
 export function initializeModerationResolution(): void {
+  if (!resolutionLifecycleInitialized) {
+    resolutionLifecycleInitialized = true
+    document.addEventListener('htmx:beforeRequest', (event) => {
+      const detail = (event as CustomEvent<HtmxBeforeRequestDetail>).detail
+      const form = detail?.elt instanceof HTMLFormElement
+        ? detail.elt
+        : detail?.elt?.closest<HTMLFormElement>('[data-resolution-form]')
+      if (!form?.matches('[data-resolution-form]')) {
+        return
+      }
+      const modal = form.closest<HTMLElement>(
+        '[data-moderation-resolution-modal]',
+      )
+      if (modal) {
+        getBootstrapModal(modal)?.hide()
+      }
+    })
+  }
   document.querySelectorAll<HTMLElement>('[data-moderation-resolution-modal]')
     .forEach(initializeResolutionModal)
 }

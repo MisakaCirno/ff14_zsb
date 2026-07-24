@@ -299,6 +299,36 @@ class ModerationFormRecoveryTests(TestCase):
         self.assertEqual(share.restriction_state, Share.RestrictionState.CLEAR)
         self.assert_no_moderation_writes(share)
 
+    def test_invalid_htmx_report_action_returns_swappable_report_page(self):
+        share = self.create_share(
+            suffix='htmx-report',
+            status=Share.Status.APPROVED,
+        )
+        report = Report.objects.create(
+            share=share,
+            reporter=self.reporter,
+            reason='需要管理员核查',
+        )
+
+        response = self.client.post(
+            reverse(
+                'admin_resolve_report',
+                args=[report.pk, 'dismiss'],
+            ),
+            {'reason': '短'},
+            HTTP_HX_REQUEST='true',
+            HTTP_HX_TARGET='moderation-report-page',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="moderation-report-page"')
+        self.assertContains(response, 'data-moderation-invalid-modal')
+        report.refresh_from_db()
+        share.refresh_from_db()
+        self.assertEqual(report.status, Report.Status.PENDING)
+        self.assertEqual(share.restriction_state, Share.RestrictionState.CLEAR)
+        self.assert_no_moderation_writes(share)
+
     def test_invalid_batch_report_action_and_stale_single_target_remain_recoverable(self):
         share = self.create_share(
             suffix='batch-report',

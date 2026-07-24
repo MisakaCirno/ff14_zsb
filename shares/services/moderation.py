@@ -333,6 +333,15 @@ def confirm_share_restriction(
         Share.RestrictionState.LEGACY_PRIVATE,
     }:
         return ShareModerationResult(share=share, outcome='requires_review')
+    if ShareLog.objects.filter(
+        share=share,
+        action=ShareLog.ActionType.RESTRICTION_CONFIRM,
+        created_at__gte=share.restricted_at,
+    ).exists():
+        return ShareModerationResult(
+            share=share,
+            outcome='already_confirmed',
+        )
 
     previous = (
         share.restriction_state,

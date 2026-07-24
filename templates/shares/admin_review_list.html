@@ -8,6 +8,14 @@
 
     {% include 'shares/includes/admin_tabs.html' %}
 
+    <div
+        id="moderation-queue"
+        class="moderation-queue"
+        hx-target="#moderation-queue"
+        hx-select="#moderation-queue"
+        hx-select-oob="#message-container"
+        hx-swap="outerHTML swap:200ms"
+        hx-push-url="false">
     <div class="moderation-summary" role="status">
         <p>
             <i class="bi bi-collection" aria-hidden="true"></i>
@@ -39,5 +47,6 @@
     {% if review_items %}
     {% include 'shares/includes/moderation_review_resolution_modal.html' with resolution_error=review_resolution_error resolution_form=review_resolution_form resolution_error_id=review_resolution_error_id resolution_help_id=review_resolution_help_id resolution_version=review_resolution_version fallback_action=pagination_base_url return_page=shares.number csrf_token=csrf_token only %}
     {% endif %}
+    </div>
 </div>
 {% endblock %}

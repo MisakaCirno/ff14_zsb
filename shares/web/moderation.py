@@ -2,7 +2,16 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquery, Value
+from django.db.models import (
+    Count,
+    Exists,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    Value,
+)
 from django.db.models.functions import Coalesce, Length, Substr
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -89,6 +98,13 @@ def _queue_share_queryset(queryset=None, *, include_strategy_code=False):
             'review_feedback',
             1,
             _QUEUE_TEXT_PREVIEW_LENGTH,
+        ),
+        restriction_is_confirmed=Exists(
+            ShareLog.objects.filter(
+                share_id=OuterRef('pk'),
+                action=ShareLog.ActionType.RESTRICTION_CONFIRM,
+                created_at__gte=OuterRef('restricted_at'),
+            ),
         ),
     ).defer(*deferred_fields).prefetch_related(_queue_log_prefetch())
 
@@ -419,7 +435,11 @@ def _render_review_form_error(request, *, share_id, action, form):
             invalid_action=action,
             invalid_form=form,
         ),
-        status=400,
+        status=(
+            200
+            if request.headers.get('HX-Request') == 'true'
+            else 400
+        ),
     )
 
 
@@ -591,6 +611,8 @@ def admin_confirm_share_restriction(request, share_id):
         messages.info(request, f'分享 "{result.share.title}" 当前没有活动限制')
     elif result.outcome == 'requires_review':
         messages.warning(request, '审核拒绝限制必须通过重新审核流程处理')
+    elif result.outcome == 'already_confirmed':
+        messages.info(request, f'分享 "{result.share.title}" 的当前限制已经确认')
     else:
         messages.success(request, f'已确认继续限制分享 "{result.share.title}"')
     return redirect(_moderation_queue_name(result.share))
@@ -815,7 +837,11 @@ def _render_report_form_error(
             resolution_form=form,
             resolution_error=resolution_error,
         ),
-        status=400,
+        status=(
+            200
+            if request.headers.get('HX-Request') == 'true'
+            else 400
+        ),
     )
 
 

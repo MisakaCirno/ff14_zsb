@@ -3,7 +3,14 @@
 {% block title %}举报处理{% endblock %}
 
 {% block content %}
-<div class="container moderation-page moderation-report-page">
+<div
+    id="moderation-report-page"
+    class="container moderation-page moderation-report-page"
+    hx-target="#moderation-report-page"
+    hx-select="#moderation-report-page"
+    hx-select-oob="#message-container"
+    hx-swap="outerHTML swap:200ms"
+    hx-push-url="false">
     {% include 'shares/includes/page_header.html' with icon='bi bi-shield-exclamation' eyebrow='内容治理' title='举报处理' summary='集中核查待处理举报，保留处理依据并向相关用户同步结果。' only %}
     {% include 'shares/includes/admin_tabs.html' %}
 

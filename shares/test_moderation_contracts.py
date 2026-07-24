@@ -495,9 +495,20 @@ class ModerationWorkflowContractTests(TestCase):
 
         first = self.client.post(url, payload)
         replay = self.client.post(url, payload)
+        share.refresh_from_db()
+        current_version_replay = self.client.post(url, {
+            'reason': '使用最新版本也不应重复确认',
+            'version': share.updated_at.isoformat(),
+        })
 
         self.assertRedirects(first, reverse('admin_restriction_list'))
         self.assertRedirects(replay, reverse('admin_restriction_list'))
+        self.assertRedirects(
+            current_version_replay,
+            reverse('admin_restriction_list'),
+        )
+        share.refresh_from_db()
+        self.assertEqual(share.restriction_reason, '确认继续限制')
         self.assertEqual(ShareLog.objects.filter(
             share=share,
             action=ShareLog.ActionType.RESTRICTION_CONFIRM,

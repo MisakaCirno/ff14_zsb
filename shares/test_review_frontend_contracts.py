@@ -64,8 +64,13 @@ class ReviewFrontendSourceContractTests(SimpleTestCase):
         )
         self.assertIn('moderation_review_resolution_trigger.html', card_source)
         self.assertIn('moderation_review_resolution_modal.html', queue_source)
+        self.assertIn('id="moderation-queue"', queue_source)
+        self.assertIn('hx-target="#moderation-queue"', queue_source)
+        self.assertIn('hx-select="#moderation-queue"', queue_source)
+        self.assertIn('hx-boost="true"', card_source)
         self.assertEqual(modal_source.count('id="reviewResolutionModal"'), 1)
         self.assertIn('data-resolution-version', modal_source)
+        self.assertIn('hx-boost="true"', modal_source)
 
         for action_name in (
             'admin_reject_share',
@@ -248,6 +253,40 @@ class ReviewFrontendRenderingContractTests(TestCase):
             action=ShareLog.ActionType.RESTRICTION_CONFIRM,
         ).exists())
 
+        refreshed = self.client.get(reverse('admin_restriction_list'))
+        refreshed_item = next(
+            item for item in refreshed.context['review_items']
+            if item['share'].pk == share.pk
+        )
+
+        self.assertTrue(refreshed_item['share'].restriction_is_confirmed)
+        self.assertContains(
+            refreshed,
+            '已确认维持，等待作者修改后重新提交',
+        )
+        self.assertNotContains(
+            refreshed,
+            (
+                'data-resolution-action="'
+                + reverse(
+                    'admin_confirm_share_restriction',
+                    args=[share.share_id],
+                )
+                + '"'
+            ),
+        )
+        self.assertNotContains(
+            refreshed,
+            (
+                'data-resolution-action="'
+                + reverse(
+                    'admin_release_share_restriction',
+                    args=[share.share_id],
+                )
+                + '"'
+            ),
+        )
+
     def test_invalid_staff_reason_uses_the_bound_form_error(self):
         share = self.create_share(share_id='4e5f6g7h')
         invalid_form = AdminReviewRejectForm({'reason': '短'})
@@ -269,3 +308,17 @@ class ReviewFrontendRenderingContractTests(TestCase):
         )
         share.refresh_from_db()
         self.assertEqual(share.status, Share.Status.PENDING)
+
+    def test_invalid_htmx_staff_reason_returns_swappable_queue(self):
+        share = self.create_share(share_id='5f6g7h8i')
+
+        response = self.client.post(
+            reverse('admin_reject_share', args=[share.share_id]),
+            {'reason': '短'},
+            HTTP_HX_REQUEST='true',
+            HTTP_HX_TARGET='moderation-queue',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="moderation-queue"')
+        self.assertContains(response, 'data-moderation-invalid-modal')
