@@ -2063,9 +2063,11 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('data-infinite-scroll-sentinel', page_source)
         self.assertIn('hx-trigger="intersect, click"', page_source)
         self.assertNotIn('hx-trigger="revealed"', page_source)
-        self.assertIn("clone.removeAttribute('id')", announcement_source)
-        self.assertIn("clone.removeAttribute('aria-labelledby')", announcement_source)
-        self.assertIn("clone.setAttribute('aria-hidden', 'true')", announcement_source)
+        self.assertIn('data-announcement-dialog', source)
+        self.assertIn('data-announcement-open', source)
+        self.assertNotIn('truncatechars_html', source)
+        self.assertIn('dialog.showModal()', announcement_source)
+        self.assertIn("dialog.addEventListener('cancel'", announcement_source)
 
     def test_in_place_state_actions_use_partial_page_updates(self):
         cases = (

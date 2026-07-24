@@ -1,26 +1,4 @@
 const dismissedAnnouncementKey = 'dismissed_announcement_id'
-const reducedMotionQuery = '(prefers-reduced-motion: reduce)'
-
-function prefersReducedMotion(): boolean {
-  return typeof window.matchMedia === 'function'
-    && window.matchMedia(reducedMotionQuery).matches
-}
-
-function restoreFocusAfterDismissal(
-  hadFocus: boolean,
-  preferredTarget: HTMLElement | null,
-): void {
-  if (!hadFocus) {
-    return
-  }
-
-  const target = preferredTarget?.isConnected
-    ? preferredTarget
-    : document.getElementById('main-content')
-  if (target instanceof HTMLElement) {
-    target.focus({ preventScroll: true })
-  }
-}
 
 function rememberDismissal(announcementId: string): void {
   if (!announcementId) {
@@ -42,74 +20,67 @@ function wasDismissed(announcementId: string): boolean {
   }
 }
 
-function dismissAnnouncement(banner: HTMLElement): void {
-  const navLink = document.getElementById('nav-announcement-link')
-  const announcementId = banner.dataset.announcementId ?? ''
-  const isNavLinkVisible = navLink instanceof HTMLElement && navLink.offsetParent !== null
-  const focusTarget = isNavLinkVisible ? navLink : null
-  const hadFocus = banner.contains(document.activeElement)
-  banner.setAttribute('aria-hidden', 'true')
-  banner.setAttribute('inert', '')
+function restoreFocus(target: HTMLElement): void {
+  const focusTarget = target.isConnected
+    ? target
+    : document.getElementById('main-content')
+  focusTarget?.focus({ preventScroll: true })
+}
 
-  if (prefersReducedMotion()) {
-    banner.style.display = 'none'
-  } else if (isNavLinkVisible) {
-    const clone = banner.cloneNode(true) as HTMLElement
-    clone.removeAttribute('id')
-    clone.removeAttribute('aria-labelledby')
-    clone.setAttribute('aria-hidden', 'true')
-    clone.setAttribute('inert', '')
-    clone.querySelector('#browse-announcement-title')?.removeAttribute('id')
-    const rect = banner.getBoundingClientRect()
-    const targetRect = navLink.getBoundingClientRect()
-    clone.style.position = 'fixed'
-    clone.style.left = `${rect.left}px`
-    clone.style.top = `${rect.top}px`
-    clone.style.width = `${rect.width}px`
-    clone.style.height = `${rect.height}px`
-    clone.style.zIndex = '9999'
-    clone.style.transition = 'all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
-    clone.style.opacity = '1'
-    clone.classList.remove('mb-4')
-    clone.querySelector('[data-dismiss-announcement]')?.remove()
-    document.body.appendChild(clone)
-    banner.style.display = 'none'
-    void clone.offsetHeight
-
-    requestAnimationFrame(() => {
-      clone.style.left = `${targetRect.left}px`
-      clone.style.top = `${targetRect.top}px`
-      clone.style.width = '20px'
-      clone.style.height = '20px'
-      clone.style.opacity = '0'
-      clone.style.transform = 'scale(0.1)'
-    })
-    window.setTimeout(() => clone.remove(), 800)
-  } else {
-    banner.style.transition = 'opacity 0.3s ease, transform 0.3s ease'
-    banner.style.opacity = '0'
-    banner.style.transform = 'scale(0.9)'
-    window.setTimeout(() => {
-      banner.style.display = 'none'
-    }, 300)
+function openAnnouncement(dialog: HTMLDialogElement): void {
+  if (dialog.open) {
+    return
   }
+  if (typeof dialog.showModal === 'function') {
+    dialog.showModal()
+  } else {
+    dialog.setAttribute('open', '')
+  }
+  dialog
+    .querySelector<HTMLElement>('[data-announcement-dialog-close]')
+    ?.focus({ preventScroll: true })
+}
 
-  restoreFocusAfterDismissal(hadFocus, focusTarget)
+function dismissAnnouncement(
+  dialog: HTMLDialogElement,
+  announcementId: string,
+  focusTarget: HTMLElement,
+): void {
+  if (dialog.open && typeof dialog.close === 'function') {
+    dialog.close()
+  } else {
+    dialog.removeAttribute('open')
+  }
   rememberDismissal(announcementId)
+  restoreFocus(focusTarget)
 }
 
 export function initializeAnnouncement(): void {
-  const banner = document.getElementById('announcement-banner')
-  if (!(banner instanceof HTMLElement)) {
+  const dialog = document.querySelector<HTMLDialogElement>('[data-announcement-dialog]')
+  const trigger = document.querySelector<HTMLElement>('[data-announcement-open]')
+  if (!dialog || !trigger || dialog.dataset.announcementInitialized === 'true') {
     return
   }
+  dialog.dataset.announcementInitialized = 'true'
 
-  const announcementId = banner.dataset.announcementId ?? ''
+  const announcementId = dialog.dataset.announcementId ?? ''
+  trigger.addEventListener('click', () => openAnnouncement(dialog))
+  dialog.querySelectorAll<HTMLElement>('[data-dismiss-announcement]').forEach((button) => {
+    button.addEventListener('click', () => {
+      dismissAnnouncement(dialog, announcementId, trigger)
+    })
+  })
+  dialog.addEventListener('cancel', (event) => {
+    event.preventDefault()
+    dismissAnnouncement(dialog, announcementId, trigger)
+  })
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) {
+      dismissAnnouncement(dialog, announcementId, trigger)
+    }
+  })
+
   if (announcementId && !wasDismissed(announcementId)) {
-    banner.style.display = 'block'
+    openAnnouncement(dialog)
   }
-
-  banner
-    .querySelector('[data-dismiss-announcement]')
-    ?.addEventListener('click', () => dismissAnnouncement(banner))
 }

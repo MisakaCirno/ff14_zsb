@@ -25,11 +25,13 @@ class NotificationFrontendContractTests(SimpleTestCase):
         self.assertIn('aria-label="关闭通知"', template)
         self.assertIn("getElementById('message-container')", module_source)
 
-    def test_announcement_has_runtime_and_css_reduced_motion_guards(self):
+    def test_announcement_uses_an_accessible_native_dialog(self):
         template = self.read_template('shares/index.html')
         module_source = self.read_frontend('features/announcement.ts')
         styles = self.read_frontend('styles/browse-page.css')
 
         self.assertIn('data-dismiss-announcement', template)
-        self.assertIn("'(prefers-reduced-motion: reduce)'", module_source)
-        self.assertIn('@media (prefers-reduced-motion: reduce)', styles)
+        self.assertIn('<dialog', template)
+        self.assertIn('aria-labelledby="browse-announcement-title"', template)
+        self.assertIn("dialog.addEventListener('cancel'", module_source)
+        self.assertIn('.browse-announcement-dialog::backdrop', styles)

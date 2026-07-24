@@ -1,101 +1,96 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-function renderAnnouncement(options: { navVisible?: boolean } = {}): {
-  banner: HTMLElement
+function renderAnnouncement(): {
   closeButton: HTMLButtonElement
-  navLink: HTMLAnchorElement
+  dialog: HTMLDialogElement
+  openButton: HTMLButtonElement
 } {
   document.body.innerHTML = `
-    <a id="nav-announcement-link" href="/announcements/">站点动态</a>
-    <aside id="announcement-banner" data-announcement-id="42" style="display: none;">
-      <h2 id="browse-announcement-title">维护通知</h2>
-      <a href="/details/">查看详情</a>
-      <button type="button" data-dismiss-announcement>关闭</button>
+    <aside id="announcement-banner" data-announcement-id="42">
+      <button id="announcement-open" type="button" data-announcement-open>维护通知</button>
+      <dialog data-announcement-dialog data-announcement-id="42">
+        <button type="button" data-announcement-dialog-close data-dismiss-announcement>关闭</button>
+        <button type="button" data-dismiss-announcement>知道了</button>
+      </dialog>
     </aside>
     <main id="main-content" tabindex="-1"></main>
   `
-  const navLink = document.querySelector<HTMLAnchorElement>('#nav-announcement-link')!
-  Object.defineProperty(navLink, 'offsetParent', {
+  const dialog = document.querySelector<HTMLDialogElement>('dialog')!
+  Object.defineProperty(dialog, 'open', {
     configurable: true,
-    value: options.navVisible === false ? null : document.body,
+    value: false,
+    writable: true,
+  })
+  dialog.showModal = vi.fn(() => {
+    dialog.open = true
+  })
+  dialog.close = vi.fn(() => {
+    dialog.open = false
   })
   return {
-    banner: document.getElementById('announcement-banner')!,
-    closeButton: document.querySelector<HTMLButtonElement>('[data-dismiss-announcement]')!,
-    navLink,
+    closeButton: document.querySelector<HTMLButtonElement>('[data-announcement-dialog-close]')!,
+    dialog,
+    openButton: document.querySelector<HTMLButtonElement>('[data-announcement-open]')!,
   }
 }
 
-describe('announcement dismissal', () => {
+describe('announcement dialog', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.restoreAllMocks()
-    vi.unstubAllGlobals()
   })
 
-  it('skips the decorative flight animation when reduced motion is requested', async () => {
-    vi.useFakeTimers()
-    const matchMedia = vi.fn(() => ({ matches: true }))
-    vi.stubGlobal('matchMedia', matchMedia)
-    const requestAnimationFrame = vi.spyOn(window, 'requestAnimationFrame')
+  it('opens a new announcement automatically and remembers dismissal', async () => {
     const elements = renderAnnouncement()
     const { initializeAnnouncement } = await import('./announcement')
 
     initializeAnnouncement()
-    expect(elements.banner.style.display).toBe('block')
-    elements.closeButton.focus()
+
+    expect(elements.dialog.showModal).toHaveBeenCalledOnce()
+    expect(document.activeElement).toBe(elements.closeButton)
     elements.closeButton.click()
 
-    expect(matchMedia).toHaveBeenCalledWith('(prefers-reduced-motion: reduce)')
-    expect(requestAnimationFrame).not.toHaveBeenCalled()
-    expect(elements.banner.style.display).toBe('none')
-    expect(elements.banner.getAttribute('aria-hidden')).toBe('true')
-    expect(elements.banner.hasAttribute('inert')).toBe(true)
-    expect(document.querySelectorAll('[data-announcement-id="42"]')).toHaveLength(1)
-    expect(document.activeElement).toBe(elements.navLink)
+    expect(elements.dialog.close).toHaveBeenCalledOnce()
+    expect(document.activeElement).toBe(elements.openButton)
     expect(localStorage.getItem('dismissed_announcement_id')).toBe('42')
   })
 
-  it('keeps the existing visual dismissal when reduced motion is not requested', async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })))
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-      callback(0)
-      return 1
-    })
+  it('does not auto-open a dismissed announcement but still allows reopening it', async () => {
+    localStorage.setItem('dismissed_announcement_id', '42')
     const elements = renderAnnouncement()
     const { initializeAnnouncement } = await import('./announcement')
 
     initializeAnnouncement()
-    elements.closeButton.click()
+    expect(elements.dialog.showModal).not.toHaveBeenCalled()
 
-    expect(document.querySelectorAll('[data-announcement-id="42"]')).toHaveLength(2)
-    const clone = Array.from(document.querySelectorAll<HTMLElement>('[data-announcement-id="42"]'))
-      .find((candidate) => candidate !== elements.banner)!
-    expect(clone.getAttribute('aria-hidden')).toBe('true')
-    expect(clone.hasAttribute('inert')).toBe(true)
-    await vi.advanceTimersByTimeAsync(800)
-    expect(document.querySelectorAll('[data-announcement-id="42"]')).toHaveLength(1)
+    elements.openButton.click()
+
+    expect(elements.dialog.showModal).toHaveBeenCalledOnce()
+    expect(document.activeElement).toBe(elements.closeButton)
   })
 
-  it('makes the fading banner inert immediately when the navigation target is hidden', async () => {
-    vi.useFakeTimers()
-    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })))
-    const elements = renderAnnouncement({ navVisible: false })
-    const main = document.getElementById('main-content')!
+  it('maps Escape cancellation to the same persistent close path', async () => {
+    const elements = renderAnnouncement()
     const { initializeAnnouncement } = await import('./announcement')
 
     initializeAnnouncement()
-    elements.closeButton.focus()
-    elements.closeButton.click()
+    const cancelEvent = new Event('cancel', { cancelable: true })
+    elements.dialog.dispatchEvent(cancelEvent)
 
-    expect(elements.banner.style.display).toBe('block')
-    expect(elements.banner.getAttribute('aria-hidden')).toBe('true')
-    expect(elements.banner.hasAttribute('inert')).toBe(true)
-    expect(elements.banner.style.transition).toContain('opacity 0.3s ease')
-    expect(document.activeElement).toBe(main)
+    expect(cancelEvent.defaultPrevented).toBe(true)
+    expect(elements.dialog.close).toHaveBeenCalledOnce()
+    expect(localStorage.getItem('dismissed_announcement_id')).toBe('42')
+    expect(document.activeElement).toBe(elements.openButton)
+  })
 
-    await vi.advanceTimersByTimeAsync(300)
-    expect(elements.banner.style.display).toBe('none')
+  it('closes when the backdrop itself is clicked', async () => {
+    const elements = renderAnnouncement()
+    const { initializeAnnouncement } = await import('./announcement')
+
+    initializeAnnouncement()
+    elements.dialog.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    expect(elements.dialog.close).toHaveBeenCalledOnce()
+    expect(localStorage.getItem('dismissed_announcement_id')).toBe('42')
   })
 })
