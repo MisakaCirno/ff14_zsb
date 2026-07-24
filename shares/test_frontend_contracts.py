@@ -333,18 +333,25 @@ class FrontendShellContractTests(TestCase):
             ))
 
         self.client.force_login(self.author)
-        non_interactive_variants = (
-            self.client.get(reverse('my_shares')),
-            self.client.get(reverse(
-                'user_public_profile', args=[self.author.username],
-            )),
+        management = self.client.get(reverse('my_shares'))
+        management_probe = _InteractionMarkupProbe()
+        management_probe.feed(management.content.decode())
+        self.assertFalse(management_probe.matching(
+            tag='form', attribute='data-share-interaction-form',
+        ))
+
+        public_profile = self.client.get(reverse(
+            'user_public_profile', args=[self.author.username],
+        ))
+        profile_probe = _InteractionMarkupProbe()
+        profile_probe.feed(public_profile.content.decode())
+        self.assertTrue(profile_probe.matching(
+            tag='form', attribute='data-share-interaction-form',
+        ))
+        self.assertIn(
+            'data-share-card-variant="browse"',
+            public_profile.content.decode(),
         )
-        for response in non_interactive_variants:
-            probe = _InteractionMarkupProbe()
-            probe.feed(response.content.decode())
-            self.assertFalse(probe.matching(
-                tag='form', attribute='data-share-interaction-form',
-            ))
 
     def test_hx_reaction_fragments_keep_deterministic_form_references(self):
         self.client.force_login(self.author)
@@ -688,9 +695,12 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('spoiler_preference=spoiler_preference', list_source)
         self.assertIn('nsfw_preference=nsfw_preference', list_source)
         self.assertIn('login_return_url=share_cards_return_url', list_source)
-        self.assertIn("card_variant='profile' viewer=user only", profile_source)
-        self.assertIn("card_variant='management' only", my_content_source)
-        self.assertIn("card_variant='browse' viewer=user only", my_content_source)
+        self.assertIn("card_variant='browse' viewer=user", profile_source)
+        self.assertIn('spoiler_preference=spoiler_preference', profile_source)
+        self.assertIn('nsfw_preference=nsfw_preference', profile_source)
+        self.assertIn('login_return_url=share_cards_return_url', profile_source)
+        self.assertIn("card_variant='management'", my_content_source)
+        self.assertIn("card_variant='browse' viewer=user", my_content_source)
         self.assertIn('<article class="card h-100 share-card card-hover browse-card', card_source)
         self.assertIn('aria-labelledby="share-card-title-', card_source)
         self.assertIn('data-share-card', card_source)
@@ -715,28 +725,28 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('data-copies-count>{{ share.copies }}', card_source)
         self.assertIn('data-managed-share', card_source)
         self.assertIn("{% if card_variant == 'management' %}", card_source)
-        self.assertIn("{% elif card_variant == 'profile' %}", card_source)
-        self.assertIn("{% elif card_variant == 'browse' %}", card_source)
-        self.assertIn('aria-label="分享操作"', card_source)
+        self.assertIn("{% elif card_variant == 'collection' %}", card_source)
+        self.assertNotIn("card_variant == 'profile'", card_source)
+        self.assertIn('aria-label="合集内容操作"', card_source)
         self.assertIn('aria-label="互动操作"', card_source)
         self.assertIn('class="management-card__actions"', card_source)
         self.assertIn("{% url 'edit_share' share.share_id %}", card_source)
         self.assertIn("{% url 'delete_share' share.share_id %}", card_source)
         self.assertNotIn('style="', card_source)
 
-        browse_card_source = card_source.split(
-            "{% elif card_variant == 'browse' %}", 1
-        )[1]
-        favorite_position = browse_card_source.index(
+        favorite_position = card_source.index(
             "includes/favorite_button.html"
         )
-        like_position = browse_card_source.index("includes/like_button.html")
-        copy_position = browse_card_source.index("data-copy-strategy")
+        like_position = card_source.index(
+            "includes/like_button.html",
+            favorite_position,
+        )
+        copy_position = card_source.index("data-copy-strategy", like_position)
         self.assertLess(favorite_position, like_position)
         self.assertLess(like_position, copy_position)
         self.assertIn('browse-card__action-icon--favorite', favorite_source)
         self.assertIn('browse-card__action-icon--like', like_source)
-        self.assertIn('browse-card__action-icon--copy', browse_card_source)
+        self.assertIn('browse-card__action-icon--copy', card_source)
 
         for source, label in (
             (like_source, '点赞，当前'),
@@ -1034,7 +1044,6 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
         for template_path in (
             'shares/includes/share_card.html',
-            'shares/includes/collection_item_card.html',
             'shares/includes/moderation_review_card.html',
         ):
             with self.subTest(template=template_path):
@@ -1047,6 +1056,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                     ),
                 )
 
+        self.assertIn(
+            "{% include 'shares/includes/share_card.html' with ",
+            self.read_template('shares/includes/collection_item_card.html'),
+        )
         self.assertIn(
             "{% include 'shares/includes/share_card.html' with ",
             self.read_template('shares/my_shares.html'),
@@ -1697,8 +1710,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             "collection=collection card_variant='management' only",
             source,
         )
-        self.assertIn("share=share card_variant='management' only", source)
-        self.assertIn("share=share card_variant='browse' viewer=user only", source)
+        self.assertIn("share=share card_variant='management'", source)
+        self.assertIn("share=share card_variant='browse' viewer=user", source)
+        self.assertIn('spoiler_preference=spoiler_preference', source)
+        self.assertIn('nsfw_preference=nsfw_preference', source)
         self.assertIn("{% querystring order=None page=None %}", source)
         self.assertIn("{% querystring order='desc' page=None %}", source)
         self.assertIn("{% include 'shares/includes/empty_state.html' with ", source)
@@ -1749,8 +1764,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
     def test_collection_detail_uses_semantic_paginated_components(self):
         source = self.read_template('shares/collection_detail.html')
         item_source = self.read_template('shares/includes/collection_item_card.html')
+        card_source = self.read_template('shares/includes/share_card.html')
         main_styles = self.read_frontend('styles/main.css')
         collection_styles = self.read_frontend('styles/collection-page.css')
+        card_styles = self.read_frontend('styles/share-card.css')
 
         self.assertIn('data-collection-detail-page', source)
         self.assertIn(
@@ -1772,24 +1789,24 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('style="', source)
         self.assertNotIn('collectionitem_set', source)
 
-        self.assertIn('data-collection-item-card', item_source)
-        self.assertEqual(
-            item_source.count('?collection_id={{ collection.id }}'),
-            3,
-        )
-        self.assertIn("method=\"post\"", item_source)
-        self.assertIn('{% csrf_token %}', item_source)
-        self.assertIn('data-confirm-message=', item_source)
-        self.assertIn('data-remove-from-collection', item_source)
-        self.assertIn('aria-label="从合集中移除《{{ item.share.title }}》"', item_source)
+        self.assertIn("card_variant='collection'", item_source)
+        self.assertIn('spoiler_preference=spoiler_preference', item_source)
+        self.assertIn('nsfw_preference=nsfw_preference', item_source)
+        self.assertIn('data-collection-item-card', card_source)
+        self.assertIn('?collection_id={{ collection.id }}', card_source)
+        self.assertIn('method="post"', card_source)
+        self.assertIn('{% csrf_token %}', card_source)
+        self.assertIn('data-confirm-message=', card_source)
+        self.assertIn('data-remove-from-collection', card_source)
+        self.assertIn('aria-label="从合集中移除《{{ share.title }}》"', card_source)
         self.assertNotIn('style="', item_source)
 
         self.assertIn("@import './collection-page.css';", main_styles)
         self.assertIn('.collection-detail-page', collection_styles)
-        self.assertIn('.collection-item-card', collection_styles)
-        self.assertIn('@container collection-item-card', collection_styles)
+        self.assertNotIn('.collection-item-card', collection_styles)
+        self.assertIn('.browse-card--browse {', card_styles)
+        self.assertIn('.browse-card__position', card_styles)
         self.assertIn('@media (max-width: 575.98px)', collection_styles)
-        self.assertIn('@media (prefers-reduced-motion: reduce)', collection_styles)
 
     def test_common_template_events_use_data_contracts(self):
         preview_template = self.read_template('shares/includes/share_preview.html')
@@ -1814,8 +1831,12 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 'spoiler_preference=spoiler_preference '
                 'nsfw_preference=nsfw_preference',
             ),
-            ('shares/includes/share_card.html', "share=share preview_variant='management'"),
-            ('shares/includes/collection_item_card.html', "share=item.share preview_variant='standard'"),
+            (
+                'shares/includes/share_card.html',
+                "share=share preview_variant='management' "
+                'spoiler_preference=spoiler_preference '
+                'nsfw_preference=nsfw_preference',
+            ),
             (
                 'shares/includes/moderation_review_card.html',
                 "share=share preview_variant='review'",
@@ -1832,10 +1853,12 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 self.assertNotIn('data-preview-frame', source)
 
         collection_source = self.read_template('shares/includes/collection_item_card.html')
+        card_source = self.read_template('shares/includes/share_card.html')
         review_source = self.read_template(
             'shares/includes/moderation_review_card.html'
         )
-        self.assertIn('?collection_id={{ collection.id }}', collection_source)
+        self.assertIn("card_variant='collection'", collection_source)
+        self.assertIn('?collection_id={{ collection.id }}', card_source)
         self.assertNotIn('share-preview__link', review_source)
 
         self.assertIn(
@@ -1844,7 +1867,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
         self.assertIn(
             'data-confirm-message',
-            self.read_template('shares/includes/collection_item_card.html'),
+            card_source,
         )
         preview_source = self.read_frontend('features/preview-images.ts')
         preview_styles = self.read_frontend('styles/share-preview.css')
@@ -1941,12 +1964,13 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
         self.assertIn('待审核', management)
         self.assertIn('私有', management)
-        self.assertIn('>战斗</span>', management)
+        self.assertNotIn('>战斗</span>', management)
         self.assertIn('bi bi-eye"></i> 123', management)
         self.assertNotIn('bi bi-clipboard"></i> 456', management)
 
         self.assertIn('share-preview__warning--static', review)
         self.assertIn('待审核', review)
+        self.assertIn('>战斗</span>', review)
         self.assertNotIn('share-preview__meta--above-warning', review)
         self.assertNotIn('点击查看详情', review)
         self.assertNotIn('bi bi-eye"></i> 123', review)
@@ -2097,7 +2121,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
                 'hx-target="#collection-detail-page"',
             ),
             (
-                'shares/includes/collection_item_card.html',
+                'shares/includes/share_card.html',
                 'data-remove-from-collection',
                 'hx-boost="true"',
             ),

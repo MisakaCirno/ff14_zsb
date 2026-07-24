@@ -6,6 +6,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.vary import vary_on_headers
 
+from shares.content_preferences import (
+    apply_hidden_content_preferences,
+    resolve_content_display_preferences,
+)
 from shares.forms import CreateShareForm, EditShareForm
 from shares.models import Collection, Share
 from shares.policies import can_view_share, is_moderator, viewable_share_queryset
@@ -47,11 +51,12 @@ def share_detail(request, share_id):
     if not can_view_share(request.user, share):
         messages.error(request, '该分享不存在或您没有权限访问')
         return redirect('index')
+    preferences = resolve_content_display_preferences(request)
     detail = build_share_detail_view_model(
         share,
         request.user,
-        show_spoiler=request.GET.get('spoiler') == 'show',
-        show_nsfw=request.GET.get('nsfw') == 'show',
+        show_spoiler=preferences.spoiler == 'show',
+        show_nsfw=preferences.nsfw == 'show',
     )
     canonical_share_path = share.get_absolute_url()
     context = {
@@ -61,6 +66,7 @@ def share_detail(request, share_id):
         'canonical_share_url': request.build_absolute_uri(canonical_share_path),
         'is_liked': detail.is_liked,
         'is_favorited': detail.is_favorited,
+        **preferences.as_context(),
     }
     if (
         is_htmx_request(request)
@@ -212,7 +218,11 @@ def my_shares(request):
     if tab not in _MY_CONTENT_TABS:
         tab = 'my_shares'
 
-    context = {'current_tab': tab}
+    preferences = resolve_content_display_preferences(request)
+    context = {
+        'current_tab': tab,
+        **preferences.as_context(),
+    }
     page_number = request.GET.get('page')
     if tab == 'trash':
         deleted_shares = annotate_share_cards(
@@ -251,12 +261,14 @@ def my_shares(request):
             request.user,
             request.user.liked_shares.all(),
         )
+        queryset = apply_hidden_content_preferences(queryset, preferences)
         ordering = ('-created_at', '-pk')
     elif tab == 'favorites':
         queryset = viewable_share_queryset(
             request.user,
             request.user.favorited_shares.all(),
         )
+        queryset = apply_hidden_content_preferences(queryset, preferences)
         ordering = ('-created_at', '-pk')
     else:
         queryset = Share.objects.filter(

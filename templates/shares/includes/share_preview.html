@@ -30,7 +30,7 @@
     <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay share-preview__veil" aria-hidden="true"></div>
 
     <div class="position-absolute top-0 start-0 m-2 share-preview__meta">
-        {% if preview_variant != 'standard' %}
+        {% if preview_variant == 'review' %}
             {% if share.category == 'combat' %}
             <span class="badge bg-danger shadow-sm">战斗</span>
             {% else %}
@@ -38,7 +38,7 @@
             {% endif %}
         {% endif %}
         {% if share.is_original %}
-        <span class="badge share-preview__translucent-badge share-preview__original-badge shadow-sm{% if preview_variant != 'standard' %} ms-1{% endif %}">原创</span>
+        <span class="badge share-preview__translucent-badge share-preview__original-badge shadow-sm{% if preview_variant == 'review' %} ms-1{% endif %}">原创</span>
         {% endif %}
     </div>
 

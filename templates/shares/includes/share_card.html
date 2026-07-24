@@ -1,17 +1,20 @@
 {% load ui_components %}
+{% if card_variant == 'collection' %}
+<li class="col collection-detail-item">
+{% else %}
 <div class="col">
-    <article class="card h-100 share-card card-hover browse-card browse-card--{{ card_variant }}{% if card_variant == 'browse' %} browse-card--category-{{ share.category }}{% endif %}" aria-labelledby="share-card-title-{{ share.share_id }}" data-share-card data-share-id="{{ share.share_id }}" data-share-card-variant="{{ card_variant }}"{% if card_variant == 'management' %} data-managed-share{% endif %}>
-        <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link" aria-label="查看《{{ share.title }}》详情"{% if card_variant == 'browse' %} data-share-detail-trigger data-spoiler-preference="{{ spoiler_preference|default:'mask' }}" data-nsfw-preference="{{ nsfw_preference|default:'mask' }}"{% endif %}>
+{% endif %}
+    <article class="card h-100 share-card card-hover browse-card browse-card--browse{% if card_variant != 'browse' %} browse-card--{{ card_variant }}{% endif %} browse-card--category-{{ share.category }}" aria-labelledby="share-card-title-{{ share.share_id }}{% if card_variant == 'collection' %}-collection-{{ collection.id }}{% endif %}" data-share-card data-share-id="{{ share.share_id }}" data-share-card-variant="{{ card_variant }}"{% if card_variant == 'management' %} data-managed-share{% endif %}{% if card_variant == 'collection' %} data-collection-item-card data-collection-item-position="{{ position }}"{% endif %}>
+        <a href="{% url 'share_detail' share.share_id %}{% if card_variant == 'collection' %}?collection_id={{ collection.id }}{% endif %}" class="text-decoration-none share-preview__link" aria-label="查看《{{ share.title }}》详情"{% if card_variant != 'management' %} data-share-detail-trigger data-spoiler-preference="{{ spoiler_preference|default:'mask' }}" data-nsfw-preference="{{ nsfw_preference|default:'mask' }}"{% endif %}>
             {% if card_variant == 'management' %}
-            {% include 'shares/includes/share_preview.html' with share=share preview_variant='management' only %}
+            {% include 'shares/includes/share_preview.html' with share=share preview_variant='management' spoiler_preference=spoiler_preference nsfw_preference=nsfw_preference only %}
             {% else %}
             {% include 'shares/includes/share_preview.html' with share=share preview_variant='standard' spoiler_preference=spoiler_preference nsfw_preference=nsfw_preference only %}
             {% endif %}
         </a>
 
         <div class="card-body browse-card__body">
-            <h3 class="card-title h5 browse-card__title" id="share-card-title-{{ share.share_id }}" title="{{ share.title }}">
-                {% if card_variant == 'browse' %}
+            <h3 class="card-title h5 browse-card__title" id="share-card-title-{{ share.share_id }}{% if card_variant == 'collection' %}-collection-{{ collection.id }}{% endif %}" title="{{ share.title }}">
                 <span class="browse-card__category-icon browse-card__category-icon--{{ share.category }}" aria-label="{{ share.get_category_display }}">
                     {% if share.category == 'combat' %}
                     <svg xmlns="http://www.w3.org/2000/svg" class="browse-card__category-svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" focusable="false">
@@ -24,28 +27,36 @@
                     </svg>
                     {% endif %}
                 </span>
-                {% endif %}
-                <a href="{% url 'share_detail' share.share_id %}" class="browse-card__title-link"{% if card_variant == 'browse' %} data-share-detail-trigger data-spoiler-preference="{{ spoiler_preference|default:'mask' }}" data-nsfw-preference="{{ nsfw_preference|default:'mask' }}"{% endif %}>{{ share.title }}</a>
+                <a href="{% url 'share_detail' share.share_id %}{% if card_variant == 'collection' %}?collection_id={{ collection.id }}{% endif %}" class="browse-card__title-link"{% if card_variant != 'management' %} data-share-detail-trigger data-spoiler-preference="{{ spoiler_preference|default:'mask' }}" data-nsfw-preference="{{ nsfw_preference|default:'mask' }}"{% endif %}>{{ share.title }}</a>
             </h3>
+
             <div class="browse-card__meta">
-                {% if card_variant == 'browse' %}
-                    {% if share.author %}
-                    <span class="browse-card__meta-item browse-card__author-wrap">
-                        <i class="bi bi-person-circle" aria-hidden="true"></i>
-                        <a href="{% url 'user_public_profile' share.author.username %}" class="browse-card__author">
-                            {{ share.author|user_display_name }}
-                        </a>
-                    </span>
-                    {% else %}
-                    <span class="browse-card__meta-item">
-                        <i class="bi bi-person-circle" aria-hidden="true"></i>
-                        <span>匿名用户</span>
-                    </span>
-                    {% endif %}
+                {% if card_variant == 'collection' %}
+                <span class="browse-card__meta-item browse-card__position" aria-label="合集第 {{ position }} 项">
+                    <i class="bi bi-list-ol" aria-hidden="true"></i>
+                    第 {{ position }} 项
+                </span>
+                {% endif %}
+                {% if share.author %}
+                <span class="browse-card__meta-item browse-card__author-wrap">
+                    <i class="bi bi-person-circle" aria-hidden="true"></i>
+                    <a href="{% url 'user_public_profile' share.author.username %}" class="browse-card__author">
+                        {{ share.author|user_display_name }}
+                    </a>
+                </span>
+                {% else %}
+                <span class="browse-card__meta-item browse-card__author-wrap">
+                    <i class="bi bi-person-circle" aria-hidden="true"></i>
+                    <span>匿名用户</span>
+                </span>
                 {% endif %}
                 <span class="browse-card__meta-item">
                     <i class="bi bi-calendar3" aria-hidden="true"></i>
+                    {% if card_variant == 'collection' %}
+                    <time datetime="{{ item.added_at|date:'c' }}" title="加入合集时间">{{ item.added_at|date:"m-d" }}</time>
+                    {% else %}
                     <time datetime="{{ share.created_at|date:'c' }}">{% if card_variant == 'management' %}{{ share.created_at|date:"Y-m-d H:i" }}{% else %}{{ share.created_at|date:"m-d" }}{% endif %}</time>
+                    {% endif %}
                 </span>
                 {% if card_variant == 'management' %}
                 <span class="browse-card__meta-item management-card__stat" aria-label="{{ share.likes_count }} 个点赞">
@@ -58,7 +69,8 @@
                 </span>
                 {% endif %}
             </div>
-            <p class="card-text browse-card__description{% if card_variant == 'browse' %} visually-hidden{% endif %}">
+
+            <p class="card-text browse-card__description{% if card_variant != 'management' %} visually-hidden{% endif %}">
                 {% if share.description %}
                 {{ share.description|striptags|truncatechars:60 }}
                 {% else %}
@@ -94,19 +106,29 @@
                     <span>删除</span>
                 </a>
             </div>
-            {% elif card_variant == 'profile' %}
-            <div class="btn-group browse-card__action-group browse-card__action-group--profile" role="group" aria-label="分享操作">
-                <a href="{% url 'share_detail' share.share_id %}" class="btn btn-sm btn-outline-primary hover-lift" aria-label="查看《{{ share.title }}》详情">
-                    <i class="bi bi-arrow-right-circle" aria-hidden="true"></i>
-                    <span>查看详情</span>
+            {% elif card_variant == 'collection' %}
+            <div class="browse-card__actions browse-card__actions--collection" role="group" aria-label="合集内容操作">
+                <a href="{% url 'share_detail' share.share_id %}?collection_id={{ collection.id }}" class="btn btn-sm hover-lift" data-share-detail-trigger data-spoiler-preference="{{ spoiler_preference|default:'mask' }}" data-nsfw-preference="{{ nsfw_preference|default:'mask' }}" aria-label="查看《{{ share.title }}》详情">
+                    <i class="bi bi-arrow-right-circle browse-card__action-icon browse-card__action-icon--view" aria-hidden="true"></i>
+                    <span>详情</span>
                 </a>
-                <button type="button" class="btn btn-sm btn-outline-primary hover-lift" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-copy-label="复制《{{ share.title }}》的分享码" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码，当前已复制 {{ share.copies }} 次">
-                    <i class="bi bi-clipboard" aria-hidden="true"></i>
-                    <span>复制码</span>
+                <button type="button" class="btn btn-sm browse-card__icon-action" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-copy-label="复制《{{ share.title }}》的分享码" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码，当前已复制 {{ share.copies }} 次">
+                    <i class="bi bi-clipboard browse-card__action-icon browse-card__action-icon--copy" aria-hidden="true"></i>
                     <span data-copies-count>{{ share.copies }}</span>
                 </button>
+                {% if can_manage_collection %}
+                <button type="submit" class="btn btn-sm browse-card__collection-remove" form="remove-collection-item-{{ collection.id }}-{{ share.share_id }}" aria-label="从合集中移除《{{ share.title }}》">
+                    <i class="bi bi-trash browse-card__action-icon browse-card__action-icon--remove" aria-hidden="true"></i>
+                    <span>移出</span>
+                </button>
+                {% endif %}
             </div>
-            {% elif card_variant == 'browse' %}
+            {% if can_manage_collection %}
+            <form id="remove-collection-item-{{ collection.id }}-{{ share.share_id }}" action="{% url 'remove_share_from_collection' collection.id share.share_id %}" method="post" data-confirm-message="确定要从合集中移除吗？" data-remove-from-collection hx-boost="true">
+                {% csrf_token %}
+            </form>
+            {% endif %}
+            {% else %}
             <div class="btn-group browse-card__actions" role="group" aria-label="互动操作">
                 {% if viewer.is_authenticated %}
                 {% include 'shares/includes/favorite_button.html' with share=share is_favorited=share.is_favorited favorites_count=share.favorites_count interaction_fragment='card' only %}
@@ -132,4 +154,8 @@
             {% endif %}
         </footer>
     </article>
+{% if card_variant == 'collection' %}
+</li>
+{% else %}
 </div>
+{% endif %}

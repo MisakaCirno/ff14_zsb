@@ -214,9 +214,9 @@
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4 my-content-grid">
             {% for share in shares %}
                 {% if current_tab == 'my_shares' %}
-                {% include 'shares/includes/share_card.html' with share=share card_variant='management' only %}
+                {% include 'shares/includes/share_card.html' with share=share card_variant='management' spoiler_preference=spoiler_preference nsfw_preference=nsfw_preference only %}
                 {% else %}
-                {% include 'shares/includes/share_card.html' with interaction_return_url=share_interaction_return_url csrf_token=csrf_token share=share card_variant='browse' viewer=user only %}
+                {% include 'shares/includes/share_card.html' with interaction_return_url=share_interaction_return_url csrf_token=csrf_token share=share card_variant='browse' viewer=user login_return_url=share_interaction_return_url spoiler_preference=spoiler_preference nsfw_preference=nsfw_preference only %}
                 {% endif %}
             {% empty %}
             <div class="col-12">

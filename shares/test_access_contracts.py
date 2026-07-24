@@ -200,6 +200,129 @@ class ShareAccessContractTests(TestCase):
             html=True,
         )
 
+    def test_content_preferences_apply_to_public_profile_and_direct_detail(self):
+        visible = self.create_share(title='global preference visible')
+        spoiler = self.create_share(
+            title='global preference spoiler',
+            is_spoiler=True,
+        )
+        nsfw = self.create_share(
+            title='global preference nsfw',
+            is_nsfw=True,
+        )
+        both = self.create_share(
+            title='global preference both',
+            is_spoiler=True,
+            is_nsfw=True,
+        )
+        profile_url = reverse(
+            'user_public_profile',
+            args=[self.author.username],
+        )
+
+        self.client.get(reverse('index'), {
+            'spoiler': 'hide',
+            'nsfw': 'mask',
+        })
+        masked_profile = self.client.get(profile_url)
+
+        self.assertEqual(masked_profile.context['public_share_count'], 4)
+        self.assertCountEqual(
+            masked_profile.context['shares'].object_list,
+            [visible, nsfw],
+        )
+        self.assertEqual(masked_profile.context['spoiler_preference'], 'hide')
+        self.assertEqual(masked_profile.context['nsfw_preference'], 'mask')
+        self.assertNotContains(masked_profile, spoiler.title)
+        self.assertContains(masked_profile, nsfw.title)
+        self.assertContains(masked_profile, '可能令人不适')
+
+        shown_profile = self.client.get(profile_url, {
+            'spoiler': 'show',
+            'nsfw': 'show',
+        })
+        self.assertCountEqual(
+            shown_profile.context['shares'].object_list,
+            [visible, spoiler, nsfw, both],
+        )
+        self.assertNotContains(shown_profile, 'blur-content')
+        self.assertContains(
+            shown_profile,
+            'data-share-card-variant="browse"',
+            count=4,
+        )
+
+        direct_detail = self.client.get(
+            reverse('share_detail', args=[both.share_id]),
+        )
+        self.assertIsNone(direct_detail.context['detail'].content_warning)
+        self.assertNotContains(direct_detail, 'data-content-warning=')
+
+    def test_hidden_preferences_apply_to_reaction_and_collection_lists(self):
+        visible = self.create_share(title='global list visible')
+        spoiler = self.create_share(
+            title='global list spoiler',
+            is_spoiler=True,
+        )
+        nsfw = self.create_share(
+            title='global list nsfw',
+            is_nsfw=True,
+        )
+        collection = Collection.objects.create(
+            title='global preference collection',
+            author=self.author,
+            is_public=True,
+        )
+        for order, share in enumerate((visible, spoiler, nsfw), start=1):
+            CollectionItem.objects.create(
+                collection=collection,
+                share=share,
+                order=order,
+            )
+        self.other_user.liked_shares.add(visible, spoiler, nsfw)
+        self.client.force_login(self.other_user)
+
+        self.client.get(reverse('index'), {
+            'spoiler': 'hide',
+            'nsfw': 'show',
+        })
+        likes = self.client.get(reverse('my_shares'), {'tab': 'likes'})
+        collection_response = self.client.get(
+            reverse('collection_detail', args=[collection.id]),
+        )
+
+        self.assertCountEqual(
+            likes.context['shares'].object_list,
+            [visible, nsfw],
+        )
+        self.assertEqual(
+            [item.share for item in collection_response.context['items']],
+            [visible, nsfw],
+        )
+        self.assertContains(
+            collection_response,
+            'data-share-card-variant="collection"',
+            count=2,
+        )
+        self.assertNotContains(collection_response, spoiler.title)
+
+        updated_collection = self.client.get(
+            reverse('collection_detail', args=[collection.id]),
+            {'spoiler': 'show', 'nsfw': 'hide'},
+        )
+        self.assertEqual(
+            [item.share for item in updated_collection.context['items']],
+            [visible, spoiler],
+        )
+        self.assertEqual(
+            self.client.session['browse_spoiler_preference'],
+            'show',
+        )
+        self.assertEqual(
+            self.client.session['browse_nsfw_preference'],
+            'hide',
+        )
+
     def test_partial_cards_keep_show_preferences(self):
         self.create_share(
             title='partial preference flagged',

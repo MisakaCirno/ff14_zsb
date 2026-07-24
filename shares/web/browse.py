@@ -12,6 +12,10 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST, require_safe
 from django.views.decorators.vary import vary_on_headers
 
+from shares.content_preferences import (
+    apply_hidden_content_preferences,
+    resolve_content_display_preferences,
+)
 from shares.models import Announcement, Collection, Share, UserProfile
 from shares.policies import can_view_share, is_moderator, public_share_queryset
 from shares.presentation import (
@@ -41,12 +45,6 @@ _BROWSE_ORDERINGS = {
     'favorites': ('-favorites_count', '-created_at', '-pk'),
     'copies': ('-copies', '-created_at', '-pk'),
 }
-_CONTENT_DISPLAY_MODES = {'hide', 'mask', 'show'}
-_DEFAULT_CONTENT_DISPLAY_MODE = 'mask'
-_CONTENT_DISPLAY_SESSION_KEYS = {
-    'spoiler': 'browse_spoiler_preference',
-    'nsfw': 'browse_nsfw_preference',
-}
 
 
 def _is_browse_explorer_request(request):
@@ -56,26 +54,6 @@ def _is_browse_explorer_request(request):
     )
 
 
-def _content_display_mode(request, parameter, legacy_parameter):
-    mode = request.GET.get(parameter)
-    if mode in _CONTENT_DISPLAY_MODES:
-        session_key = _CONTENT_DISPLAY_SESSION_KEYS[parameter]
-        if request.session.get(session_key) != mode:
-            request.session[session_key] = mode
-        return mode
-    if request.GET.get(legacy_parameter) == 'on':
-        session_key = _CONTENT_DISPLAY_SESSION_KEYS[parameter]
-        if request.session.get(session_key) != 'hide':
-            request.session[session_key] = 'hide'
-        return 'hide'
-    saved_mode = request.session.get(
-        _CONTENT_DISPLAY_SESSION_KEYS[parameter],
-    )
-    if saved_mode in _CONTENT_DISPLAY_MODES:
-        return saved_mode
-    return _DEFAULT_CONTENT_DISPLAY_MODE
-
-
 def _prepare_browse_shares(request, queryset):
     category = request.GET.get('category')
     if category not in _BROWSE_CATEGORIES:
@@ -83,20 +61,8 @@ def _prepare_browse_shares(request, queryset):
     if category:
         queryset = queryset.filter(category=category)
 
-    spoiler_preference = _content_display_mode(
-        request,
-        'spoiler',
-        'hide_spoiler',
-    )
-    nsfw_preference = _content_display_mode(
-        request,
-        'nsfw',
-        'hide_nsfw',
-    )
-    if spoiler_preference == 'hide':
-        queryset = queryset.filter(is_spoiler=False)
-    if nsfw_preference == 'hide':
-        queryset = queryset.filter(is_nsfw=False)
+    preferences = resolve_content_display_preferences(request)
+    queryset = apply_hidden_content_preferences(queryset, preferences)
 
     sort_by = request.GET.get('sort', 'latest')
     if sort_by not in _BROWSE_ORDERINGS:
@@ -107,12 +73,7 @@ def _prepare_browse_shares(request, queryset):
     return queryset, {
         'current_category': category,
         'sort_by': sort_by,
-        'spoiler_preference': spoiler_preference,
-        'nsfw_preference': nsfw_preference,
-        # Retain the old context flags while external links migrate to the
-        # explicit three-state query parameters.
-        'hide_spoiler': spoiler_preference == 'hide',
-        'hide_nsfw': nsfw_preference == 'hide',
+        **preferences.as_context(),
     }
 
 
@@ -259,15 +220,18 @@ def user_public_profile(request, username):
     current_tab = request.GET.get('tab', 'shares')
     if current_tab not in _PUBLIC_PROFILE_TABS:
         current_tab = 'shares'
+    preferences = resolve_content_display_preferences(request)
     context = {
         'author': author,
         'current_tab': current_tab,
         'author_presentation': build_user_presentation(author),
+        **preferences.as_context(),
     }
     public_shares = public_share_queryset(
         Share.objects.filter(author=author),
     ).order_by('-created_at', '-pk')
     if current_tab == 'collections':
+        context['public_share_count'] = public_shares.count()
         queryset = annotate_collection_cards(
             Collection.objects.filter(
                 author=author,
@@ -278,12 +242,26 @@ def user_public_profile(request, username):
         context['collections'] = Paginator(queryset, 12).get_page(
             request.GET.get('page')
         )
-        context['public_share_count'] = public_shares.count()
     else:
-        context['shares'] = Paginator(public_shares, 12).get_page(
+        visible_shares = apply_hidden_content_preferences(
+            public_shares,
+            preferences,
+        )
+        visible_shares = annotate_share_cards(
+            visible_shares,
+            request.user,
+        ).order_by('-created_at', '-pk')
+        context['shares'] = Paginator(visible_shares, 12).get_page(
             request.GET.get('page')
         )
-        context['public_share_count'] = context['shares'].paginator.count
+        if preferences.spoiler == 'hide' or preferences.nsfw == 'hide':
+            context['public_share_count'] = public_shares.count()
+        else:
+            context['public_share_count'] = context['shares'].paginator.count
+        context['share_cards_return_url'] = build_share_cards_return_url(
+            request,
+            page_number=context['shares'].number,
+        )
     return render(request, 'shares/user_public_profile.html', context)
 
 

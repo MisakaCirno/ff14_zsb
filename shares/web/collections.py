@@ -8,6 +8,10 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from shares.content_preferences import (
+    apply_hidden_content_preferences,
+    resolve_content_display_preferences,
+)
 from shares.forms import CollectionForm
 from shares.models import Collection, CollectionItem, Share, ShareLog
 from shares.policies import (
@@ -123,9 +127,15 @@ def collection_detail(request, collection_id):
         messages.error(request, '该合集不存在或您没有权限访问')
         return redirect('index')
     visible_share_ids = viewable_share_queryset(request.user).order_by().values('pk')
+    preferences = resolve_content_display_preferences(request)
     collection_items = CollectionItem.objects.filter(
         collection=collection,
         share_id__in=visible_share_ids,
+    )
+    collection_items = apply_hidden_content_preferences(
+        collection_items,
+        preferences,
+        field_prefix='share',
     ).select_related(
         'share',
         'share__author',
@@ -136,6 +146,7 @@ def collection_detail(request, collection_id):
         'collection': collection,
         'items': items,
         'can_manage_collection': is_owner(request.user, collection),
+        **preferences.as_context(),
     })
 
 

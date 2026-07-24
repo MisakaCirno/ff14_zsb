@@ -55,7 +55,7 @@
         <h2 class="visually-hidden" id="public-profile-shares-title">{{ author_presentation.display_name }} 的公开分享</h2>
         <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
             {% for share in shares %}
-            {% include 'shares/includes/share_card.html' with share=share card_variant='profile' viewer=user only %}
+            {% include 'shares/includes/share_card.html' with interaction_return_url=share_cards_return_url csrf_token=csrf_token share=share card_variant='browse' viewer=user login_return_url=share_cards_return_url spoiler_preference=spoiler_preference nsfw_preference=nsfw_preference only %}
             {% empty %}
             <div class="col-12">
                 {% include 'shares/includes/empty_state.html' with icon='bi-inbox' title='暂无公开分享' message='该用户暂时没有发布公开的战术板分享。' only %}
