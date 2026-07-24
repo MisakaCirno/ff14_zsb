@@ -38,11 +38,11 @@
             {% endif %}
         {% endif %}
         {% if share.is_original %}
-        <span class="badge bg-primary shadow-sm{% if preview_variant != 'standard' %} ms-1{% endif %}">原创</span>
+        <span class="badge share-preview__translucent-badge share-preview__original-badge shadow-sm{% if preview_variant != 'standard' %} ms-1{% endif %}">原创</span>
         {% endif %}
     </div>
 
-    <div class="position-absolute top-0 end-0 m-2 share-preview__meta">
+    <div class="position-absolute top-0 end-0 m-2 share-preview__meta{% if preview_variant != 'review' %} share-preview__meta--above-warning{% endif %}">
         {% if preview_variant == 'review' %}
         {% if share.is_restricted %}
         <span class="badge bg-danger">
@@ -79,7 +79,7 @@
                 </span>
                 {% endif %}
             {% endif %}
-        <span class="badge share-preview__view-count">
+        <span class="badge share-preview__translucent-badge share-preview__view-count">
             <i class="bi bi-eye"></i> {{ share.views }}
         </span>
         {% endif %}

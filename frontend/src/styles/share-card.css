@@ -19,14 +19,6 @@
   box-shadow: var(--app-shadow-surface);
 }
 
-.browse-card--category-entertainment {
-  background: var(--app-color-card-entertainment);
-}
-
-.browse-card--category-combat {
-  background: var(--app-color-card-combat);
-}
-
 .browse-card--browse:hover,
 .browse-card--browse:focus-within {
   transform: none;
@@ -78,11 +70,35 @@
 }
 
 .browse-card--browse .browse-card__title {
-  display: block;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--app-space-2);
+  align-items: start;
   min-height: calc(2 * 1.35em);
   margin-bottom: var(--app-space-2);
   font-size: var(--app-text-sm);
   line-height: 1.35;
+}
+
+.browse-card__category-icon {
+  display: inline-grid;
+  align-self: start;
+  width: 1.2rem;
+  height: 1.35em;
+  min-width: 1.2rem;
+  place-items: center;
+  color: var(--app-color-text-muted);
+  line-height: 1.35;
+}
+
+.browse-card__category-icon .bi {
+  display: block;
+  line-height: 1;
+}
+
+.browse-card__category-icon .bi::before {
+  display: block;
+  vertical-align: 0;
 }
 
 .browse-card--browse .browse-card__title-link {
@@ -228,6 +244,18 @@
 .browse-card--browse .browse-card__actions .btn-warning {
   color: var(--bs-warning-text-emphasis);
   background: var(--bs-warning-bg-subtle);
+}
+
+.browse-card--browse .browse-card__action-icon--favorite {
+  color: var(--app-color-warning-text);
+}
+
+.browse-card--browse .browse-card__action-icon--like {
+  color: var(--app-color-danger);
+}
+
+.browse-card--browse .browse-card__action-icon--copy {
+  color: var(--app-color-action-copy);
 }
 
 .browse-card--browse [data-copies-count] {

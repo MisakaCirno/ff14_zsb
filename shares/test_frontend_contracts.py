@@ -680,6 +680,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         like_source = self.read_template('shares/includes/like_button.html')
         favorite_source = self.read_template('shares/includes/favorite_button.html')
         card_styles = self.read_frontend('styles/share-card.css')
+        token_styles = self.read_frontend('styles/tokens.css')
         action_source = self.read_frontend('features/share-actions.ts')
         copy_source = self.read_frontend('features/share-copy.ts')
 
@@ -695,6 +696,13 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('data-share-card', card_source)
         self.assertIn('data-share-card-variant=', card_source)
         self.assertIn('browse-card--category-{{ share.category }}', card_source)
+        self.assertIn(
+            'browse-card__category-icon--{{ share.category }}',
+            card_source,
+        )
+        self.assertIn('aria-label="{{ share.get_category_display }}"', card_source)
+        self.assertIn('bi bi-palette', card_source)
+        self.assertIn('bi bi-shield-shaded', card_source)
         self.assertIn('data-copies-count>{{ share.copies }}', card_source)
         self.assertIn('data-managed-share', card_source)
         self.assertIn("{% if card_variant == 'management' %}", card_source)
@@ -707,6 +715,20 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn("{% url 'delete_share' share.share_id %}", card_source)
         self.assertNotIn('style="', card_source)
 
+        browse_card_source = card_source.split(
+            "{% elif card_variant == 'browse' %}", 1
+        )[1]
+        favorite_position = browse_card_source.index(
+            "includes/favorite_button.html"
+        )
+        like_position = browse_card_source.index("includes/like_button.html")
+        copy_position = browse_card_source.index("data-copy-strategy")
+        self.assertLess(favorite_position, like_position)
+        self.assertLess(like_position, copy_position)
+        self.assertIn('browse-card__action-icon--favorite', favorite_source)
+        self.assertIn('browse-card__action-icon--like', like_source)
+        self.assertIn('browse-card__action-icon--copy', browse_card_source)
+
         for source, label in (
             (like_source, '点赞，当前'),
             (favorite_source, '收藏，当前'),
@@ -718,11 +740,32 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('.browse-card:focus-within', card_styles)
         self.assertIn('.browse-card--browse {', card_styles)
         self.assertIn('background: var(--app-color-surface);', card_styles)
-        self.assertIn('.browse-card--category-entertainment', card_styles)
-        self.assertIn('.browse-card--category-combat', card_styles)
+        self.assert_css_rule_contains(
+            card_styles,
+            '.browse-card__category-icon',
+            (
+                'align-self: start;',
+                'height: 1.35em;',
+                'place-items: center;',
+                'color: var(--app-color-text-muted);',
+            ),
+        )
+        self.assert_css_rule_contains(
+            card_styles,
+            '.browse-card--browse .browse-card__title',
+            (
+                'display: grid;',
+                'grid-template-columns: auto minmax(0, 1fr);',
+            ),
+        )
+        self.assertNotIn('--app-color-category-entertainment', token_styles)
+        self.assertNotIn('--app-color-category-combat', token_styles)
         self.assertIn('border: 1px solid var(--app-color-border);', card_styles)
         self.assertIn('border-color: var(--app-color-border-strong);', card_styles)
         self.assertIn('.browse-card__actions', card_styles)
+        self.assertIn('.browse-card__action-icon--favorite', card_styles)
+        self.assertIn('.browse-card__action-icon--like', card_styles)
+        self.assertIn('.browse-card__action-icon--copy', card_styles)
         self.assertIn('.management-card__actions', card_styles)
         self.assertIn('@container browse-card (max-width: 18rem)', card_styles)
         self.assertIn('@container browse-card (max-width: 15rem)', card_styles)
@@ -1796,6 +1839,29 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn(".share-preview[aria-busy='true']", preview_styles)
         self.assertIn('@media (prefers-reduced-motion: reduce)', preview_styles)
         self.assertIn('var(--app-z-preview-meta)', preview_styles)
+        self.assert_css_rule_contains(
+            preview_styles,
+            '.share-preview__meta--above-warning',
+            ('z-index: calc(var(--app-z-content-overlay) + 1);',),
+        )
+        self.assert_css_rule_contains(
+            preview_styles,
+            '.share-preview__original-badge',
+            ('background: var(--app-color-preview-original-badge);',),
+        )
+        self.assert_css_rule_contains(
+            preview_styles,
+            '.share-preview__translucent-badge',
+            (
+                'color: var(--app-color-shell-text);',
+                'text-shadow: var(--app-shadow-preview-badge-text);',
+            ),
+        )
+        self.assert_css_rule_contains(
+            preview_styles,
+            '.share-preview__view-count',
+            ('background: var(--app-color-preview-badge);',),
+        )
         self.assertIn('form?.requestSubmit()', controls_source)
         self.assertIn('window.confirm(message)', controls_source)
 
@@ -1846,9 +1912,11 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('<script', standard)
         self.assertIn('可能令人不适', standard)
         self.assertNotIn('可能包含剧透', standard)
+        self.assertIn('share-preview__original-badge', standard)
         self.assertIn('点击查看详情', standard)
         self.assertIn('bi bi-eye"></i> 123', standard)
         self.assertIn('share-preview__view-count', standard)
+        self.assertIn('share-preview__meta--above-warning', standard)
         self.assertNotIn('bi bi-clipboard"></i> 456', standard)
         self.assertNotIn('>战斗</span>', standard)
         self.assertNotIn('私有', standard)
@@ -1861,6 +1929,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
         self.assertIn('share-preview__warning--static', review)
         self.assertIn('待审核', review)
+        self.assertNotIn('share-preview__meta--above-warning', review)
         self.assertNotIn('点击查看详情', review)
         self.assertNotIn('bi bi-eye"></i> 123', review)
         self.assertNotIn('bi bi-clipboard"></i> 456', review)

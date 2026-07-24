@@ -16,7 +16,7 @@
         aria-label="收藏，当前 {{ favorites_count }} 个收藏"
         aria-pressed="{% if is_favorited %}true{% else %}false{% endif %}"
         title="{% if is_favorited %}取消收藏{% else %}收藏{% endif %}">
-    <i class="bi {% if is_favorited %}bi-star-fill{% else %}bi-star{% endif %}" aria-hidden="true"></i>
+    <i class="bi {% if is_favorited %}bi-star-fill{% else %}bi-star{% endif %} browse-card__action-icon browse-card__action-icon--favorite" aria-hidden="true"></i>
     <span id="favorites-count-{% if fragment == 'overlay' %}overlay-{% endif %}{{ share.share_id }}" data-reaction-count{% if fragment == 'detail' or fragment == 'overlay' %} class="ms-1"{% endif %}>{{ favorites_count }}</span>
 </button>
 {% endwith %}

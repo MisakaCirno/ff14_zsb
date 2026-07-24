@@ -54,9 +54,21 @@
   z-index: var(--app-z-preview-meta);
 }
 
-.share-preview__view-count {
+.share-preview__meta--above-warning {
+  z-index: calc(var(--app-z-content-overlay) + 1);
+}
+
+.share-preview__translucent-badge {
   color: var(--app-color-shell-text);
-  background: var(--app-color-overlay);
+  text-shadow: var(--app-shadow-preview-badge-text);
+}
+
+.share-preview__original-badge {
+  background: var(--app-color-preview-original-badge);
+}
+
+.share-preview__view-count {
+  background: var(--app-color-preview-badge);
 }
 
 .share-preview__warning--static {

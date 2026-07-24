@@ -11,6 +11,15 @@
 
         <div class="card-body browse-card__body">
             <h3 class="card-title h5 browse-card__title" id="share-card-title-{{ share.share_id }}" title="{{ share.title }}">
+                {% if card_variant == 'browse' %}
+                <span class="browse-card__category-icon browse-card__category-icon--{{ share.category }}" aria-label="{{ share.get_category_display }}">
+                    {% if share.category == 'combat' %}
+                    <i class="bi bi-shield-shaded" aria-hidden="true"></i>
+                    {% else %}
+                    <i class="bi bi-palette" aria-hidden="true"></i>
+                    {% endif %}
+                </span>
+                {% endif %}
                 <a href="{% url 'share_detail' share.share_id %}" class="browse-card__title-link"{% if card_variant == 'browse' %} data-share-detail-trigger data-spoiler-preference="{{ spoiler_preference|default:'mask' }}" data-nsfw-preference="{{ nsfw_preference|default:'mask' }}"{% endif %}>{{ share.title }}</a>
             </h3>
             <div class="browse-card__meta">
@@ -94,23 +103,23 @@
             </div>
             {% elif card_variant == 'browse' %}
             <div class="btn-group browse-card__actions" role="group" aria-label="互动操作">
-                    <button type="button" class="btn btn-sm browse-card__icon-action" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-copy-label="复制《{{ share.title }}》的分享码" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码，当前已复制 {{ share.copies }} 次">
-                        <i class="bi bi-clipboard" aria-hidden="true"></i>
-                        <span data-copies-count>{{ share.copies }}</span>
-                    </button>
-                    {% if viewer.is_authenticated %}
-                    {% include 'shares/includes/like_button.html' with share=share is_liked=share.is_liked likes_count=share.likes_count interaction_fragment='card' only %}
-                    {% include 'shares/includes/favorite_button.html' with share=share is_favorited=share.is_favorited favorites_count=share.favorites_count interaction_fragment='card' only %}
-                    {% else %}
-                    <a href="{% url 'login' %}?next={{ login_return_url|urlencode }}" class="btn btn-sm btn-outline-danger hover-lift" title="登录后点赞" aria-label="登录后点赞《{{ share.title }}》，当前 {{ share.likes_count }} 个点赞">
-                        <i class="bi bi-heart" aria-hidden="true"></i>
-                        <span>{{ share.likes_count }}</span>
-                    </a>
-                    <a href="{% url 'login' %}?next={{ login_return_url|urlencode }}" class="btn btn-sm btn-outline-secondary hover-lift" title="登录后收藏" aria-label="登录后收藏《{{ share.title }}》，当前 {{ share.favorites_count }} 个收藏">
-                        <i class="bi bi-star" aria-hidden="true"></i>
-                        <span>{{ share.favorites_count }}</span>
-                    </a>
-                    {% endif %}
+                {% if viewer.is_authenticated %}
+                {% include 'shares/includes/favorite_button.html' with share=share is_favorited=share.is_favorited favorites_count=share.favorites_count interaction_fragment='card' only %}
+                {% include 'shares/includes/like_button.html' with share=share is_liked=share.is_liked likes_count=share.likes_count interaction_fragment='card' only %}
+                {% else %}
+                <a href="{% url 'login' %}?next={{ login_return_url|urlencode }}" class="btn btn-sm btn-outline-secondary hover-lift" title="登录后收藏" aria-label="登录后收藏《{{ share.title }}》，当前 {{ share.favorites_count }} 个收藏">
+                    <i class="bi bi-star browse-card__action-icon browse-card__action-icon--favorite" aria-hidden="true"></i>
+                    <span>{{ share.favorites_count }}</span>
+                </a>
+                <a href="{% url 'login' %}?next={{ login_return_url|urlencode }}" class="btn btn-sm btn-outline-danger hover-lift" title="登录后点赞" aria-label="登录后点赞《{{ share.title }}》，当前 {{ share.likes_count }} 个点赞">
+                    <i class="bi bi-heart browse-card__action-icon browse-card__action-icon--like" aria-hidden="true"></i>
+                    <span>{{ share.likes_count }}</span>
+                </a>
+                {% endif %}
+                <button type="button" class="btn btn-sm browse-card__icon-action" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-copy-label="复制《{{ share.title }}》的分享码" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码，当前已复制 {{ share.copies }} 次">
+                    <i class="bi bi-clipboard browse-card__action-icon browse-card__action-icon--copy" aria-hidden="true"></i>
+                    <span data-copies-count>{{ share.copies }}</span>
+                </button>
             </div>
             {% if viewer.is_authenticated %}
             {% include 'shares/includes/share_interaction_form.html' with share=share interaction_fragment='card' interaction_return_url=interaction_return_url csrf_token=csrf_token only %}

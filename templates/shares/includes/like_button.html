@@ -16,7 +16,7 @@
         aria-label="点赞，当前 {{ likes_count }} 个点赞"
         aria-pressed="{% if is_liked %}true{% else %}false{% endif %}"
         title="{% if is_liked %}取消点赞{% else %}点赞{% endif %}">
-    <i class="bi {% if is_liked %}bi-heart-fill{% else %}bi-heart{% endif %}" aria-hidden="true"></i>
+    <i class="bi {% if is_liked %}bi-heart-fill{% else %}bi-heart{% endif %} browse-card__action-icon browse-card__action-icon--like" aria-hidden="true"></i>
     <span id="likes-count-{% if fragment == 'overlay' %}overlay-{% endif %}{{ share.share_id }}" data-reaction-count{% if fragment == 'detail' or fragment == 'overlay' %} class="ms-1"{% endif %}>{{ likes_count }}</span>
 </button>
 {% endwith %}
