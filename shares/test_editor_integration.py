@@ -41,6 +41,48 @@ class QuillEditorIntegrationTests(SimpleTestCase):
         self.assertIn('js/quill.js', media)
         self.assertIn('js/quill-widget.js', media)
 
+    def test_admin_shell_and_editor_use_responsive_project_contracts(self):
+        admin_template = get_template('admin/base_site.html').template.source
+        editor_script = (
+            Path(settings.BASE_DIR) / 'static' / 'js' / 'quill-widget.js'
+        ).read_text(encoding='utf-8')
+        editor_styles = (
+            Path(settings.BASE_DIR) / 'static' / 'css' / 'quill-widget.css'
+        ).read_text(encoding='utf-8')
+        admin_styles = (
+            Path(settings.BASE_DIR) / 'static' / 'css' / 'admin-shell.css'
+        ).read_text(encoding='utf-8')
+
+        self.assertIn('{% extends "admin/base.html" %}', admin_template)
+        self.assertIn('{% block responsive %}', admin_template)
+        self.assertIn('{{ block.super }}', admin_template)
+        self.assertIn("static 'css/admin-shell.css'", admin_template)
+        self.assertIn('class="admin-brand__link"', admin_template)
+        self.assertIn("wrapper.className = 'quill-admin-field'", editor_script)
+        self.assertIn('wrapper.appendChild(editor)', editor_script)
+        self.assertIn("source.insertAdjacentElement('afterend', wrapper)", editor_script)
+        self.assertLess(
+            editor_script.index('wrapper.appendChild(editor)'),
+            editor_script.index('new window.Quill'),
+        )
+        self.assertIn("toolbar.setAttribute('role', 'toolbar')", editor_script)
+        self.assertIn("quill.root.setAttribute('role', 'textbox')", editor_script)
+        self.assertIn('let contentDirty = false', editor_script)
+        self.assertIn("if (origin === 'user')", editor_script)
+        self.assertIn('if (contentDirty)', editor_script)
+        self.assertIn('.quill-admin-field {', editor_styles)
+        self.assertIn('flex: 1 1 48rem;', editor_styles)
+        self.assertIn('width: min(100%, 72rem);', editor_styles)
+        self.assertIn('height: auto;', editor_styles)
+        self.assertIn('@media (max-width: 767px)', editor_styles)
+        self.assertIn('.admin-brand__link {', admin_styles)
+        self.assertIn('#changelist .results {', admin_styles)
+        self.assertIn('--admin-radius-control: 0.5rem;', admin_styles)
+        self.assertIn('--admin-radius-surface: 0.75rem;', admin_styles)
+        self.assertIn('@media (prefers-color-scheme: dark)', admin_styles)
+        self.assertIn('html[data-theme="auto"]', admin_styles)
+        self.assertIn('overflow-wrap: anywhere;', admin_styles)
+
     def test_public_editors_share_one_native_first_form_partial(self):
         partial_name = 'shares/includes/share_editor_form.html'
         partial_source = get_template(partial_name).template.source

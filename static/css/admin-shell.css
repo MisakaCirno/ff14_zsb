@@ -1,0 +1,302 @@
+:root,
+html[data-theme="light"] {
+    --primary: #9b2f50;
+    --secondary: #822541;
+    --accent: #fffdfb;
+    --primary-fg: #fffdfb;
+    --body-fg: #2d2926;
+    --body-bg: #f7f4f1;
+    --body-quiet-color: #625a55;
+    --body-medium-color: #514a46;
+    --body-loud-color: #2d2926;
+    --header-color: #fffdfb;
+    --header-branding-color: #fffdfb;
+    --header-bg: #822541;
+    --header-link-color: #fffdfb;
+    --breadcrumbs-fg: #f7e8ed;
+    --breadcrumbs-link-fg: #fffdfb;
+    --breadcrumbs-bg: #6c1d35;
+    --link-fg: #822541;
+    --link-hover-color: #6c1d35;
+    --link-selected-fg: #9b2f50;
+    --hairline-color: #e8e0db;
+    --border-color: #d7cec7;
+    --darkened-bg: #f4efeb;
+    --selected-bg: #ede7e2;
+    --selected-row: #f7e8ed;
+    --button-bg: #822541;
+    --button-hover-bg: #6c1d35;
+    --default-button-bg: #9b2f50;
+    --default-button-hover-bg: #822541;
+    --object-tools-bg: #625a55;
+    --object-tools-hover-bg: #514a46;
+    --admin-surface: #fffdfb;
+    --admin-canvas: #f7f4f1;
+    --admin-shadow: 0 0.125rem 0.5rem rgba(45, 41, 38, 0.08);
+    --admin-radius-control: 0.5rem;
+    --admin-radius-surface: 0.75rem;
+}
+
+html[data-theme="dark"] {
+    --primary: #d88aa2;
+    --secondary: #b75573;
+    --accent: #fff2f6;
+    --header-color: #fff8fa;
+    --header-branding-color: #fff8fa;
+    --header-bg: #381924;
+    --header-link-color: #fff8fa;
+    --breadcrumbs-fg: #f3cbd7;
+    --breadcrumbs-link-fg: #fff8fa;
+    --breadcrumbs-bg: #2b131b;
+    --link-fg: #efadc1;
+    --link-hover-color: #ffd5e1;
+    --link-selected-fg: #efadc1;
+    --admin-surface: #25211f;
+    --admin-canvas: #171513;
+    --admin-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+    html[data-theme="auto"] {
+        --primary: #d88aa2;
+        --secondary: #b75573;
+        --accent: #fff2f6;
+        --header-color: #fff8fa;
+        --header-branding-color: #fff8fa;
+        --header-bg: #381924;
+        --header-link-color: #fff8fa;
+        --breadcrumbs-fg: #f3cbd7;
+        --breadcrumbs-link-fg: #fff8fa;
+        --breadcrumbs-bg: #2b131b;
+        --link-fg: #efadc1;
+        --link-hover-color: #ffd5e1;
+        --link-selected-fg: #efadc1;
+        --admin-surface: #25211f;
+        --admin-canvas: #171513;
+        --admin-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.28);
+    }
+}
+
+body {
+    background: var(--admin-canvas);
+}
+
+#header {
+    min-height: 3.75rem;
+    padding: 0.75rem clamp(1rem, 3vw, 2rem);
+    gap: 1rem;
+    box-shadow: var(--admin-shadow);
+}
+
+#branding {
+    min-width: 0;
+}
+
+.admin-brand,
+.admin-brand__link,
+.admin-brand__copy {
+    min-width: 0;
+}
+
+.admin-brand__link {
+    display: inline-flex;
+    gap: 0.75rem;
+    align-items: center;
+    color: var(--header-branding-color) !important;
+}
+
+.admin-brand__mark {
+    display: inline-grid;
+    flex: 0 0 auto;
+    width: 2.25rem;
+    height: 2.25rem;
+    place-items: center;
+    font-size: 1rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: var(--admin-radius-surface);
+}
+
+.admin-brand__copy {
+    display: grid;
+    gap: 0.1rem;
+}
+
+.admin-brand__copy strong {
+    overflow: hidden;
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-brand__copy small {
+    color: var(--breadcrumbs-fg);
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
+#user-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.6rem;
+    align-items: center;
+    justify-content: flex-end;
+    max-width: min(100%, 46rem);
+    line-height: 1.5;
+}
+
+#user-tools a,
+#logout-form button {
+    text-underline-offset: 0.18em;
+}
+
+div.breadcrumbs {
+    padding: 0.75rem clamp(1rem, 3vw, 2rem);
+}
+
+.main {
+    background: var(--admin-canvas);
+}
+
+#content {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100rem;
+    margin-inline: auto;
+    padding: clamp(1rem, 2.5vw, 2rem);
+}
+
+#content h1 {
+    margin-bottom: 1.25rem;
+    color: var(--body-loud-color);
+    font-size: clamp(1.4rem, 2.5vw, 1.85rem);
+    line-height: 1.25;
+}
+
+.module,
+.inline-group,
+fieldset.module,
+.submit-row {
+    overflow: hidden;
+    background: var(--admin-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--admin-radius-surface);
+    box-shadow: var(--admin-shadow);
+}
+
+.module,
+.inline-group,
+.change-form fieldset.module {
+    margin-bottom: 1rem;
+}
+
+.module h2,
+.module caption,
+.inline-group h2,
+fieldset.module > h2,
+fieldset.module > .fieldset-heading {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.form-row {
+    padding: 0.9rem 1rem;
+}
+
+.aligned label {
+    box-sizing: border-box;
+    padding-top: 0.45rem;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="url"],
+input[type="number"],
+input[type="search"],
+textarea,
+select {
+    border-radius: var(--admin-radius-control);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    outline: 2px solid color-mix(in srgb, var(--primary) 45%, transparent);
+    outline-offset: 1px;
+}
+
+.button,
+input[type="submit"],
+input[type="button"],
+.submit-row input,
+a.button,
+.object-tools a {
+    border-radius: var(--admin-radius-control);
+}
+
+.submit-row {
+    box-sizing: border-box;
+    padding: 0.85rem;
+}
+
+#changelist .results {
+    overflow-x: auto;
+    background: var(--admin-surface);
+    border: 1px solid var(--border-color);
+    border-radius: var(--admin-radius-surface);
+    box-shadow: var(--admin-shadow);
+}
+
+#changelist .results table {
+    border: 0;
+}
+
+#nav-sidebar {
+    background: var(--admin-surface);
+    border-right-color: var(--border-color);
+}
+
+.messagelist {
+    margin-bottom: 1rem;
+}
+
+.messagelist li {
+    border-radius: var(--admin-radius-control);
+}
+
+@media (max-width: 767px) {
+    #header {
+        height: auto;
+        align-items: stretch;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+    }
+
+    .admin-brand__copy small {
+        display: none;
+    }
+
+    #user-tools {
+        justify-content: flex-start;
+        max-width: none;
+        overflow-wrap: anywhere;
+    }
+
+    #content {
+        padding: 1rem;
+    }
+
+    .module,
+    .inline-group,
+    fieldset.module,
+    .submit-row,
+    #changelist .results {
+        border-radius: var(--admin-radius-control);
+    }
+}

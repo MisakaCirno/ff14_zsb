@@ -1,18 +1,74 @@
-.quill-editor-source[hidden] + .quill-admin-editor {
+.quill-editor-source[hidden] + .quill-admin-field {
     display: block;
 }
 
+.quill-admin-field {
+    box-sizing: border-box;
+    flex: 1 1 48rem;
+    width: min(100%, 72rem);
+    min-width: 0;
+}
+
+.quill-admin-field[hidden] {
+    display: none;
+}
+
+.quill-admin-field .ql-toolbar,
+.quill-admin-field .ql-container {
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.quill-admin-field .ql-container {
+    height: auto;
+}
+
+.quill-admin-field .ql-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0;
+    align-items: center;
+    background: var(--darkened-bg, #f8f8f8);
+    border-color: var(--border-color, #ccc);
+    border-radius: var(--admin-radius-control, 0.5rem) var(--admin-radius-control, 0.5rem) 0 0;
+}
+
+.quill-admin-field .ql-toolbar .ql-formats {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    margin-right: 0.75rem;
+}
+
 .quill-admin-editor {
-    background: var(--body-bg, #fff);
+    width: 100%;
     color: var(--body-fg, #333);
-    min-height: 18rem;
+    background: var(--admin-surface, var(--body-bg, #fff));
+    border-color: var(--border-color, #ccc);
+    border-radius: 0 0 var(--admin-radius-control, 0.5rem) var(--admin-radius-control, 0.5rem);
 }
 
 .quill-admin-editor .ql-editor {
+    box-sizing: border-box;
     min-height: 18rem;
+    padding: 1rem;
+    font-family: var(--font-family-primary, sans-serif);
+    font-size: 0.9375rem;
+    line-height: 1.65;
 }
 
 .quill-admin-editor .ql-editor code,
 .quill-admin-editor .ql-editor .ql-code-block-container {
     border-radius: var(--app-radius-control, 0.5rem);
+}
+
+@media (max-width: 767px) {
+    .quill-admin-field {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+
+    .quill-admin-field .ql-toolbar {
+        overflow-x: auto;
+    }
 }
