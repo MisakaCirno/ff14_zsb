@@ -53,9 +53,9 @@
                 <span class="browse-card__meta-item">
                     <i class="bi bi-calendar3" aria-hidden="true"></i>
                     {% if card_variant == 'collection' %}
-                    <time datetime="{{ item.added_at|date:'c' }}" title="加入合集时间">{{ item.added_at|date:"m-d" }}</time>
+                    <time datetime="{{ item.added_at|date:'c' }}" title="加入合集时间">{{ item.added_at|date:"Y-m-d" }}</time>
                     {% else %}
-                    <time datetime="{{ share.created_at|date:'c' }}">{% if card_variant == 'management' %}{{ share.created_at|date:"Y-m-d H:i" }}{% else %}{{ share.created_at|date:"m-d" }}{% endif %}</time>
+                    <time datetime="{{ share.created_at|date:'c' }}">{{ share.created_at|date:"Y-m-d" }}</time>
                     {% endif %}
                 </span>
                 {% if card_variant == 'management' %}
