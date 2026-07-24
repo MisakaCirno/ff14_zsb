@@ -1,10 +1,11 @@
 from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.recorder import MigrationRecorder
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from django.utils import timezone
 
 
+@tag('slow')
 class DataIntegrityConstraintMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0020_replace_ckeditor_field')
     migrate_to = ('shares', '0021_add_data_integrity_constraints')

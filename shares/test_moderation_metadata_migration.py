@@ -5,10 +5,11 @@ from django.db import connection, migrations
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.exceptions import IrreversibleError
 from django.db.migrations.recorder import MigrationRecorder
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from django.utils import timezone
 
 
+@tag('slow')
 class ModerationMetadataMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0018_default_home_feed_waterfall')
     migrate_to = (

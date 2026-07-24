@@ -15,7 +15,7 @@ from django.contrib.sessions.models import Session
 from django.core import serializers
 from django.db import DatabaseError, connection, models, transaction
 from django.db.backends.sqlite3.base import DatabaseWrapper as SQLiteDatabaseWrapper
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, tag
 from django.utils import timezone
 
 from .models import (
@@ -61,6 +61,7 @@ def import_dataset(*args, **kwargs):
     return _import_dataset(*args, **kwargs)
 
 
+@tag('slow')
 class DataPortabilityTests(TestCase):
     def setUp(self):
         self.author = User.objects.create_user(
@@ -1941,6 +1942,7 @@ class DataPortabilityTests(TestCase):
         self.assertIn('permissions must be a list', errors)
 
 
+@tag('slow')
 class DataPortabilityEmbeddedTableTests(TransactionTestCase):
     reset_sequences = True
 
@@ -2061,6 +2063,7 @@ class DataPortabilityEmbeddedTableTests(TransactionTestCase):
             self.assertIn(recovered_status, {'recovered', 'already_imported'})
 
 
+@tag('slow')
 class DataPortabilityBackendLockTests(TransactionTestCase):
     def test_file_sqlite_exclusive_import_lock_blocks_a_native_second_connection(self):
         if connection.vendor != 'sqlite':
@@ -2145,6 +2148,7 @@ class DataPortabilityBackendLockTests(TransactionTestCase):
                 lock_connection.close()
 
 
+@tag('slow')
 class DataPortabilityPostgreSQLBackendTests(TransactionTestCase):
     reset_sequences = True
 

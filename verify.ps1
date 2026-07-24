@@ -25,28 +25,6 @@ if ($runReleaseE2E -and $env:OS -ne 'Windows_NT') {
     throw 'The Release profile requires Windows NTFS and DACL APIs.'
 }
 
-function Write-GitHubErrorAnnotation {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Title,
-        [Parameter(Mandatory = $true)]
-        [string]$Message
-    )
-
-    if ($env:GITHUB_ACTIONS -ne 'true') {
-        return
-    }
-    $escapedTitle = $Title.
-        Replace('%', '%25').
-        Replace("`r", '%0D').
-        Replace("`n", '%0A')
-    $escapedMessage = $Message.
-        Replace('%', '%25').
-        Replace("`r", '%0D').
-        Replace("`n", '%0A')
-    Write-Host "::error title=$escapedTitle::$escapedMessage"
-}
-
 function Invoke-CheckedStep {
     param(
         [Parameter(Mandatory = $true)]
@@ -64,9 +42,6 @@ function Invoke-CheckedStep {
         }
     }
     catch {
-        Write-GitHubErrorAnnotation `
-            -Title $Name `
-            -Message $_.Exception.Message
         throw
     }
     finally {
@@ -250,37 +225,25 @@ try {
     }
 
     if (-not $SkipTests) {
-        Invoke-CheckedStep "Django test suite ($DjangoParallel workers)" {
-            if ($env:GITHUB_ACTIONS -ne 'true') {
-                & $PythonExecutable manage.py test -v 1 --parallel $DjangoParallel
-                return
+        $djangoTestScope = if ($effectiveProfile -eq 'Fast') {
+            'fast'
+        }
+        else {
+            'complete'
+        }
+        Invoke-CheckedStep "Django $djangoTestScope test suite ($DjangoParallel workers)" {
+            $djangoTestArguments = @(
+                'manage.py',
+                'test',
+                '-v',
+                '1',
+                '--parallel',
+                $DjangoParallel
+            )
+            if ($effectiveProfile -eq 'Fast') {
+                $djangoTestArguments += '--exclude-tag=slow'
             }
-
-            $testOutput = [System.Collections.Generic.List[string]]::new()
-            & $PythonExecutable `
-                manage.py `
-                test `
-                -v 1 `
-                --parallel $DjangoParallel 2>&1 |
-                ForEach-Object {
-                    $line = $_.ToString()
-                    $testOutput.Add($line)
-                    Write-Host $line
-                }
-            $testExitCode = $LASTEXITCODE
-            if ($testExitCode -ne 0) {
-                $tail = (
-                    $testOutput |
-                    Select-Object -Last 40
-                ) -join "`n"
-                if ($tail.Length -gt 6000) {
-                    $tail = $tail.Substring($tail.Length - 6000)
-                }
-                Write-GitHubErrorAnnotation `
-                    -Title 'Django test failure details' `
-                    -Message $tail
-                throw "Django tests failed with exit code $testExitCode"
-            }
+            & $PythonExecutable @djangoTestArguments
         }
     }
 

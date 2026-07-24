@@ -2,13 +2,14 @@ from datetime import timedelta
 
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from django.utils import timezone
 
 from shares.models import Share, ShareLog, SiteMessage
 from shares.services.restriction_preflight import build_share_restriction_preflight
 
 
+@tag('slow')
 class LegacyPrivateClassificationMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0026_sync_announcement_permission_names')
     migrate_to = ('shares', '0027_classify_legacy_private_shares')

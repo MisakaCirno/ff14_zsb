@@ -37,7 +37,7 @@ venv\Scripts\python.exe -B manage.py createsuperuser
 
 ## 验证
 
-日常开发使用 Fast 档位。它仍会执行完整 Django 测试、前端行为测试、类型检查、设计系统和基础运维契约，只跳过耗时的生产副本演练与真实服务进程检查：
+日常开发使用 Fast 档位。它执行业务、权限、界面、配置等快速 Django 测试，以及前端行为测试、类型检查、设计系统和基础运维契约；历史迁移与完整数据可移植测试留给 Full 档位：
 
 ```powershell
 .\verify.ps1
@@ -67,7 +67,7 @@ Pop-Location
     -NpmExecutable npm.cmd
 ```
 
-依赖漏洞审计位于独立 CI 作业，不会因外部漏洞库网络波动拖慢本地验证。手动审计命令见 `requirements-audit.txt` 和 `.github/workflows/backend-ci.yml`。
+项目不使用 GitHub Actions；部署结论以目标 Windows 服务器的发布预检为准。需要检查依赖漏洞时，可按需安装 `requirements-audit.txt` 后在本地运行 `pip-audit`，并在 `frontend` 目录运行 `npm audit`。
 
 ## 数据与发布安全
 
@@ -99,6 +99,7 @@ sb_renderer/           独立渲染器（本轮不改）
 - [重构问题清单](document/REFACTORING_BACKLOG.md)
 - [项目当前状态](document/PROJECT_STATUS.md)
 - [测试指南](document/TESTING_GUIDE.md)
+- [测试套件审查](document/TEST_SUITE_REVIEW.md)
 - [Windows 生产运行手册](document/WINDOWS_PRODUCTION.md)
 - [生产副本演练手册](document/PRODUCTION_COPY_REHEARSAL.md)
 - [R20 现有 Git 仓库精简发布手册](document/R20_GIT_DEPLOYMENT.md)

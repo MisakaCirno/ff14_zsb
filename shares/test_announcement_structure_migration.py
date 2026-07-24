@@ -2,11 +2,12 @@ from unittest import skipUnless
 
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 
 from shares.models import Announcement
 
 
+@tag('slow')
 @skipUnless(connection.vendor == 'sqlite', 'SQLite-specific migration contract')
 class AnnouncementStructureMigrationTests(TransactionTestCase):
     maxDiff = None

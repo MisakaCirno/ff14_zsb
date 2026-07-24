@@ -207,6 +207,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# Password strength is covered by form and validator tests; cryptographic work
+# adds no value to isolated test fixtures and dominates local suite time.
+if APP_ENV == 'test':
+    PASSWORD_HASHERS = [
+        'django.contrib.auth.hashers.MD5PasswordHasher',
+    ]
+
 # Internationalization
 LANGUAGE_CODE = 'zh-hans'
 TIME_ZONE = 'Asia/Shanghai'

@@ -1,8 +1,9 @@
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 
 
+@tag('slow')
 class HomeFeedModeDefaultMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0017_userprofile_home_feed_mode')
     migrate_to = ('shares', '0018_default_home_feed_waterfall')
@@ -102,6 +103,7 @@ class HomeFeedModeDefaultMigrationTests(TransactionTestCase):
         )
 
 
+@tag('slow')
 class LegacyHomeFeedModeMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0016_add_copies_field')
     migrate_to = ('shares', '0018_default_home_feed_waterfall')
@@ -158,6 +160,7 @@ class LegacyHomeFeedModeMigrationTests(TransactionTestCase):
         self.assertEqual(new_profile.home_feed_mode, 'infinite')
 
 
+@tag('slow')
 class AppliedHomeFeedModeMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0018_default_home_feed_waterfall')
     migrate_to = ('shares', '0028_normalize_announcement_column_order')

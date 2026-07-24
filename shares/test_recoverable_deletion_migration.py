@@ -3,10 +3,11 @@ from unittest import skipUnless
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.exceptions import IrreversibleError
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from django.utils import timezone
 
 
+@tag('slow')
 class RecoverableDeletionMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0028_normalize_announcement_column_order')
     migrate_to = ('shares', '0029_add_recoverable_content_deletion')
@@ -44,6 +45,7 @@ class RecoverableDeletionMigrationTests(TransactionTestCase):
             MigrationExecutor(connection).migrate([self.migrate_from])
 
 
+@tag('slow')
 @skipUnless(connection.vendor == 'sqlite', 'SQLite-specific sequence contract')
 class RecoverableDeletionSequenceMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0028_normalize_announcement_column_order')

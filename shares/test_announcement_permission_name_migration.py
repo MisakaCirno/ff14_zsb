@@ -2,9 +2,10 @@ from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 
 
+@tag('slow')
 class AnnouncementPermissionNameMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0025_add_collection_owner_index')
     migrate_to = ('shares', '0026_sync_announcement_permission_names')

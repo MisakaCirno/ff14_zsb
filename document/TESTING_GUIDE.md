@@ -13,18 +13,20 @@ python manage.py createsuperuser
 
 ## 自动化与可访问性回归
 
-日常提交前运行快速验证；它仍会并行执行完整 Django 测试、前端验证和基础运维契约：
+日常提交前运行快速验证；它会并行执行业务、权限、界面和配置等快速 Django 测试、前端验证及基础运维契约：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\verify.ps1
 ```
 
-合并或发布候选前运行完整验证；正式发布工具链的合成离线演练使用 `Release` 档位：
+历史迁移和完整数据可移植测试标记为 `slow`，不会在 Fast 档位重复消耗日常开发时间。合并或发布候选前使用 Full 运行全部 Django 测试和离线数据合约；正式发布工具链的合成离线端到端演练使用 `Release` 档位：
 
 ```powershell
 .\verify.ps1 -Profile Full
 .\verify.ps1 -Profile Release
 ```
+
+项目不使用 GitHub Actions。自动化结果只代表本机代码检查；最终能否部署仍由目标 Windows 服务器上的启动器、配置预检、依赖安装和数据库备份／迁移结果决定。
 
 `Release` 会在合成生产副本演练之外启动隔离的临时 Django 站点，并运行 Playwright/Chromium 与 axe。首次在本机运行前安装浏览器：
 

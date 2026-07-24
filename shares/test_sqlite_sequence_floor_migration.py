@@ -6,7 +6,7 @@ from django.db import connection, transaction
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.exceptions import IrreversibleError
 from django.db.migrations.recorder import MigrationRecorder
-from django.test import SimpleTestCase, TransactionTestCase
+from django.test import SimpleTestCase, TransactionTestCase, tag
 from django.utils import timezone
 
 
@@ -55,6 +55,7 @@ class SQLiteSequenceRowValidationTests(SimpleTestCase):
         MIGRATION_0025.restore_sqlite_sequence_floors(None, schema_editor)
 
 
+@tag('slow')
 @skipUnless(connection.vendor == 'sqlite', 'SQLite-specific migration contract')
 class SQLiteSequenceFloorMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0018_default_home_feed_waterfall')

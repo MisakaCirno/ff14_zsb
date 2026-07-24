@@ -3,10 +3,11 @@ from unittest import skipUnless
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.exceptions import IrreversibleError
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from django.utils import timezone
 
 
+@tag('slow')
 class ModeratorTakedownMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0029_add_recoverable_content_deletion')
     migrate_to = ('shares', '0030_add_moderator_takedown')

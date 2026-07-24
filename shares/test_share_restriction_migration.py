@@ -4,10 +4,11 @@ from importlib import import_module
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.exceptions import IrreversibleError
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from django.utils import timezone
 
 
+@tag('slow')
 class ShareRestrictionMigrationTests(TransactionTestCase):
     """Protect the historical moderation-state recovery in migration 0022."""
 

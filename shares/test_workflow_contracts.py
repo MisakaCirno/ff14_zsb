@@ -682,76 +682,133 @@ class InteractionWorkflowTests(TestCase):
             status=Share.Status.APPROVED,
         )
 
-    def test_like_endpoint_sets_explicit_state_idempotently(self):
+    def test_interaction_endpoints_set_explicit_state_idempotently(self):
         self.client.force_login(self.user)
 
-        url = reverse('toggle_like', args=[self.share.share_id])
-        add_responses = [
-            self.client.post(url, {'target_state': 'active'}),
-            self.client.post(url, {'target_state': 'active'}),
-        ]
-        remove_responses = [
-            self.client.post(url, {'target_state': 'inactive'}),
-            self.client.post(url, {'target_state': 'inactive'}),
-        ]
-
-        for response in add_responses:
-            self.assertEqual(response.json(), {
-                'status': 'success',
-                'is_liked': True,
-                'likes_count': 1,
-            })
-        for response in remove_responses:
-            self.assertEqual(response.json(), {
-                'status': 'success',
-                'is_liked': False,
-                'likes_count': 0,
-            })
-        self.assertFalse(self.share.likes.filter(pk=self.user.pk).exists())
-        self.assertIn('HX-Request', add_responses[0].headers['Vary'])
-        self.assertIn('no-store', add_responses[0].headers['Cache-Control'])
-
-    def test_hx_like_endpoint_returns_reusable_card_button(self):
-        self.client.force_login(self.user)
-
-        response = self.client.post(
-            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=card',
-            {'target_state': 'active'},
-            HTTP_HX_REQUEST='true',
+        cases = (
+            ('toggle_like', 'likes', 'is_liked', 'likes_count'),
+            (
+                'toggle_favorite',
+                'favorites',
+                'is_favorited',
+                'favorites_count',
+            ),
         )
+        for endpoint, relation_name, state_key, count_key in cases:
+            with self.subTest(endpoint=endpoint):
+                url = reverse(endpoint, args=[self.share.share_id])
+                add_responses = [
+                    self.client.post(url, {'target_state': 'active'}),
+                    self.client.post(url, {'target_state': 'active'}),
+                ]
+                remove_responses = [
+                    self.client.post(url, {'target_state': 'inactive'}),
+                    self.client.post(url, {'target_state': 'inactive'}),
+                ]
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.headers['Content-Type'].startswith('text/html'))
-        self.assertContains(response, 'btn-danger')
-        self.assertContains(response, 'bi-heart-fill')
-        self.assertContains(response, 'hx-post=')
-        self.assertContains(response, 'aria-label="点赞，当前 1 个点赞"')
-        self.assertContains(response, 'aria-pressed="true"')
-        self.assertContains(response, 'hx-vals=\'{"target_state":"inactive"}\'')
-        self.assertContains(response, 'hx-sync="this:drop"')
-        self.assertContains(response, 'hx-disabled-elt="this"')
-        self.assertContains(response, '>1</span>')
-        self.assertIn('HX-Request', response.headers['Vary'])
-        self.assertIn('no-store', response.headers['Cache-Control'])
-        self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
+                for response in add_responses:
+                    self.assertEqual(response.json(), {
+                        'status': 'success',
+                        state_key: True,
+                        count_key: 1,
+                    })
+                for response in remove_responses:
+                    self.assertEqual(response.json(), {
+                        'status': 'success',
+                        state_key: False,
+                        count_key: 0,
+                    })
+                relation = getattr(self.share, relation_name)
+                self.assertFalse(relation.filter(pk=self.user.pk).exists())
+                self.assertIn('HX-Request', add_responses[0].headers['Vary'])
+                self.assertIn(
+                    'no-store',
+                    add_responses[0].headers['Cache-Control'],
+                )
 
-    def test_hx_like_endpoint_returns_detail_button(self):
+    def test_hx_interaction_endpoints_return_reusable_card_buttons(self):
         self.client.force_login(self.user)
 
-        response = self.client.post(
-            reverse('toggle_like', args=[self.share.share_id]) + '?fragment=detail',
-            {'target_state': 'active'},
-            HTTP_HX_REQUEST='true',
+        cases = (
+            (
+                'toggle_like',
+                'likes',
+                'btn-danger',
+                'bi-heart-fill',
+                'aria-label="点赞，当前 1 个点赞"',
+            ),
+            (
+                'toggle_favorite',
+                'favorites',
+                'btn-warning',
+                'bi-star-fill',
+                'aria-label="收藏，当前 1 个收藏"',
+            ),
         )
+        for endpoint, relation_name, button_class, icon, label in cases:
+            with self.subTest(endpoint=endpoint):
+                response = self.client.post(
+                    reverse(endpoint, args=[self.share.share_id])
+                    + '?fragment=card',
+                    {'target_state': 'active'},
+                    HTTP_HX_REQUEST='true',
+                )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'btn-danger')
-        self.assertContains(response, 'bi-heart-fill')
-        self.assertContains(response, 'fragment=detail')
-        self.assertContains(response, 'me-2')
-        self.assertContains(response, '>1</span>')
-        self.assertNotContains(response, 'w-50')
-        self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(
+                    response.headers['Content-Type'].startswith('text/html'),
+                )
+                self.assertContains(response, button_class)
+                self.assertContains(response, icon)
+                self.assertContains(response, 'hx-post=')
+                self.assertContains(response, label)
+                self.assertContains(response, 'aria-pressed="true"')
+                self.assertContains(
+                    response,
+                    'hx-vals=\'{"target_state":"inactive"}\'',
+                )
+                self.assertContains(response, 'hx-sync="this:drop"')
+                self.assertContains(response, 'hx-disabled-elt="this"')
+                self.assertContains(response, '>1</span>')
+                self.assertIn('HX-Request', response.headers['Vary'])
+                self.assertIn('no-store', response.headers['Cache-Control'])
+                relation = getattr(self.share, relation_name)
+                self.assertTrue(relation.filter(pk=self.user.pk).exists())
+                relation.clear()
+
+    def test_hx_interaction_endpoints_return_detail_buttons(self):
+        self.client.force_login(self.user)
+
+        cases = (
+            ('toggle_like', 'likes', 'btn-danger', 'bi-heart-fill', True),
+            (
+                'toggle_favorite',
+                'favorites',
+                'btn-warning',
+                'bi-star-fill',
+                False,
+            ),
+        )
+        for endpoint, relation_name, button_class, icon, has_margin in cases:
+            with self.subTest(endpoint=endpoint):
+                response = self.client.post(
+                    reverse(endpoint, args=[self.share.share_id])
+                    + '?fragment=detail',
+                    {'target_state': 'active'},
+                    HTTP_HX_REQUEST='true',
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, button_class)
+                self.assertContains(response, icon)
+                self.assertContains(response, 'fragment=detail')
+                if has_margin:
+                    self.assertContains(response, 'me-2')
+                self.assertContains(response, '>1</span>')
+                self.assertNotContains(response, 'w-50')
+                relation = getattr(self.share, relation_name)
+                self.assertTrue(relation.filter(pk=self.user.pk).exists())
+                relation.clear()
 
     def test_hx_inactive_interactions_emit_relation_specific_refresh_events(self):
         self.client.force_login(self.user)
@@ -787,33 +844,6 @@ class InteractionWorkflowTests(TestCase):
                 self.assertEqual(active_response.status_code, 200)
                 self.assertNotIn('HX-Trigger-After-Swap', active_response.headers)
                 self.assertTrue(relation.filter(pk=self.user.pk).exists())
-
-    def test_favorite_endpoint_sets_explicit_state_idempotently(self):
-        self.client.force_login(self.user)
-
-        url = reverse('toggle_favorite', args=[self.share.share_id])
-        add_responses = [
-            self.client.post(url, {'target_state': 'active'}),
-            self.client.post(url, {'target_state': 'active'}),
-        ]
-        remove_responses = [
-            self.client.post(url, {'target_state': 'inactive'}),
-            self.client.post(url, {'target_state': 'inactive'}),
-        ]
-
-        for response in add_responses:
-            self.assertEqual(response.json(), {
-                'status': 'success',
-                'is_favorited': True,
-                'favorites_count': 1,
-            })
-        for response in remove_responses:
-            self.assertEqual(response.json(), {
-                'status': 'success',
-                'is_favorited': False,
-                'favorites_count': 0,
-            })
-        self.assertFalse(self.share.favorites.filter(pk=self.user.pk).exists())
 
     def test_plain_form_interactions_redirect_and_remain_idempotent(self):
         self.client.force_login(self.user)
@@ -996,42 +1026,6 @@ class InteractionWorkflowTests(TestCase):
         self.assertEqual(allowed.status_code, 302)
         self.assertEqual(allowed.headers['Location'], detail_url)
         self.assertTrue(self.share.likes.filter(pk=self.user.pk).exists())
-
-    def test_hx_favorite_endpoint_returns_reusable_card_button(self):
-        self.client.force_login(self.user)
-
-        response = self.client.post(
-            reverse('toggle_favorite', args=[self.share.share_id]) + '?fragment=card',
-            {'target_state': 'active'},
-            HTTP_HX_REQUEST='true',
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'btn-warning')
-        self.assertContains(response, 'bi-star-fill')
-        self.assertContains(response, 'hx-post=')
-        self.assertContains(response, 'aria-label="收藏，当前 1 个收藏"')
-        self.assertContains(response, 'aria-pressed="true"')
-        self.assertContains(response, 'hx-vals=\'{"target_state":"inactive"}\'')
-        self.assertContains(response, '>1</span>')
-        self.assertTrue(self.share.favorites.filter(pk=self.user.pk).exists())
-
-    def test_hx_favorite_endpoint_returns_detail_button(self):
-        self.client.force_login(self.user)
-
-        response = self.client.post(
-            reverse('toggle_favorite', args=[self.share.share_id]) + '?fragment=detail',
-            {'target_state': 'active'},
-            HTTP_HX_REQUEST='true',
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'btn-warning')
-        self.assertContains(response, 'bi-star-fill')
-        self.assertContains(response, 'fragment=detail')
-        self.assertContains(response, '>1</span>')
-        self.assertNotContains(response, 'w-50')
-        self.assertTrue(self.share.favorites.filter(pk=self.user.pk).exists())
 
     def test_hx_interaction_rejects_unknown_or_missing_fragment_without_mutating(self):
         self.client.force_login(self.user)

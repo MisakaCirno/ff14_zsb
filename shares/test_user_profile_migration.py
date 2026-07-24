@@ -3,10 +3,11 @@ from importlib import import_module
 
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, tag
 from django.utils import timezone
 
 
+@tag('slow')
 class UserProfileIntegrityMigrationTests(TransactionTestCase):
     migrate_from = ('shares', '0022_add_share_restrictions')
     migrate_to = ('shares', '0023_userprofile_integrity')
