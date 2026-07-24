@@ -2133,8 +2133,10 @@ arguments = sys.argv[1:]
     prefix,
     base,
 ) = arguments[:7]
-tamper_after_fsync = Path(arguments[7]) if len(arguments) == 8 else None
-assert len(arguments) in {7, 8}
+fsync_action = arguments[7] if len(arguments) == 9 else None
+fsync_target = Path(arguments[8]) if len(arguments) == 9 else None
+assert len(arguments) in {7, 9}
+assert fsync_action in {None, "tamper-runtime-file", "touch-marker-ancestor"}
 spec = importlib.util.spec_from_file_location("synthetic_quick_rehearsal", orchestrator)
 assert spec is not None and spec.loader is not None
 module = importlib.util.module_from_spec(spec)
@@ -2151,7 +2153,7 @@ sys.path[:] = [
     str(prefix),
     str(prefix / "Lib" / "site-packages"),
 ]
-if tamper_after_fsync is not None:
+if fsync_action is not None:
     original_fsync = os.fsync
     tampered = False
 
@@ -2159,7 +2161,12 @@ if tamper_after_fsync is not None:
         global tampered
         original_fsync(descriptor)
         if not tampered:
-            tamper_after_fsync.write_bytes(b"VALUE = 'late'\\n")
+            payload = (
+                b"VALUE = 'late'\\n"
+                if fsync_action == "tamper-runtime-file"
+                else b"unrelated marker ancestor activity\\n"
+            )
+            fsync_target.write_bytes(payload)
             tampered = True
 
     os.fsync = fsync_then_tamper
@@ -2211,7 +2218,20 @@ def run_synthetic_quick(
     source_report: dict[str, object],
     destination: Path,
     tamper_after_fsync: Path | None = None,
+    touch_marker_ancestor_after_fsync: Path | None = None,
 ) -> subprocess.CompletedProcess[bytes]:
+    assert not (
+        tamper_after_fsync is not None
+        and touch_marker_ancestor_after_fsync is not None
+    )
+    fsync_arguments: list[str] = []
+    if tamper_after_fsync is not None:
+        fsync_arguments = ["tamper-runtime-file", str(tamper_after_fsync)]
+    elif touch_marker_ancestor_after_fsync is not None:
+        fsync_arguments = [
+            "touch-marker-ancestor",
+            str(touch_marker_ancestor_after_fsync),
+        ]
     return subprocess.run(
         [
             sys.executable,
@@ -2228,7 +2248,7 @@ def run_synthetic_quick(
             str(destination),
             str(synthetic_prefix),
             str(synthetic_base),
-            *([str(tamper_after_fsync)] if tamper_after_fsync is not None else []),
+            *fsync_arguments,
         ],
         cwd=synthetic_execution,
         stdin=subprocess.DEVNULL,
@@ -2296,6 +2316,24 @@ assert not terminal_new_entry_output.exists()
 terminal_new_entry.unlink()
 synthetic_before_source = synthetic_parent / "before.json"
 synthetic_before = run_synthetic_full(synthetic_before_source)
+marker_ancestor_probe = test_root / "unrelated-marker-ancestor-activity.tmp"
+marker_ancestor_output = synthetic_quick_output / "quick-marker-ancestor.json"
+marker_ancestor_quick = run_synthetic_quick(
+    synthetic_before_source,
+    synthetic_before,
+    marker_ancestor_output,
+    touch_marker_ancestor_after_fsync=marker_ancestor_probe,
+)
+assert marker_ancestor_quick.returncode == 0, marker_ancestor_quick.stderr.decode(
+    "utf-8", errors="replace"
+)
+assert marker_ancestor_probe.is_file()
+module._validate_runtime_identity_checkpoint(
+    marker_ancestor_output,
+    expected_fingerprint_sha256=synthetic_before["fingerprint_sha256"],
+    expected_source_report_sha256=file_hash(synthetic_before_source),
+)
+marker_ancestor_probe.unlink()
 synthetic_overlap_source = synthetic_parent / "before-overlapping-site-roots.json"
 synthetic_overlap_before = run_synthetic_full(
     synthetic_overlap_source,
@@ -2852,23 +2890,6 @@ try {
         $ErrorActionPreference = $previousErrorActionPreference
     }
     $global:LASTEXITCODE = 0
-    if ($exitCode -ne 0 -and $env:GITHUB_ACTIONS -eq 'true') {
-        $details = (
-            $fixtureOutput |
-            Select-Object -Last 40
-        ) -join "`n"
-        if ($details.Length -gt 6000) {
-            $details = $details.Substring($details.Length - 6000)
-        }
-        $escapedDetails = $details.
-            Replace('%', '%25').
-            Replace("`r", '%0D').
-            Replace("`n", '%0A')
-        Write-Host (
-            '::error title=Production-copy rehearsal details::' +
-            $escapedDetails
-        )
-    }
     Assert-Contract `
         -Condition ($exitCode -eq 0) `
         -Message "Production-copy rehearsal contract test failed with exit code $exitCode."

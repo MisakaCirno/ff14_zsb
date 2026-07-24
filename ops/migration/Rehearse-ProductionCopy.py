@@ -3876,6 +3876,7 @@ def label_within_scope(label_parts, root_parts, *, top_level):
     )
 
 directory_guards = {}
+marker_directory_guards = {}
 
 def guard_directory(path, *, issue, metadata=None):
     path = Path(path)
@@ -3894,15 +3895,35 @@ def guard_directory(path, *, issue, metadata=None):
     directory_guards.setdefault(key, (path, expected))
     return path
 
+def guard_marker_directory(path):
+    path = Path(path)
+    metadata = os.lstat(path)
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_ISLNK(metadata.st_mode)
+        or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
+    ):
+        raise RuntimeError(
+            f"Runtime checkpoint marker component is not a real directory: {path}"
+        )
+    key = path_key(path)
+    expected = (metadata.st_dev, metadata.st_ino)
+    existing = marker_directory_guards.get(key)
+    if existing is not None and existing[1] != expected:
+        raise RuntimeError(
+            f"Runtime checkpoint marker component changed while being checked: {path}"
+        )
+    marker_directory_guards.setdefault(key, (path, expected))
+
 def guard_marker_root(root):
     root = Path(root)
     if not root.is_absolute() or not root.anchor:
         raise RuntimeError("Runtime checkpoint marker root is not absolute.")
     current = Path(root.anchor)
-    guard_directory(current, issue="Runtime checkpoint marker component")
+    guard_marker_directory(current)
     for part in root.parts[1:]:
         current /= part
-        guard_directory(current, issue="Runtime checkpoint marker component")
+        guard_marker_directory(current)
 
 def expand_directory_label(label):
     marker, root, parts = parse_label(label)
@@ -3963,6 +3984,18 @@ def revalidate_runtime_directories():
             or identity(metadata) != expected
         ):
             raise RuntimeError(f"Runtime directory identity changed: {path}")
+    for key in sorted(marker_directory_guards):
+        path, expected = marker_directory_guards[key]
+        metadata = os.lstat(path)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or stat.S_ISLNK(metadata.st_mode)
+            or getattr(metadata, "st_file_attributes", 0) & reparse_attribute
+            or (metadata.st_dev, metadata.st_ino) != expected
+        ):
+            raise RuntimeError(
+                f"Runtime checkpoint marker component changed: {path}"
+            )
 
 source_path = Path(sys.argv[1])
 expected_fingerprint = sys.argv[2]
