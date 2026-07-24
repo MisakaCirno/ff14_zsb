@@ -79,7 +79,9 @@ foreach ($requiredText in @(
     'Invoke-DirectGitUpdateAndPrepare.ps1',
     'Invoke-DirectGitLauncher.ps1',
     'powershell.exe -NoProfile -ExecutionPolicy Bypass',
-    '-RepositoryRoot "%PROJECT_DIR%"'
+    '-RepositoryRoot "%PROJECT_DIR%"',
+    'chcp 65001',
+    'set "NO_COLOR=1"'
 )) {
     Assert-Contract `
         -Condition $startSource.Contains($requiredText) `
@@ -107,6 +109,7 @@ foreach ($requiredText in @(
     "'--prefix', 'frontend', 'run', 'build'",
     "'collectstatic'",
     'Invoke-DirectGitReleaseReadiness.ps1',
+    '$env:APP_VERSION = $Commit',
     'prepared-commit.txt',
     'Test-PreparedState',
     'Set-PreparedState'

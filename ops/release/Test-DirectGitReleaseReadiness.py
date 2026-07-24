@@ -525,7 +525,7 @@ def main() -> int:
     if not app_version or app_version in PLACEHOLDERS or app_version != target_commit:
         checks.warned(
             "application_version_binding",
-            "The file APP_VERSION is not the target commit; the unified launcher will override it.",
+            "Effective APP_VERSION is not the target commit; the unified launcher will override it.",
         )
     else:
         checks.passed(

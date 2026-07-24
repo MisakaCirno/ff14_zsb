@@ -284,22 +284,40 @@ function Invoke-ReleaseReadiness {
     )
 
     $readinessWrapper = Join-Path $Root 'ops\release\Invoke-DirectGitReleaseReadiness.ps1'
-    return Invoke-ExternalCommand `
-        -Executable 'powershell.exe' `
-        -CommandArguments @(
-            '-NoProfile',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-File',
-            $readinessWrapper,
-            '-RepositoryRoot',
-            $Root,
-            '-TargetCommit',
-            $Commit
-        ) `
-        -WorkingDirectory $Root `
-        -Description 'Verify release readiness' `
-        -AllowFailure
+    $hadAppVersion = Test-Path Env:APP_VERSION
+    $previousAppVersion = [Environment]::GetEnvironmentVariable(
+        'APP_VERSION',
+        [EnvironmentVariableTarget]::Process
+    )
+    try {
+        # Readiness must validate the same immutable version binding that the
+        # launcher will inject into the Waitress process.
+        $env:APP_VERSION = $Commit
+        return Invoke-ExternalCommand `
+            -Executable 'powershell.exe' `
+            -CommandArguments @(
+                '-NoProfile',
+                '-ExecutionPolicy',
+                'Bypass',
+                '-File',
+                $readinessWrapper,
+                '-RepositoryRoot',
+                $Root,
+                '-TargetCommit',
+                $Commit
+            ) `
+            -WorkingDirectory $Root `
+            -Description 'Verify release readiness' `
+            -AllowFailure
+    }
+    finally {
+        if ($hadAppVersion) {
+            $env:APP_VERSION = $previousAppVersion
+        }
+        else {
+            Remove-Item Env:APP_VERSION -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 if ($env:OS -ne 'Windows_NT') {

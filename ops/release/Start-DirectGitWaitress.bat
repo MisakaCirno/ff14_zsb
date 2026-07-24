@@ -1,6 +1,11 @@
 @echo off
 setlocal EnableExtensions
 
+REM Native Node tools emit UTF-8. Match the console code page and disable ANSI
+REM colors so PowerShell 5 does not turn build output into mojibake.
+chcp 65001 >nul
+set "NO_COLOR=1"
+
 REM This file lives in ops\release. Resolve the Git worktree without relying on
 REM the caller's working directory or an activated virtual environment.
 for %%I in ("%~dp0\..\..") do set "PROJECT_DIR=%%~fI"
