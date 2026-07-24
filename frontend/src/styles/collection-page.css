@@ -154,6 +154,10 @@
   min-width: 0;
 }
 
+.collection-detail-item > .browse-card {
+  width: 100%;
+}
+
 .collection-detail-pagination {
   margin-top: var(--app-space-6);
 }

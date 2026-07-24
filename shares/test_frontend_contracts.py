@@ -1842,6 +1842,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
         self.assertIn("@import './collection-page.css';", main_styles)
         self.assertIn('.collection-detail-page', collection_styles)
+        self.assertIn('.collection-detail-item > .browse-card', collection_styles)
+        self.assertIn('width: 100%;', collection_styles)
         self.assertNotIn('.collection-item-card', collection_styles)
         self.assertIn('.browse-card--browse {', card_styles)
         self.assertIn('.browse-card__position', card_styles)
