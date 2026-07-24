@@ -1670,6 +1670,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
     def test_public_profile_uses_semantic_server_navigation(self):
         source = self.read_template('shares/user_public_profile.html')
+        home_source = self.read_template('shares/index.html')
         main_styles = self.read_frontend('styles/main.css')
         profile_styles = self.read_frontend('styles/public-profile.css')
 
@@ -1684,6 +1685,12 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('aria-current="page"', source)
         self.assertIn('data-public-profile-shares', source)
         self.assertIn('data-public-profile-collections', source)
+        shared_share_grid = (
+            'browse-grid row row-cols-2 row-cols-md-3 row-cols-lg-4 '
+            'row-cols-xl-5 row-cols-xxl-6 g-3'
+        )
+        self.assertIn(shared_share_grid, source)
+        self.assertIn(shared_share_grid, home_source)
         self.assertNotIn('data-bs-toggle="tab"', source)
         self.assertNotIn('role="tablist"', source)
         self.assertNotIn('role="tabpanel"', source)

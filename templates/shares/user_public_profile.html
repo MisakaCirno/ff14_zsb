@@ -53,7 +53,7 @@
     {% if current_tab == 'shares' %}
     <section class="public-profile-content" aria-labelledby="public-profile-shares-title" data-public-profile-shares>
         <h2 class="visually-hidden" id="public-profile-shares-title">{{ author_presentation.display_name }} 的公开分享</h2>
-        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4">
+        <div class="browse-grid row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 row-cols-xxl-6 g-3">
             {% for share in shares %}
             {% include 'shares/includes/share_card.html' with interaction_return_url=share_cards_return_url csrf_token=csrf_token share=share card_variant='browse' viewer=user login_return_url=share_cards_return_url spoiler_preference=spoiler_preference nsfw_preference=nsfw_preference only %}
             {% empty %}
