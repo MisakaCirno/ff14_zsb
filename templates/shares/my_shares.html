@@ -211,7 +211,7 @@
             </div>
         </header>
 
-        <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-4 my-content-grid">
+        <div class="browse-grid row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 row-cols-xxl-6 g-3 my-content-grid">
             {% for share in shares %}
                 {% if current_tab == 'my_shares' %}
                 {% include 'shares/includes/share_card.html' with share=share card_variant='management' spoiler_preference=spoiler_preference nsfw_preference=nsfw_preference only %}
@@ -250,7 +250,7 @@
             </span>
         </header>
 
-        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 my-content-grid">
+        <div class="browse-grid row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 row-cols-xxl-6 g-3 my-content-grid">
             {% for collection in collections %}
             {% include 'shares/includes/collection_card.html' with collection=collection card_variant='management' only %}
             {% empty %}

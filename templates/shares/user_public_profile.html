@@ -68,7 +68,7 @@
     {% else %}
     <section class="public-profile-content" aria-labelledby="public-profile-collections-title" data-public-profile-collections>
         <h2 class="visually-hidden" id="public-profile-collections-title">{{ author_presentation.display_name }} 的公开合集</h2>
-        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+        <div class="browse-grid row row-cols-2 row-cols-md-3 row-cols-lg-4 row-cols-xl-5 row-cols-xxl-6 g-3">
             {% for collection in collections %}
             {% include 'shares/includes/collection_card.html' with collection=collection card_variant='public' only %}
             {% empty %}

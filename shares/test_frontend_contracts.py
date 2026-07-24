@@ -1738,6 +1738,11 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn("share=share card_variant='browse' viewer=user", source)
         self.assertIn('spoiler_preference=spoiler_preference', source)
         self.assertIn('nsfw_preference=nsfw_preference', source)
+        shared_share_grid = (
+            'browse-grid row row-cols-2 row-cols-md-3 row-cols-lg-4 '
+            'row-cols-xl-5 row-cols-xxl-6 g-3'
+        )
+        self.assertEqual(source.count(shared_share_grid), 2)
         self.assertIn("{% querystring order=None page=None %}", source)
         self.assertIn("{% querystring order='desc' page=None %}", source)
         self.assertIn("{% include 'shares/includes/empty_state.html' with ", source)
@@ -1775,6 +1780,11 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn("{% if card_variant == 'management' %}", component_source)
         self.assertIn('data-public-collection', component_source)
         self.assertIn('data-managed-collection', component_source)
+        self.assertIn('collection-card__action-label', component_source)
+        self.assertIn(
+            'aria-label="管理《{{ collection.title }}》的内容"',
+            component_source,
+        )
         self.assertIn("{% url 'collection_detail' collection.id %}", component_source)
         self.assertIn("{% url 'edit_collection' collection.id %}", component_source)
         self.assertIn("{% url 'delete_collection' collection.id %}", component_source)
@@ -1783,6 +1793,11 @@ class FrontendTemplateSourceTests(SimpleTestCase):
 
         self.assertIn('.collection-card {', card_styles)
         self.assertIn('@container collection-card', card_styles)
+        self.assertIn('.collection-card__action-label', card_styles)
+        self.assertIn(
+            'grid-template-columns: repeat(3, minmax(0, 1fr));',
+            card_styles,
+        )
         self.assertIn('@media (prefers-reduced-motion: reduce)', card_styles)
 
     def test_collection_detail_uses_semantic_paginated_components(self):
@@ -1798,7 +1813,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
             '<h1 class="ui-page-title collection-detail-hero__title"',
             source,
         )
-        self.assertIn('<ol class="row ', source)
+        self.assertIn('<ol class="browse-grid row ', source)
         self.assertIn('data-collection-items', source)
         self.assertIn(
             "{% include 'shares/includes/collection_item_card.html' with ",

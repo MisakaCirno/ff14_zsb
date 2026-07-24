@@ -44,17 +44,17 @@
         <footer class="card-footer collection-card__footer">
             {% if card_variant == 'management' %}
             <div class="collection-card__actions" role="group" aria-label="合集管理">
-                <a href="{% url 'collection_detail' collection.id %}" class="btn btn-sm btn-outline-primary">
+                <a href="{% url 'collection_detail' collection.id %}" class="btn btn-sm btn-outline-primary" aria-label="管理《{{ collection.title }}》的内容">
                     <i class="bi bi-list-check" aria-hidden="true"></i>
-                    管理内容
+                    <span class="collection-card__action-label">管理内容</span>
                 </a>
-                <a href="{% url 'edit_collection' collection.id %}" class="btn btn-sm btn-outline-secondary">
+                <a href="{% url 'edit_collection' collection.id %}" class="btn btn-sm btn-outline-secondary" aria-label="编辑《{{ collection.title }}》的信息">
                     <i class="bi bi-pencil" aria-hidden="true"></i>
-                    编辑信息
+                    <span class="collection-card__action-label">编辑信息</span>
                 </a>
-                <a href="{% url 'delete_collection' collection.id %}" class="btn btn-sm btn-outline-danger">
+                <a href="{% url 'delete_collection' collection.id %}" class="btn btn-sm btn-outline-danger" aria-label="删除合集《{{ collection.title }}》">
                     <i class="bi bi-trash" aria-hidden="true"></i>
-                    删除
+                    <span class="collection-card__action-label">删除</span>
                 </a>
             </div>
             {% else %}
