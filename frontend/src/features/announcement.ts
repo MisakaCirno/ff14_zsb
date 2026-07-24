@@ -21,10 +21,14 @@ function wasDismissed(announcementId: string): boolean {
 }
 
 function restoreFocus(target: HTMLElement): void {
-  const focusTarget = target.isConnected
+  const focusTarget = target.isConnected && !target.closest('[hidden]')
     ? target
     : document.getElementById('main-content')
   focusTarget?.focus({ preventScroll: true })
+}
+
+function hideAnnouncementEntry(banner: HTMLElement): void {
+  banner.hidden = true
 }
 
 function openAnnouncement(dialog: HTMLDialogElement): void {
@@ -45,6 +49,7 @@ function dismissAnnouncement(
   dialog: HTMLDialogElement,
   announcementId: string,
   focusTarget: HTMLElement,
+  banner: HTMLElement,
 ): void {
   if (dialog.open && typeof dialog.close === 'function') {
     dialog.close()
@@ -52,35 +57,47 @@ function dismissAnnouncement(
     dialog.removeAttribute('open')
   }
   rememberDismissal(announcementId)
+  hideAnnouncementEntry(banner)
   restoreFocus(focusTarget)
 }
 
 export function initializeAnnouncement(): void {
+  const banner = document.querySelector<HTMLElement>('[data-announcement-banner]')
   const dialog = document.querySelector<HTMLDialogElement>('[data-announcement-dialog]')
   const trigger = document.querySelector<HTMLElement>('[data-announcement-open]')
-  if (!dialog || !trigger || dialog.dataset.announcementInitialized === 'true') {
+  if (
+    !banner
+    || !dialog
+    || !trigger
+    || dialog.dataset.announcementInitialized === 'true'
+  ) {
     return
   }
   dialog.dataset.announcementInitialized = 'true'
 
   const announcementId = dialog.dataset.announcementId ?? ''
+  if (announcementId && wasDismissed(announcementId)) {
+    hideAnnouncementEntry(banner)
+    return
+  }
+
   trigger.addEventListener('click', () => openAnnouncement(dialog))
   dialog.querySelectorAll<HTMLElement>('[data-dismiss-announcement]').forEach((button) => {
     button.addEventListener('click', () => {
-      dismissAnnouncement(dialog, announcementId, trigger)
+      dismissAnnouncement(dialog, announcementId, trigger, banner)
     })
   })
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault()
-    dismissAnnouncement(dialog, announcementId, trigger)
+    dismissAnnouncement(dialog, announcementId, trigger, banner)
   })
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) {
-      dismissAnnouncement(dialog, announcementId, trigger)
+      dismissAnnouncement(dialog, announcementId, trigger, banner)
     }
   })
 
-  if (announcementId && !wasDismissed(announcementId)) {
+  if (announcementId) {
     openAnnouncement(dialog)
   }
 }

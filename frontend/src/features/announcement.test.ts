@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 function renderAnnouncement(): {
+  banner: HTMLElement
   closeButton: HTMLButtonElement
   dialog: HTMLDialogElement
+  main: HTMLElement
   openButton: HTMLButtonElement
 } {
   document.body.innerHTML = `
-    <aside id="announcement-banner" data-announcement-id="42">
+    <aside id="announcement-banner" data-announcement-banner data-announcement-id="42">
       <button id="announcement-open" type="button" data-announcement-open>维护通知</button>
       <dialog data-announcement-dialog data-announcement-id="42">
         <button type="button" data-announcement-dialog-close data-dismiss-announcement>关闭</button>
@@ -28,8 +30,10 @@ function renderAnnouncement(): {
     dialog.open = false
   })
   return {
+    banner: document.querySelector<HTMLElement>('[data-announcement-banner]')!,
     closeButton: document.querySelector<HTMLButtonElement>('[data-announcement-dialog-close]')!,
     dialog,
+    main: document.querySelector<HTMLElement>('#main-content')!,
     openButton: document.querySelector<HTMLButtonElement>('[data-announcement-open]')!,
   }
 }
@@ -51,22 +55,30 @@ describe('announcement dialog', () => {
     elements.closeButton.click()
 
     expect(elements.dialog.close).toHaveBeenCalledOnce()
-    expect(document.activeElement).toBe(elements.openButton)
+    expect(elements.banner.hidden).toBe(true)
+    expect(document.activeElement).toBe(elements.main)
     expect(localStorage.getItem('dismissed_announcement_id')).toBe('42')
   })
 
-  it('does not auto-open a dismissed announcement but still allows reopening it', async () => {
+  it('hides the homepage entry for an announcement that was already read', async () => {
     localStorage.setItem('dismissed_announcement_id', '42')
     const elements = renderAnnouncement()
     const { initializeAnnouncement } = await import('./announcement')
 
     initializeAnnouncement()
     expect(elements.dialog.showModal).not.toHaveBeenCalled()
+    expect(elements.banner.hidden).toBe(true)
+  })
 
-    elements.openButton.click()
+  it('shows and opens a newer announcement after an older one was read', async () => {
+    localStorage.setItem('dismissed_announcement_id', '41')
+    const elements = renderAnnouncement()
+    const { initializeAnnouncement } = await import('./announcement')
 
+    initializeAnnouncement()
+
+    expect(elements.banner.hidden).toBe(false)
     expect(elements.dialog.showModal).toHaveBeenCalledOnce()
-    expect(document.activeElement).toBe(elements.closeButton)
   })
 
   it('maps Escape cancellation to the same persistent close path', async () => {
@@ -80,7 +92,8 @@ describe('announcement dialog', () => {
     expect(cancelEvent.defaultPrevented).toBe(true)
     expect(elements.dialog.close).toHaveBeenCalledOnce()
     expect(localStorage.getItem('dismissed_announcement_id')).toBe('42')
-    expect(document.activeElement).toBe(elements.openButton)
+    expect(elements.banner.hidden).toBe(true)
+    expect(document.activeElement).toBe(elements.main)
   })
 
   it('closes when the backdrop itself is clicked', async () => {
@@ -92,5 +105,6 @@ describe('announcement dialog', () => {
 
     expect(elements.dialog.close).toHaveBeenCalledOnce()
     expect(localStorage.getItem('dismissed_announcement_id')).toBe('42')
+    expect(elements.banner.hidden).toBe(true)
   })
 })

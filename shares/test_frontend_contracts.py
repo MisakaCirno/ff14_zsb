@@ -2105,6 +2105,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('hx-trigger="intersect, click"', page_source)
         self.assertNotIn('hx-trigger="revealed"', page_source)
         self.assertIn('data-announcement-dialog', source)
+        self.assertIn('data-announcement-banner', source)
         self.assertIn('data-announcement-open', source)
         self.assertNotIn('truncatechars_html', source)
         self.assertIn('dialog.showModal()', announcement_source)
