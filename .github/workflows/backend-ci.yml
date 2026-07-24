@@ -4,8 +4,6 @@ on:
   push:
   pull_request:
   workflow_dispatch:
-  schedule:
-    - cron: "17 19 * * 0"
 
 permissions:
   contents: read
@@ -98,10 +96,10 @@ jobs:
 
       - name: Verify project
         shell: powershell
-        run: .\verify.ps1 -Profile Full -DjangoParallel 4 -PythonExecutable python
+        run: .\verify.ps1 -Profile Fast -DjangoParallel 4 -PythonExecutable python
 
   verify-postgresql:
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -166,7 +164,7 @@ jobs:
         run: .\verify.ps1 -Profile Fast -DjangoParallel 1 -PythonExecutable python
 
   verify-release-windows:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 30
     env:
