@@ -654,23 +654,6 @@ try {
         $ErrorActionPreference = $previousErrorActionPreference
     }
     $global:LASTEXITCODE = 0
-    if ($exitCode -ne 0 -and $env:GITHUB_ACTIONS -eq 'true') {
-        $details = (
-            $fixtureOutput |
-            Select-Object -Last 40
-        ) -join "`n"
-        if ($details.Length -gt 6000) {
-            $details = $details.Substring($details.Length - 6000)
-        }
-        $escapedDetails = $details.
-            Replace('%', '%25').
-            Replace("`r", '%0D').
-            Replace("`n", '%0A')
-        Write-Host (
-            '::error title=Production-copy bootstrap details::' +
-            $escapedDetails
-        )
-    }
     Assert-Contract `
         -Condition ($exitCode -eq 0) `
         -Message "Production-copy bootstrap contract failed with exit code $exitCode."
