@@ -155,6 +155,47 @@ function updateCopyCounters(root: ParentNode | null, value: string | null): void
   root.querySelectorAll<HTMLElement>('[data-copies-count]').forEach((counter) => {
     counter.textContent = value
   })
+  root.querySelectorAll<HTMLButtonElement>(
+    '[data-copy-strategy][data-copy-label]',
+  ).forEach((button) => {
+    button.setAttribute(
+      'aria-label',
+      `${button.dataset.copyLabel}，当前已复制 ${value} 次`,
+    )
+  })
+}
+
+function updateSnapshotCopyCounters(
+  snapshot: ActionButtonSnapshot,
+  value: string | null,
+): void {
+  if (value === null) {
+    return
+  }
+  snapshot.children.forEach((node) => {
+    if (!(node instanceof Element)) {
+      return
+    }
+    if (node.matches('[data-copies-count]')) {
+      node.textContent = value
+    }
+    node.querySelectorAll<HTMLElement>('[data-copies-count]').forEach((counter) => {
+      counter.textContent = value
+    })
+  })
+}
+
+function updateSnapshotCopyLabel(
+  button: HTMLButtonElement,
+  snapshot: ActionButtonSnapshot,
+  value: string | null,
+): void {
+  if (value === null || !button.dataset.copyLabel) {
+    return
+  }
+  snapshot.ariaLabel = (
+    `${button.dataset.copyLabel}，当前已复制 ${value} 次`
+  )
 }
 
 export async function performShareCopy(options: ShareCopyOptions): Promise<CopyTextResult> {
@@ -183,6 +224,8 @@ export async function performShareCopy(options: ShareCopyOptions): Promise<CopyT
     )
     void recordShareCopy(options.recordUrl).then((value) => {
       updateCopyCounters(options.counterRoot ?? fallbackRoot, value)
+      updateSnapshotCopyCounters(snapshot, value)
+      updateSnapshotCopyLabel(options.button, snapshot, value)
     })
   }
   return result

@@ -167,6 +167,7 @@ class ShareAccessContractTests(TestCase):
             'spoiler': 'invalid',
             'nsfw': 'invalid',
         })
+        persisted = self.client.get(reverse('index'))
 
         self.assertEqual(
             set(hidden.context['shares'].object_list),
@@ -178,8 +179,18 @@ class ShareAccessContractTests(TestCase):
         )
         self.assertEqual(hidden.context['spoiler_preference'], 'hide')
         self.assertEqual(hidden.context['nsfw_preference'], 'mask')
-        self.assertEqual(invalid.context['spoiler_preference'], 'mask')
-        self.assertEqual(invalid.context['nsfw_preference'], 'mask')
+        self.assertEqual(invalid.context['spoiler_preference'], 'show')
+        self.assertEqual(invalid.context['nsfw_preference'], 'show')
+        self.assertEqual(persisted.context['spoiler_preference'], 'show')
+        self.assertEqual(persisted.context['nsfw_preference'], 'show')
+        self.assertEqual(
+            self.client.session['browse_spoiler_preference'],
+            'show',
+        )
+        self.assertEqual(
+            self.client.session['browse_nsfw_preference'],
+            'show',
+        )
         self.assertContains(shown, 'id="spoiler-preference"')
         self.assertContains(shown, 'id="nsfw-preference"')
         self.assertContains(

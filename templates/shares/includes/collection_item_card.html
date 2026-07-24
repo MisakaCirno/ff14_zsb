@@ -46,7 +46,7 @@
                     <span>查看详情</span>
                 </a>
                 {% if can_manage_collection %}
-                <form action="{% url 'remove_share_from_collection' collection.id item.share.share_id %}" method="post" data-confirm-message="确定要从合集中移除吗？" data-remove-from-collection>
+                <form action="{% url 'remove_share_from_collection' collection.id item.share.share_id %}" method="post" data-confirm-message="确定要从合集中移除吗？" data-remove-from-collection hx-boost="true">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-outline-danger hover-lift" aria-label="从合集中移除《{{ item.share.title }}》">
                         <i class="bi bi-trash" aria-hidden="true"></i>

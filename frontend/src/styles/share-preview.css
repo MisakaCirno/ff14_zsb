@@ -54,6 +54,11 @@
   z-index: var(--app-z-preview-meta);
 }
 
+.share-preview__view-count {
+  color: var(--app-color-shell-text);
+  background: var(--app-color-overlay);
+}
+
 .share-preview__warning--static {
   cursor: default;
 }

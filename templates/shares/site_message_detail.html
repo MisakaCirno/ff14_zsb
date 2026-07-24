@@ -3,7 +3,17 @@
 {% block title %}{{ site_message.title }} - 站内信 - 粘鼠板儿{% endblock %}
 
 {% block content %}
-<section class="message-center-page message-detail-page" data-site-message-page data-site-message-detail aria-labelledby="site-message-title">
+<section
+    id="message-center-page"
+    class="message-center-page message-detail-page"
+    data-site-message-page
+    data-site-message-detail
+    aria-labelledby="site-message-title"
+    hx-target="#message-center-page"
+    hx-select="#message-center-page"
+    hx-select-oob="#message-container"
+    hx-swap="outerHTML"
+    hx-push-url="true">
     <header class="ui-page-header message-detail-hero">
         <a href="{{ back_url }}" class="btn btn-outline-secondary message-detail-hero__back">
             <i class="bi bi-arrow-left" aria-hidden="true"></i>
@@ -55,7 +65,7 @@
         </div>
         <footer class="message-detail-actions">
             {% if not site_message.is_read %}
-            <form method="post" action="{% url 'open_site_message' site_message.pk %}">
+            <form method="post" action="{% url 'open_site_message' site_message.pk %}" hx-boost="true">
                 {% csrf_token %}
                 <input type="hidden" name="mailbox" value="{{ mailbox }}">
                 {% if page_number %}<input type="hidden" name="page" value="{{ page_number }}">{% endif %}
@@ -65,7 +75,7 @@
                 </button>
             </form>
             {% endif %}
-            <form method="post" action="{% url 'set_site_message_archive_state' site_message.pk %}">
+            <form method="post" action="{% url 'set_site_message_archive_state' site_message.pk %}" hx-boost="true">
                 {% csrf_token %}
                 <input type="hidden" name="mailbox" value="{{ mailbox }}">
                 {% if page_number %}<input type="hidden" name="page" value="{{ page_number }}">{% endif %}

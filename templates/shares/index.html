@@ -157,7 +157,17 @@
                         <span>浏览方式</span>
                     </div>
                     <div class="browse-toolbar__modes btn-group" role="group" aria-labelledby="browse-mode-label">
-                        <form method="post" action="{% url 'set_home_feed_mode' %}">
+                        <form
+                            method="post"
+                            action="{% url 'set_home_feed_mode' %}"
+                            hx-boost="true"
+                            hx-target="#browse-explorer"
+                            hx-select="#browse-explorer"
+                            hx-select-oob="#message-container"
+                            hx-swap="outerHTML"
+                            hx-push-url="true"
+                            hx-sync="#browse-explorer:replace"
+                            hx-indicator="#browse-explorer-loading">
                             {% csrf_token %}
                             <input type="hidden" name="feed" value="paginated">
                             <input type="hidden" name="next" value="{{ request.path }}?{{ paginated_query }}">
@@ -165,7 +175,17 @@
                                 <span>分页</span>
                             </button>
                         </form>
-                        <form method="post" action="{% url 'set_home_feed_mode' %}">
+                        <form
+                            method="post"
+                            action="{% url 'set_home_feed_mode' %}"
+                            hx-boost="true"
+                            hx-target="#browse-explorer"
+                            hx-select="#browse-explorer"
+                            hx-select-oob="#message-container"
+                            hx-swap="outerHTML"
+                            hx-push-url="true"
+                            hx-sync="#browse-explorer:replace"
+                            hx-indicator="#browse-explorer-loading">
                             {% csrf_token %}
                             <input type="hidden" name="feed" value="infinite">
                             <input type="hidden" name="next" value="{{ request.path }}?{{ infinite_query }}">

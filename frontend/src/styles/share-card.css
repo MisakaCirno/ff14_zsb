@@ -19,6 +19,14 @@
   box-shadow: var(--app-shadow-surface);
 }
 
+.browse-card--category-entertainment {
+  background: var(--app-color-card-entertainment);
+}
+
+.browse-card--category-combat {
+  background: var(--app-color-card-combat);
+}
+
 .browse-card--browse:hover,
 .browse-card--browse:focus-within {
   transform: none;
@@ -220,6 +228,11 @@
 .browse-card--browse .browse-card__actions .btn-warning {
   color: var(--bs-warning-text-emphasis);
   background: var(--bs-warning-bg-subtle);
+}
+
+.browse-card--browse [data-copies-count] {
+  min-width: 1ch;
+  font-variant-numeric: tabular-nums;
 }
 
 .browse-card__action-group {

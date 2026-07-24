@@ -4,7 +4,16 @@
 {% block title %}站点动态 - 粘鼠板儿{% endblock %}
 
 {% block content %}
-<section class="announcement-page" data-announcement-page aria-labelledby="announcement-page-title">
+<section
+    id="announcement-page"
+    class="announcement-page"
+    data-announcement-page
+    aria-labelledby="announcement-page-title"
+    hx-target="#announcement-page"
+    hx-select="#announcement-page"
+    hx-select-oob="#message-container"
+    hx-swap="outerHTML"
+    hx-push-url="false">
     <header class="ui-page-header announcement-page__hero">
         <p class="ui-eyebrow announcement-page__eyebrow">站点信息</p>
         <h1 class="ui-page-title announcement-page__title" id="announcement-page-title">
@@ -52,7 +61,7 @@
 
                         {% if user.is_staff or user.is_superuser %}
                         <div class="announcement-card__actions">
-                            <form method="post" action="{% url 'toggle_announcement_visibility' announcement.id %}" class="announcement-card__visibility-form">
+                            <form method="post" action="{% url 'toggle_announcement_visibility' announcement.id %}" class="announcement-card__visibility-form" hx-boost="true">
                                 {% csrf_token %}
                                 <input type="hidden" name="is_active" value="{% if announcement.is_active %}0{% else %}1{% endif %}">
                                 <button

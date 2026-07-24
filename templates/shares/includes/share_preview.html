@@ -30,13 +30,15 @@
     <div class="position-absolute top-0 start-0 w-100 h-100 preview-overlay share-preview__veil" aria-hidden="true"></div>
 
     <div class="position-absolute top-0 start-0 m-2 share-preview__meta">
-        {% if share.category == 'combat' %}
-        <span class="badge bg-danger shadow-sm">战斗</span>
-        {% else %}
-        <span class="badge bg-success shadow-sm">娱乐</span>
+        {% if preview_variant != 'standard' %}
+            {% if share.category == 'combat' %}
+            <span class="badge bg-danger shadow-sm">战斗</span>
+            {% else %}
+            <span class="badge bg-success shadow-sm">娱乐</span>
+            {% endif %}
         {% endif %}
         {% if share.is_original %}
-        <span class="badge bg-primary shadow-sm ms-1">原创</span>
+        <span class="badge bg-primary shadow-sm{% if preview_variant != 'standard' %} ms-1{% endif %}">原创</span>
         {% endif %}
     </div>
 
@@ -77,11 +79,8 @@
                 </span>
                 {% endif %}
             {% endif %}
-        <span class="badge bg-dark bg-opacity-75">
+        <span class="badge share-preview__view-count">
             <i class="bi bi-eye"></i> {{ share.views }}
-        </span>
-        <span class="badge bg-dark bg-opacity-75">
-            <i class="bi bi-clipboard"></i> {{ share.copies }}
         </span>
         {% endif %}
     </div>

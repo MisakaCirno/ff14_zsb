@@ -3,7 +3,17 @@
 {% block title %}{{ mailbox_title }} - 站内信 - 粘鼠板儿{% endblock %}
 
 {% block content %}
-<section class="message-center-page" data-site-message-page data-mailbox="{{ mailbox }}" aria-labelledby="message-center-title">
+<section
+    id="message-center-page"
+    class="message-center-page"
+    data-site-message-page
+    data-mailbox="{{ mailbox }}"
+    aria-labelledby="message-center-title"
+    hx-target="#message-center-page"
+    hx-select="#message-center-page"
+    hx-select-oob="#message-container"
+    hx-swap="outerHTML"
+    hx-push-url="true">
     <header class="ui-page-header message-center-hero">
         <div class="message-center-hero__copy">
             <p class="ui-eyebrow message-center-hero__eyebrow">账户通知</p>
@@ -20,7 +30,7 @@
                 条未读
             </span>
             {% if global_unread_site_messages_count > 0 and mailbox != 'archived' %}
-            <form method="post" action="{% url 'mark_all_site_messages_read' %}" class="message-center-bulk-form">
+            <form method="post" action="{% url 'mark_all_site_messages_read' %}" class="message-center-bulk-form" hx-boost="true">
                 {% csrf_token %}
                 <input type="hidden" name="mailbox" value="{{ mailbox }}">
                 <input type="hidden" name="page" value="{{ site_messages.number }}">
@@ -89,7 +99,7 @@
                     </a>
                     {% endif %}
                     <div class="message-summary__actions">
-                        <form method="post" action="{% url 'set_site_message_archive_state' message.pk %}">
+                        <form method="post" action="{% url 'set_site_message_archive_state' message.pk %}" hx-boost="true">
                             {% csrf_token %}
                             <input type="hidden" name="mailbox" value="{{ mailbox }}">
                             <input type="hidden" name="page" value="{{ site_messages.number }}">

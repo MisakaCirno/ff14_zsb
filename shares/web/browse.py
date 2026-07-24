@@ -43,6 +43,10 @@ _BROWSE_ORDERINGS = {
 }
 _CONTENT_DISPLAY_MODES = {'hide', 'mask', 'show'}
 _DEFAULT_CONTENT_DISPLAY_MODE = 'mask'
+_CONTENT_DISPLAY_SESSION_KEYS = {
+    'spoiler': 'browse_spoiler_preference',
+    'nsfw': 'browse_nsfw_preference',
+}
 
 
 def _is_browse_explorer_request(request):
@@ -55,9 +59,20 @@ def _is_browse_explorer_request(request):
 def _content_display_mode(request, parameter, legacy_parameter):
     mode = request.GET.get(parameter)
     if mode in _CONTENT_DISPLAY_MODES:
+        session_key = _CONTENT_DISPLAY_SESSION_KEYS[parameter]
+        if request.session.get(session_key) != mode:
+            request.session[session_key] = mode
         return mode
     if request.GET.get(legacy_parameter) == 'on':
+        session_key = _CONTENT_DISPLAY_SESSION_KEYS[parameter]
+        if request.session.get(session_key) != 'hide':
+            request.session[session_key] = 'hide'
         return 'hide'
+    saved_mode = request.session.get(
+        _CONTENT_DISPLAY_SESSION_KEYS[parameter],
+    )
+    if saved_mode in _CONTENT_DISPLAY_MODES:
+        return saved_mode
     return _DEFAULT_CONTENT_DISPLAY_MODE
 
 

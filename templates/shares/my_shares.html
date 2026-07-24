@@ -3,7 +3,15 @@
 {% block title %}我的内容{% endblock %}
 
 {% block content %}
-<div class="my-content-page" data-my-content-page>
+<div
+    id="my-content-page"
+    class="my-content-page"
+    data-my-content-page
+    hx-target="#my-content-page"
+    hx-select="#my-content-page"
+    hx-select-oob="#message-container"
+    hx-swap="outerHTML"
+    hx-push-url="false">
     <header class="ui-page-header my-content-hero">
         <div class="my-content-hero__copy">
             <p class="ui-eyebrow my-content-hero__eyebrow">个人工作台</p>
@@ -81,7 +89,7 @@
                     </div>
                     <footer class="card-footer">
                         {% if share.deletion_origin == 'owner' %}
-                        <form method="post" action="{% url 'restore_share' share.share_id %}">
+                        <form method="post" action="{% url 'restore_share' share.share_id %}" hx-boost="true">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-sm btn-outline-success">
                                 <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
@@ -128,7 +136,7 @@
                         <p class="mb-0">{{ collection.deletion_reason }}</p>
                     </div>
                     <footer class="card-footer">
-                        <form method="post" action="{% url 'restore_collection' collection.id %}">
+                        <form method="post" action="{% url 'restore_collection' collection.id %}" hx-boost="true">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-sm btn-outline-success">
                                 <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>

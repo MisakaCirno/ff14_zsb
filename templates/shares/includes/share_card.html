@@ -1,6 +1,6 @@
 {% load ui_components %}
 <div class="col">
-    <article class="card h-100 share-card card-hover browse-card browse-card--{{ card_variant }}" aria-labelledby="share-card-title-{{ share.share_id }}" data-share-card data-share-id="{{ share.share_id }}" data-share-card-variant="{{ card_variant }}"{% if card_variant == 'management' %} data-managed-share{% endif %}>
+    <article class="card h-100 share-card card-hover browse-card browse-card--{{ card_variant }}{% if card_variant == 'browse' %} browse-card--category-{{ share.category }}{% endif %}" aria-labelledby="share-card-title-{{ share.share_id }}" data-share-card data-share-id="{{ share.share_id }}" data-share-card-variant="{{ card_variant }}"{% if card_variant == 'management' %} data-managed-share{% endif %}>
         <a href="{% url 'share_detail' share.share_id %}" class="text-decoration-none share-preview__link" aria-label="查看《{{ share.title }}》详情"{% if card_variant == 'browse' %} data-share-detail-trigger data-spoiler-preference="{{ spoiler_preference|default:'mask' }}" data-nsfw-preference="{{ nsfw_preference|default:'mask' }}"{% endif %}>
             {% if card_variant == 'management' %}
             {% include 'shares/includes/share_preview.html' with share=share preview_variant='management' only %}
@@ -86,15 +86,17 @@
                     <i class="bi bi-arrow-right-circle" aria-hidden="true"></i>
                     <span>查看详情</span>
                 </a>
-                <button type="button" class="btn btn-sm btn-outline-primary hover-lift" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码">
+                <button type="button" class="btn btn-sm btn-outline-primary hover-lift" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-copy-label="复制《{{ share.title }}》的分享码" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码，当前已复制 {{ share.copies }} 次">
                     <i class="bi bi-clipboard" aria-hidden="true"></i>
                     <span>复制码</span>
+                    <span data-copies-count>{{ share.copies }}</span>
                 </button>
             </div>
             {% elif card_variant == 'browse' %}
             <div class="btn-group browse-card__actions" role="group" aria-label="互动操作">
-                    <button type="button" class="btn btn-sm browse-card__icon-action" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码">
+                    <button type="button" class="btn btn-sm browse-card__icon-action" data-copy-strategy data-copy-code="{{ share.strategy_code }}" data-copy-label="复制《{{ share.title }}》的分享码" data-share-id="{{ share.share_id }}" data-record-copy-url="{% url 'record_copy' share.share_id %}" aria-label="复制《{{ share.title }}》的分享码，当前已复制 {{ share.copies }} 次">
                         <i class="bi bi-clipboard" aria-hidden="true"></i>
+                        <span data-copies-count>{{ share.copies }}</span>
                     </button>
                     {% if viewer.is_authenticated %}
                     {% include 'shares/includes/like_button.html' with share=share is_liked=share.is_liked likes_count=share.likes_count interaction_fragment='card' only %}

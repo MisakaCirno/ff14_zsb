@@ -694,6 +694,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('aria-labelledby="share-card-title-', card_source)
         self.assertIn('data-share-card', card_source)
         self.assertIn('data-share-card-variant=', card_source)
+        self.assertIn('browse-card--category-{{ share.category }}', card_source)
+        self.assertIn('data-copies-count>{{ share.copies }}', card_source)
         self.assertIn('data-managed-share', card_source)
         self.assertIn("{% if card_variant == 'management' %}", card_source)
         self.assertIn("{% elif card_variant == 'profile' %}", card_source)
@@ -716,6 +718,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('.browse-card:focus-within', card_styles)
         self.assertIn('.browse-card--browse {', card_styles)
         self.assertIn('background: var(--app-color-surface);', card_styles)
+        self.assertIn('.browse-card--category-entertainment', card_styles)
+        self.assertIn('.browse-card--category-combat', card_styles)
         self.assertIn('border: 1px solid var(--app-color-border);', card_styles)
         self.assertIn('border-color: var(--app-color-border-strong);', card_styles)
         self.assertIn('.browse-card__actions', card_styles)
@@ -724,6 +728,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('@container browse-card (max-width: 15rem)', card_styles)
         self.assertIn("import { performShareCopy } from './share-copy'", action_source)
         self.assertIn("icon.setAttribute('aria-hidden', 'true')", copy_source)
+        self.assertIn('updateSnapshotCopyCounters(snapshot, value)', copy_source)
 
     def test_base_template_has_no_classic_business_script(self):
         source = self.read_template('base.html')
@@ -739,6 +744,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('window.updateHistoryDropdown', main_source)
         self.assertIn(
             "import { initializeShareInteractions } from './features/share-interactions'",
+            main_source,
+        )
+        self.assertIn(
+            "document.addEventListener('htmx:load', initializeModerationResolution)",
             main_source,
         )
         self.assertIn('initializeShareInteractions()', main_source)
@@ -1839,12 +1848,16 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertNotIn('可能包含剧透', standard)
         self.assertIn('点击查看详情', standard)
         self.assertIn('bi bi-eye"></i> 123', standard)
-        self.assertIn('bi bi-clipboard"></i> 456', standard)
+        self.assertIn('share-preview__view-count', standard)
+        self.assertNotIn('bi bi-clipboard"></i> 456', standard)
+        self.assertNotIn('>战斗</span>', standard)
         self.assertNotIn('私有', standard)
 
         self.assertIn('待审核', management)
         self.assertIn('私有', management)
+        self.assertIn('>战斗</span>', management)
         self.assertIn('bi bi-eye"></i> 123', management)
+        self.assertNotIn('bi bi-clipboard"></i> 456', management)
 
         self.assertIn('share-preview__warning--static', review)
         self.assertIn('待审核', review)
@@ -1967,6 +1980,45 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn("clone.removeAttribute('aria-labelledby')", announcement_source)
         self.assertIn("clone.setAttribute('aria-hidden', 'true')", announcement_source)
 
+    def test_in_place_state_actions_use_partial_page_updates(self):
+        cases = (
+            (
+                'shares/announcement_list.html',
+                'id="announcement-page"',
+                'announcement-card__visibility-form" hx-boost="true"',
+            ),
+            (
+                'shares/my_shares.html',
+                'id="my-content-page"',
+                'restore_share\' share.share_id %}" hx-boost="true"',
+            ),
+            (
+                'shares/site_message_list.html',
+                'id="message-center-page"',
+                'message-center-bulk-form" hx-boost="true"',
+            ),
+            (
+                'shares/site_message_detail.html',
+                'id="message-center-page"',
+                'open_site_message\' site_message.pk %}" hx-boost="true"',
+            ),
+            (
+                'shares/collection_detail.html',
+                'id="collection-detail-page"',
+                'hx-target="#collection-detail-page"',
+            ),
+            (
+                'shares/includes/collection_item_card.html',
+                'data-remove-from-collection',
+                'hx-boost="true"',
+            ),
+        )
+        for template, target_hook, action_hook in cases:
+            with self.subTest(template=template):
+                source = self.read_template(template)
+                self.assertIn(target_hook, source)
+                self.assertIn(action_hook, source)
+
     def test_home_uses_scoped_responsive_browse_layout_contract(self):
         source = self.read_template('shares/index.html')
         main_styles = self.read_frontend('styles/main.css')
@@ -1988,6 +2040,10 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('hx-indicator="#browse-explorer-loading"', source)
         self.assertIn('hx-get="{{ request.path }}"', source)
         self.assertGreaterEqual(source.count('hx-boost="true"'), 3)
+        self.assertIn(
+            'action="{% url \'set_home_feed_mode\' %}"',
+            source,
+        )
         self.assertIn('aria-labelledby="browse-toolbar-title"', source)
         self.assertIn('aria-labelledby="browse-results-title"', source)
         self.assertIn('aria-label="敏感内容显示方式"', source)

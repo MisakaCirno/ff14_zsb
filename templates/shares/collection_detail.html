@@ -4,7 +4,15 @@
 {% block title %}{{ collection.title }} - 合集详情{% endblock %}
 
 {% block content %}
-<div class="container-fluid collection-detail-page" data-collection-detail-page>
+<div
+    id="collection-detail-page"
+    class="container-fluid collection-detail-page"
+    data-collection-detail-page
+    hx-target="#collection-detail-page"
+    hx-select="#collection-detail-page"
+    hx-select-oob="#message-container"
+    hx-swap="outerHTML"
+    hx-push-url="false">
     <header class="ui-page-header collection-detail-hero" aria-labelledby="collection-title">
         <div class="collection-detail-hero__identity">
             <div class="collection-detail-hero__badges" role="group" aria-label="合集状态">

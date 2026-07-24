@@ -28,10 +28,9 @@ class AnnouncementFrontendSourceContractTests(SimpleTestCase):
     def test_page_uses_semantic_list_and_shared_components(self):
         source = self.read_template()
 
-        self.assertIn(
-            'data-announcement-page aria-labelledby="announcement-page-title"',
-            source,
-        )
+        self.assertIn('data-announcement-page', source)
+        self.assertIn('aria-labelledby="announcement-page-title"', source)
+        self.assertIn('hx-target="#announcement-page"', source)
         self.assertIn(
             '<h1 class="ui-page-title announcement-page__title" id="announcement-page-title">',
             source,
