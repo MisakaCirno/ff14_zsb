@@ -1990,7 +1990,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
 
         self.assertIn('alt="预览 &amp; &quot;标题&quot; 的战术板预览"', standard)
-        self.assertIn('/n/board/%5Bstgy%3Aa%26%22b%5D', standard)
+        self.assertIn('/n/board/%5Bstgy%3Aa%26%22b%5D?rv=2', standard)
         self.assertNotIn('<script', standard)
         self.assertIn('可能令人不适', standard)
         self.assertNotIn('可能包含剧透', standard)

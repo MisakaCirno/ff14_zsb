@@ -1,5 +1,5 @@
 from dataclasses import FrozenInstanceError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from django.contrib.auth.models import AnonymousUser, User
 from django.db import connection
@@ -297,9 +297,9 @@ class ShareDetailPresentationTests(TestCase):
 
         self.assertEqual(
             detail.preview_url,
-            f'/n/board/{quote(special_code, safe="")}',
+            f'/n/board/{quote(special_code, safe="")}?rv=2',
         )
-        encoded_segment = detail.preview_url.removeprefix('/n/board/')
+        encoded_segment = urlsplit(detail.preview_url).path.removeprefix('/n/board/')
         for delimiter in ('/', '?', '#', '+', '"'):
             self.assertNotIn(delimiter, encoded_segment)
         self.assertEqual(detail.content_warning.key, 'nsfw-spoiler')

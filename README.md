@@ -93,6 +93,12 @@ static/overlay/        独立“小抄儿”功能（本轮不改）
 sb_renderer/           独立渲染器（本轮不改）
 ```
 
+## 战术板预览缓存版本
+
+分享卡片、详情页和弹窗统一通过 `shares.preview_urls.build_board_preview_url` 生成 `/n/board/<分享码>?rv=<版本>`。`ffxivshare.settings.BOARD_RENDER_CACHE_VERSION` 应与 node-zsb 的 `RENDER_CACHE_VERSION` 保持一致；当前均为 `2`。
+
+只有渲染输出可能变化时才升级该版本。推荐先部署带新版本参数的 FFXIVShare，再部署新版 node-zsb；两个服务短暂不一致时，渲染器会以不缓存的临时跳转纠正版本，不会把新图片写入旧版浏览器缓存。
+
 ## 进一步阅读
 
 - [重构执行计划](document/REFACTORING_PLAN.md)

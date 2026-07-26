@@ -50,6 +50,9 @@ RENDERER_PROXY_MAX_BYTES = env_int(
     default=16 * 1024 * 1024,
     minimum=1024,
 )
+# Public cache hint used by preview URLs. The renderer remains authoritative and
+# redirects stale or premature versions, so deployments cannot poison a versioned URL.
+BOARD_RENDER_CACHE_VERSION = '2'
 SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', default=IS_PRODUCTION)
 SECURE_REDIRECT_EXEMPT = [r'^health/(?:live|ready)/$']
 SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
