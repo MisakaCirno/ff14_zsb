@@ -2,9 +2,11 @@ import re
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import models
 from django.template.loader import get_template
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
 
 from .admin_forms import AnnouncementAdminForm, ShareAdminForm
 from .forms import ShareForm
@@ -41,23 +43,22 @@ class QuillEditorIntegrationTests(SimpleTestCase):
         self.assertIn('js/quill.js', media)
         self.assertIn('js/quill-widget.js', media)
 
-    def test_admin_shell_and_editor_use_responsive_project_contracts(self):
-        admin_template = get_template('admin/base_site.html').template.source
+    def test_admin_uses_framework_shell_and_editor_keeps_responsive_fixes(self):
+        project_admin_template = (
+            Path(settings.BASE_DIR) / 'templates' / 'admin' / 'base_site.html'
+        )
+        project_admin_styles = (
+            Path(settings.BASE_DIR) / 'static' / 'css' / 'admin-shell.css'
+        )
         editor_script = (
             Path(settings.BASE_DIR) / 'static' / 'js' / 'quill-widget.js'
         ).read_text(encoding='utf-8')
         editor_styles = (
             Path(settings.BASE_DIR) / 'static' / 'css' / 'quill-widget.css'
         ).read_text(encoding='utf-8')
-        admin_styles = (
-            Path(settings.BASE_DIR) / 'static' / 'css' / 'admin-shell.css'
-        ).read_text(encoding='utf-8')
 
-        self.assertIn('{% extends "admin/base.html" %}', admin_template)
-        self.assertIn('{% block responsive %}', admin_template)
-        self.assertIn('{{ block.super }}', admin_template)
-        self.assertIn("static 'css/admin-shell.css'", admin_template)
-        self.assertIn('class="admin-brand__link"', admin_template)
+        self.assertFalse(project_admin_template.exists())
+        self.assertFalse(project_admin_styles.exists())
         self.assertIn("wrapper.className = 'quill-admin-field'", editor_script)
         self.assertIn('wrapper.appendChild(editor)', editor_script)
         self.assertIn("source.insertAdjacentElement('afterend', wrapper)", editor_script)
@@ -75,13 +76,6 @@ class QuillEditorIntegrationTests(SimpleTestCase):
         self.assertIn('width: min(100%, 72rem);', editor_styles)
         self.assertIn('height: auto;', editor_styles)
         self.assertIn('@media (max-width: 767px)', editor_styles)
-        self.assertIn('.admin-brand__link {', admin_styles)
-        self.assertIn('#changelist .results {', admin_styles)
-        self.assertIn('--admin-radius-control: 0.5rem;', admin_styles)
-        self.assertIn('--admin-radius-surface: 0.75rem;', admin_styles)
-        self.assertIn('@media (prefers-color-scheme: dark)', admin_styles)
-        self.assertIn('html[data-theme="auto"]', admin_styles)
-        self.assertIn('overflow-wrap: anywhere;', admin_styles)
 
     def test_public_editors_share_one_native_first_form_partial(self):
         partial_name = 'shares/includes/share_editor_form.html'
@@ -182,3 +176,27 @@ class QuillEditorIntegrationTests(SimpleTestCase):
         ).read_text(encoding='utf-8')
 
         self.assertIn('Quill Editor v2.0.3', license_notice)
+
+
+class AdminEditorPageIntegrationTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(
+            username='editor-admin',
+            email='editor-admin@example.test',
+            password='password123',
+        )
+        self.client.force_login(self.admin)
+
+    def test_framework_admin_shell_loads_only_editor_customizations(self):
+        index_response = self.client.get(reverse('admin:index'))
+        editor_response = self.client.get(reverse('admin:shares_announcement_add'))
+
+        self.assertEqual(index_response.status_code, 200)
+        self.assertEqual(editor_response.status_code, 200)
+        self.assertNotContains(index_response, 'css/admin-shell.css')
+        self.assertNotContains(index_response, 'admin-brand__link')
+        self.assertNotContains(editor_response, 'css/admin-shell.css')
+        self.assertContains(editor_response, 'css/quill-widget.css')
+        self.assertContains(editor_response, 'js/quill-widget.js')
+        self.assertContains(editor_response, 'js/quill.js')
+        self.assertContains(editor_response, 'quill-editor-source')
