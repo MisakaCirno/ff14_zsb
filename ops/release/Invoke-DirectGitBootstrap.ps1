@@ -51,11 +51,12 @@ function Invoke-PowerShellScript {
     param(
         [Parameter(Mandatory = $true)][string]$PowerShellExecutable,
         [Parameter(Mandatory = $true)][string]$ScriptPath,
-        [Parameter(Mandatory = $true)][string[]]$ScriptArguments
+        [Parameter(Mandatory = $true)][string[]]$ScriptArguments,
+        [Parameter(Mandatory = $true)][ref]$ExitCodeReference
     )
 
     $previousErrorActionPreference = $ErrorActionPreference
-    $exitCode = $null
+    $processExitCode = $null
     try {
         $ErrorActionPreference = 'Continue'
         & $PowerShellExecutable `
@@ -63,12 +64,15 @@ function Invoke-PowerShellScript {
             -ExecutionPolicy Bypass `
             -File $ScriptPath `
             @ScriptArguments
-        $exitCode = $LASTEXITCODE
+        $processExitCode = $LASTEXITCODE
     }
     finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
-    return [int]$exitCode
+    # Do not return the exit code through PowerShell's success stream. Native
+    # child output uses that same stream, so assigning the function result would
+    # combine normal output and the integer into an Object[] value.
+    $ExitCodeReference.Value = [int]$processExitCode
 }
 
 function Stop-Bootstrap {
@@ -140,10 +144,12 @@ if ($NonInteractive) {
     $prepareArguments += '-NonInteractive'
 }
 
-$prepareExitCode = Invoke-PowerShellScript `
+$prepareExitCode = 0
+Invoke-PowerShellScript `
     -PowerShellExecutable $powerShellExecutable `
     -ScriptPath $preparerPath `
-    -ScriptArguments $prepareArguments
+    -ScriptArguments $prepareArguments `
+    -ExitCodeReference ([ref]$prepareExitCode)
 if ($prepareExitCode -ne 0) {
     Stop-Bootstrap `
         -Message (
@@ -201,10 +207,12 @@ if ($NonInteractive) {
     $launcherArguments += '-NonInteractive'
 }
 
-$launcherExitCode = Invoke-PowerShellScript `
+$launcherExitCode = 0
+Invoke-PowerShellScript `
     -PowerShellExecutable $powerShellExecutable `
     -ScriptPath $launcherPath `
-    -ScriptArguments $launcherArguments
+    -ScriptArguments $launcherArguments `
+    -ExitCodeReference ([ref]$launcherExitCode)
 if ($launcherExitCode -ne 0) {
     Stop-Bootstrap `
         -Message "FFXIVShare launcher exited with code $launcherExitCode." `

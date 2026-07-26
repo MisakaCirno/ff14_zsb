@@ -67,6 +67,7 @@ param(
 )
 
 $head = (& git.exe -C $RepositoryRoot rev-parse HEAD).Trim()
+Write-Host "Fixture preparation output for $head."
 $stateRoot = Split-Path -Parent $StatePath
 [void][System.IO.Directory]::CreateDirectory($stateRoot)
 [System.IO.File]::WriteAllText(
@@ -90,6 +91,7 @@ param(
 )
 
 $head = (& git.exe -C $RepositoryRoot rev-parse HEAD).Trim()
+Write-Host "Fixture launcher output for $head."
 [System.IO.File]::WriteAllText(
     (Join-Path $RepositoryRoot 'launcher-handoff.txt'),
     "$head`r`n",
@@ -145,6 +147,50 @@ exit 0
             [System.IO.File]::ReadAllText($handoffPath).Trim() -eq $commit
         ) `
         -Message 'Bootstrap handed off a launcher for the wrong Git HEAD.'
+
+    Remove-Item -LiteralPath $handoffPath -Force
+    $failedPreparerSource = @'
+param(
+    [string]$RepositoryRoot,
+    [string]$StatePath,
+    [switch]$SkipRemoteUpdate,
+    [switch]$NonInteractive
+)
+
+Write-Host 'Fixture preparation failed after writing normal output.'
+exit 13
+'@
+    [System.IO.File]::WriteAllText(
+        (Join-Path $releaseRoot 'Invoke-DirectGitUpdateAndPrepare.ps1'),
+        $failedPreparerSource,
+        $utf8
+    )
+
+    $failureExitCode = $null
+    try {
+        $ErrorActionPreference = 'Continue'
+        & powershell.exe `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File $bootstrapPath `
+            -RepositoryRoot $testRoot `
+            -StatePath $statePath `
+            -SkipRemoteUpdate `
+            -NonInteractive
+        $failureExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    Assert-Condition `
+        -Condition ($failureExitCode -eq 13) `
+        -Message (
+            'Bootstrap did not preserve a child failure exit code after ' +
+            "normal output: $failureExitCode."
+        )
+    Assert-Condition `
+        -Condition (-not (Test-Path -LiteralPath $handoffPath -PathType Leaf)) `
+        -Message 'Bootstrap launched the application after preparation failed.'
 
     Write-Host 'Direct Git bootstrap test passed.'
 }
