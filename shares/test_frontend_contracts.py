@@ -110,6 +110,9 @@ class FrontendShellContractTests(TestCase):
         self.assertIn('for="mobile-site-search">搜索分享或分享 ID</label>', content)
         self.assertIn('<main id="main-content" class="app-main py-4" tabindex="-1">', content)
         self.assertIn(f'2010 - {timezone.localdate().year} SQUARE ENIX', content)
+        self.assertIn('href="https://ff14hub.com/n/editor"', content)
+        self.assertIn('<span>编辑器</span>', content)
+        self.assertLess(content.index('<span>小抄儿</span>'), content.index('<span>编辑器</span>'))
 
     def test_authenticated_shell_marks_my_content_as_current(self):
         self.client.force_login(self.author)
