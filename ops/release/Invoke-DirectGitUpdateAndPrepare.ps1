@@ -15,6 +15,11 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$consoleScript = Join-Path $PSScriptRoot 'LauncherConsole.ps1'
+if (-not (Test-Path -LiteralPath $consoleScript -PathType Leaf)) {
+    throw "Launcher console helpers are missing: $consoleScript"
+}
+. $consoleScript
 
 function Get-AbsoluteLocalPath {
     param(
@@ -83,14 +88,14 @@ function Invoke-ExternalCommand {
         [switch]$AllowFailure
     )
 
-    Write-Host "==> $Description"
+    Write-LauncherStep -Message $Description
     $previousErrorActionPreference = $ErrorActionPreference
     $exitCode = $null
     Push-Location $WorkingDirectory
     try {
         $ErrorActionPreference = 'Continue'
         & $Executable @CommandArguments 2>&1 |
-            ForEach-Object { Write-Host $_.ToString() }
+            ForEach-Object { Write-LauncherProcessLine -Line $_.ToString() }
         $exitCode = $LASTEXITCODE
     }
     finally {
@@ -138,7 +143,7 @@ function Assert-CriticalWorktreeClean {
     ) + $criticalPaths
     $status = Invoke-GitText -Root $Root -GitArguments $statusArguments
     if (-not [string]::IsNullOrWhiteSpace($status)) {
-        Write-Host $status
+        Write-LauncherProcessLine -Line $status
         throw 'Critical runtime files are modified. Refusing to update or start.'
     }
 }
@@ -384,10 +389,10 @@ if (-not $SkipRemoteUpdate -and -not $skipUpdateFromEnvironment) {
             throw 'Remote update check failed in non-interactive mode.'
         }
         Write-Host ''
-        Write-Host 'The remote update check failed.'
-        Write-Host '[1] Start the current prepared version (default)'
-        Write-Host '[2] Stop'
-        $offlineChoice = (Read-Host 'Choose 1 or 2').Trim()
+        Write-LauncherWarning -Message 'The remote update check failed.'
+        Write-LauncherChoice -Key '1' -Description 'Start the current prepared version (default)'
+        Write-LauncherChoice -Key '2' -Description 'Stop'
+        $offlineChoice = (Read-LauncherChoice -Prompt 'Choose 1 or 2: ').Trim()
         if ($offlineChoice -notin @('', '1')) {
             throw 'Startup stopped after the remote update check failed.'
         }
@@ -420,7 +425,9 @@ if (-not $SkipRemoteUpdate -and -not $skipUpdateFromEnvironment) {
             }
 
             Write-Host ''
-            Write-Host "Update available: $currentCommit -> $targetCommit"
+            Write-LauncherWarning -Message (
+                "Update available: $currentCommit -> $targetCommit"
+            )
             $summary = Invoke-GitText `
                 -Root $RepositoryRoot `
                 -GitArguments @(
@@ -430,16 +437,18 @@ if (-not $SkipRemoteUpdate -and -not $skipUpdateFromEnvironment) {
                     "$currentCommit..$targetCommit"
                 )
             if (-not [string]::IsNullOrWhiteSpace($summary)) {
-                Write-Host $summary
+                Write-LauncherDetail -Message $summary
             }
             Write-Host ''
-            Write-Host '[1] Update, prepare, and start (default)'
-            Write-Host '[2] Start the current version without updating'
-            Write-Host '[3] Stop'
+            Write-LauncherChoice -Key '1' -Description 'Update, prepare, and start (default)'
+            Write-LauncherChoice -Key '2' -Description 'Start the current version without updating'
+            Write-LauncherChoice -Key '3' -Description 'Stop'
             if ($NonInteractive) {
                 throw 'A remote update requires interactive approval.'
             }
-            $updateChoice = (Read-Host 'Choose 1, 2, or 3').Trim()
+            $updateChoice = (
+                Read-LauncherChoice -Prompt 'Choose 1, 2, or 3: '
+            ).Trim()
             if ([string]::IsNullOrWhiteSpace($updateChoice)) {
                 $updateChoice = '1'
             }
@@ -470,12 +479,12 @@ if (-not $SkipRemoteUpdate -and -not $skipUpdateFromEnvironment) {
             }
         }
         else {
-            Write-Host "Code is current at $currentCommit."
+            Write-LauncherSuccess -Message "Code is current at $currentCommit."
         }
     }
 }
 else {
-    Write-Host 'Remote update check skipped.'
+    Write-LauncherWarning -Message 'Remote update check skipped.'
 }
 
 $prepared = Test-PreparedState `
@@ -484,7 +493,7 @@ $prepared = Test-PreparedState `
     -Root $RepositoryRoot
 if ($updated -or -not $prepared) {
     Write-Host ''
-    Write-Host "Preparing release $currentCommit..."
+    Write-LauncherNotice -Message "Preparing release $currentCommit..."
     Invoke-ReleasePreparation `
         -Root $RepositoryRoot `
         -PythonExecutable $pythonExecutable
@@ -497,10 +506,10 @@ if ($updated -or -not $prepared) {
     Set-PreparedState `
         -Commit $currentCommit `
         -PreparedStatePath $StatePath
-    Write-Host "[OK] Release $currentCommit is prepared."
+    Write-LauncherSuccess -Message "Release $currentCommit is prepared."
 }
 else {
-    Write-Host "Release $currentCommit is already prepared."
+    Write-LauncherSuccess -Message "Release $currentCommit is already prepared."
 }
 
 exit 0

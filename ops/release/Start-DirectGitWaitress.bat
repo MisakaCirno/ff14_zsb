@@ -1,8 +1,8 @@
 @echo off
 setlocal EnableExtensions
 
-REM Native Node tools emit UTF-8. Match the console code page and disable ANSI
-REM colors so PowerShell 5 does not turn build output into mojibake.
+REM Native Node tools emit UTF-8. Match the console code page and disable child
+REM process ANSI sequences. The PowerShell launcher adds host-native colors.
 chcp 65001 >nul
 set "NO_COLOR=1"
 
@@ -13,17 +13,20 @@ set "PREPARER=%PROJECT_DIR%\ops\release\Invoke-DirectGitUpdateAndPrepare.ps1"
 set "LAUNCHER=%PROJECT_DIR%\ops\release\Invoke-DirectGitLauncher.ps1"
 
 if not exist "%PROJECT_DIR%\manage.py" (
-    echo [ERROR] Git deployment root is invalid: %PROJECT_DIR%
+    powershell.exe -NoProfile -Command ^
+        "Write-Host ('[ERROR] Git deployment root is invalid: ' + $env:PROJECT_DIR) -ForegroundColor Red"
     pause
     exit /b 1
 )
 if not exist "%LAUNCHER%" (
-    echo [ERROR] Unified launcher is missing: %LAUNCHER%
+    powershell.exe -NoProfile -Command ^
+        "Write-Host ('[ERROR] Unified launcher is missing: ' + $env:LAUNCHER) -ForegroundColor Red"
     pause
     exit /b 1
 )
 if not exist "%PREPARER%" (
-    echo [ERROR] Update and preparation workflow is missing: %PREPARER%
+    powershell.exe -NoProfile -Command ^
+        "Write-Host ('[ERROR] Update and preparation workflow is missing: ' + $env:PREPARER) -ForegroundColor Red"
     pause
     exit /b 1
 )
@@ -34,7 +37,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass ^
 
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
-    echo [ERROR] FFXIVShare update or preparation exited with code %EXIT_CODE%.
+    powershell.exe -NoProfile -Command ^
+        "Write-Host ('[ERROR] FFXIVShare update or preparation exited with code ' + $env:EXIT_CODE + '.') -ForegroundColor Red"
     pause
     exit /b %EXIT_CODE%
 )
@@ -45,7 +49,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass ^
 
 set "EXIT_CODE=%ERRORLEVEL%"
 if not "%EXIT_CODE%"=="0" (
-    echo [ERROR] FFXIVShare launcher exited with code %EXIT_CODE%.
+    powershell.exe -NoProfile -Command ^
+        "Write-Host ('[ERROR] FFXIVShare launcher exited with code ' + $env:EXIT_CODE + '.') -ForegroundColor Red"
     pause
 )
 exit /b %EXIT_CODE%

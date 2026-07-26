@@ -8,6 +8,11 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$consoleScript = Join-Path $PSScriptRoot 'LauncherConsole.ps1'
+if (-not (Test-Path -LiteralPath $consoleScript -PathType Leaf)) {
+    throw "Launcher console helpers are missing: $consoleScript"
+}
+. $consoleScript
 
 function Get-AbsoluteLocalPath {
     param(
@@ -102,7 +107,9 @@ function Invoke-Waitress {
     $env:PYTHONUTF8 = '1'
     Push-Location $WorkingDirectory
     try {
-        Write-Host 'Starting FFXIVShare on http://127.0.0.1:8000/'
+        Write-LauncherSuccess -Message 'FFXIVShare is ready to accept requests.'
+        Write-LauncherNotice -Message 'Local endpoint: http://127.0.0.1:8000/'
+        Write-LauncherDetail -Message 'Runtime logs follow. Press Ctrl+C to stop.'
         # Waitress writes normal access and lifecycle logs to stderr. Keep them
         # visible without letting PowerShell 5 reinterpret them as failures.
         $ErrorActionPreference = 'Continue'
@@ -116,7 +123,7 @@ function Invoke-Waitress {
             --clear-untrusted-proxy-headers `
             --no-expose-tracebacks `
             ffxivshare.wsgi:application 2>&1 |
-            ForEach-Object { Write-Host $_.ToString() }
+            ForEach-Object { Write-LauncherProcessLine -Line $_.ToString() }
         $exitCode = $LASTEXITCODE
     }
     finally {
@@ -155,6 +162,7 @@ if (Test-Listener -Port 8000) {
 # Process environment values take precedence over any stale APP_VERSION in .env.
 $env:APP_VERSION = Get-GitHead -Root $RepositoryRoot
 
+Write-LauncherStep -Message 'Check database schema'
 $schema = Get-SchemaStatus `
     -PythonExecutable $pythonExecutable `
     -WorkingDirectory $RepositoryRoot
@@ -165,21 +173,29 @@ if ($schema.status -eq 'invalid_history') {
 if ($schema.upgrade_required) {
     Write-Host ''
     $pendingMigrations = @($schema.pending_migrations)
-    Write-Host "Database upgrade required: $($pendingMigrations.Count) migration(s)."
+    Write-LauncherWarning -Message (
+        "Database upgrade required: $($pendingMigrations.Count) migration(s)."
+    )
     foreach ($migration in $pendingMigrations) {
-        Write-Host ('  - {0}/{1}' -f $migration[0], $migration[1])
+        Write-LauncherDetail -Message (
+            '  - {0}/{1}' -f $migration[0], $migration[1]
+        )
     }
     Write-Host ''
-    Write-Host '[1] Create a verified backup, upgrade safely, and start'
-    Write-Host '[2] Do not upgrade; keep the application stopped (default)'
+    Write-LauncherChoice -Key '1' -Description 'Create a verified backup, upgrade safely, and start'
+    Write-LauncherChoice -Key '2' -Description 'Do not upgrade; keep the application stopped (default)'
 
     if ($NonInteractive) {
-        Write-Host 'Non-interactive launch will not approve a database upgrade.'
+        Write-LauncherWarning -Message (
+            'Non-interactive launch will not approve a database upgrade.'
+        )
         exit 10
     }
-    $choice = (Read-Host 'Choose 1 or 2').Trim()
+    $choice = (Read-LauncherChoice -Prompt 'Choose 1 or 2: ').Trim()
     if ($choice -notin @('1', 'U', 'u', 'UPGRADE', 'upgrade')) {
-        Write-Host 'Upgrade declined. No database changes were made.'
+        Write-LauncherWarning -Message (
+            'Upgrade declined. No database changes were made.'
+        )
         exit 0
     }
 
@@ -200,6 +216,7 @@ if ($schema.upgrade_required) {
 if (-not $schema.safe_to_start) {
     throw 'The database is not safe to start.'
 }
+Write-LauncherSuccess -Message 'Database schema is ready.'
 exit (Invoke-Waitress `
     -PythonExecutable $pythonExecutable `
     -WorkingDirectory $RepositoryRoot)

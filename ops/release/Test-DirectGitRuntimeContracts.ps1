@@ -29,6 +29,7 @@ $startPath = Join-Path $RepositoryRoot 'ops\release\Start-DirectGitWaitress.bat'
 $preparePath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitUpdateAndPrepare.ps1'
 $prepareTestPath = Join-Path $RepositoryRoot 'ops\release\Test-DirectGitUpdateWorkflow.ps1'
 $launcherPath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitLauncher.ps1'
+$consolePath = Join-Path $RepositoryRoot 'ops\release\LauncherConsole.ps1'
 $upgradePath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitDatabaseUpgrade.ps1'
 $readinessWrapperPath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitReleaseReadiness.ps1'
 $readinessPath = Join-Path $RepositoryRoot 'ops\release\Test-DirectGitReleaseReadiness.py'
@@ -41,6 +42,7 @@ foreach ($path in @(
     $preparePath,
     $prepareTestPath,
     $launcherPath,
+    $consolePath,
     $upgradePath,
     $readinessWrapperPath,
     $nginxPath
@@ -81,7 +83,8 @@ foreach ($requiredText in @(
     'powershell.exe -NoProfile -ExecutionPolicy Bypass',
     '-RepositoryRoot "%PROJECT_DIR%"',
     'chcp 65001',
-    'set "NO_COLOR=1"'
+    'set "NO_COLOR=1"',
+    '-ForegroundColor Red'
 )) {
     Assert-Contract `
         -Condition $startSource.Contains($requiredText) `
@@ -94,15 +97,41 @@ Assert-Contract `
     ) `
     -Message 'Release preparation must complete before the application launcher.'
 
+$consoleSource = [System.IO.File]::ReadAllText($consolePath)
+foreach ($requiredText in @(
+    'Write-LauncherStep',
+    'Write-LauncherSuccess',
+    'Write-LauncherWarning',
+    'Write-LauncherChoice',
+    'Read-LauncherChoice',
+    'Read-Host',
+    'Write-LauncherProcessLine',
+    '-ForegroundColor Cyan',
+    '-ForegroundColor Green',
+    '-ForegroundColor Yellow',
+    '-ForegroundColor Magenta',
+    "'Red'",
+    "'DarkGray'"
+)) {
+    Assert-Contract `
+        -Condition $consoleSource.Contains($requiredText) `
+        -Message "Launcher console helpers are missing: $requiredText"
+}
+
 $prepareSource = [System.IO.File]::ReadAllText($preparePath)
 foreach ($requiredText in @(
+    '. $consoleScript',
+    'Write-LauncherStep',
+    'Write-LauncherProcessLine',
+    'Write-LauncherChoice',
+    'Read-LauncherChoice',
     'Assert-CriticalWorktreeClean',
     'FFXIVSHARE_SKIP_UPDATE',
     "'fetch'",
     "'merge'",
     "'--ff-only'",
-    '[1] Update, prepare, and start (default)',
-    '[2] Start the current version without updating',
+    'Update, prepare, and start (default)',
+    'Start the current version without updating',
     'pip',
     'install',
     "'ci', '--prefix', 'frontend'",
@@ -135,11 +164,16 @@ foreach ($forbiddenPattern in @(
 
 $launcherSource = [System.IO.File]::ReadAllText($launcherPath)
 foreach ($requiredText in @(
+    '. $consoleScript',
+    'Write-LauncherStep',
+    'Write-LauncherSuccess',
+    'Write-LauncherProcessLine',
+    'Write-LauncherChoice',
+    'Read-LauncherChoice',
     'manage.py check_deployment_schema',
     'Invoke-DirectGitDatabaseUpgrade.ps1',
-    '[1] Create a verified backup, upgrade safely, and start',
-    '[2] Do not upgrade; keep the application stopped (default)',
-    'Read-Host',
+    'Create a verified backup, upgrade safely, and start',
+    'Do not upgrade; keep the application stopped (default)',
     '-Confirm:$false',
     '$env:APP_VERSION = Get-GitHead -Root $RepositoryRoot',
     '-m waitress',
