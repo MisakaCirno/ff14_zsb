@@ -28,6 +28,9 @@ $rootPreflightPath = Join-Path $RepositoryRoot 'preflight_ffxivshare.bat'
 $startPath = Join-Path $RepositoryRoot 'ops\release\Start-DirectGitWaitress.bat'
 $preparePath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitUpdateAndPrepare.ps1'
 $prepareTestPath = Join-Path $RepositoryRoot 'ops\release\Test-DirectGitUpdateWorkflow.ps1'
+$bootstrapTestPath = Join-Path $RepositoryRoot 'ops\release\Test-DirectGitBootstrap.ps1'
+$trampolineTestPath = Join-Path $RepositoryRoot 'ops\release\Test-BatchTrampolineImmutability.ps1'
+$bootstrapPath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitBootstrap.ps1'
 $launcherPath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitLauncher.ps1'
 $consolePath = Join-Path $RepositoryRoot 'ops\release\LauncherConsole.ps1'
 $upgradePath = Join-Path $RepositoryRoot 'ops\release\Invoke-DirectGitDatabaseUpgrade.ps1'
@@ -39,8 +42,11 @@ foreach ($path in @(
     $rootStartPath,
     $rootPreflightPath,
     $startPath,
+    $bootstrapPath,
     $preparePath,
     $prepareTestPath,
+    $bootstrapTestPath,
+    $trampolineTestPath,
     $launcherPath,
     $consolePath,
     $upgradePath,
@@ -62,8 +68,18 @@ Assert-Contract `
 
 $rootStartSource = [System.IO.File]::ReadAllText($rootStartPath)
 Assert-Contract `
-    -Condition $rootStartSource.Contains('ops\release\Start-DirectGitWaitress.bat') `
-    -Message 'Root start script does not delegate to the unified launcher.'
+    -Condition (
+        $rootStartSource.Contains('Invoke-DirectGitBootstrap.ps1') -and
+        $rootStartSource.Contains('& exit /b') -and
+        -not $rootStartSource.Contains('call ')
+    ) `
+    -Message 'Root start script is not an immutable bootstrap trampoline.'
+$rootStartLines = @($rootStartSource -split '\r?\n' | Where-Object {
+    -not [string]::IsNullOrWhiteSpace($_)
+})
+Assert-Contract `
+    -Condition ($rootStartLines.Count -eq 1) `
+    -Message 'Root start script must remain one physical command line.'
 $rootPreflightSource = [System.IO.File]::ReadAllText($rootPreflightPath)
 foreach ($requiredText in @(
     'Invoke-DirectGitReleaseReadiness.ps1',
@@ -78,13 +94,10 @@ foreach ($requiredText in @(
 
 $startSource = [System.IO.File]::ReadAllText($startPath)
 foreach ($requiredText in @(
-    'Invoke-DirectGitUpdateAndPrepare.ps1',
-    'Invoke-DirectGitLauncher.ps1',
+    'Invoke-DirectGitBootstrap.ps1',
     'powershell.exe -NoProfile -ExecutionPolicy Bypass',
-    '-RepositoryRoot "%PROJECT_DIR%"',
-    'chcp 65001',
-    'set "NO_COLOR=1"',
-    '-ForegroundColor Red'
+    '-RepositoryRoot "%~dp0..\.."',
+    '& exit /b'
 )) {
     Assert-Contract `
         -Condition $startSource.Contains($requiredText) `
@@ -92,16 +105,45 @@ foreach ($requiredText in @(
 }
 Assert-Contract `
     -Condition (
-        $startSource.IndexOf('-File "%PREPARER%"') -lt
-        $startSource.IndexOf('-File "%LAUNCHER%"')
+        @($startSource -split '\r?\n' | Where-Object {
+            -not [string]::IsNullOrWhiteSpace($_)
+        }).Count -eq 1
     ) `
-    -Message 'Release preparation must complete before the application launcher.'
+    -Message 'Compatibility start script must remain one physical command line.'
+
+$bootstrapSource = [System.IO.File]::ReadAllText($bootstrapPath)
+foreach ($requiredText in @(
+    'chcp.com 65001',
+    '$env:NO_COLOR = ''1''',
+    'Invoke-DirectGitUpdateAndPrepare.ps1',
+    'Invoke-DirectGitLauncher.ps1',
+    'Invoke-PowerShellScript',
+    'Get-GitHead',
+    'prepared-commit.txt',
+    '$stateHead -ne $preparedHead',
+    'Handing off to updated release',
+    'Resolve this path only after preparation',
+    'Stop-Bootstrap'
+)) {
+    Assert-Contract `
+        -Condition $bootstrapSource.Contains($requiredText) `
+        -Message "Direct Git bootstrap is missing: $requiredText"
+}
+Assert-Contract `
+    -Condition (
+        $bootstrapSource.IndexOf('$prepareExitCode =') -lt
+        $bootstrapSource.IndexOf('$preparedHead =') -and
+        $bootstrapSource.IndexOf('$preparedHead =') -lt
+        $bootstrapSource.IndexOf('$launcherExitCode =')
+    ) `
+    -Message 'Bootstrap handoff order is invalid.'
 
 $consoleSource = [System.IO.File]::ReadAllText($consolePath)
 foreach ($requiredText in @(
     'Write-LauncherStep',
     'Write-LauncherSuccess',
     'Write-LauncherWarning',
+    'Write-LauncherError',
     'Write-LauncherChoice',
     'Read-LauncherChoice',
     'Read-Host',
@@ -218,6 +260,7 @@ foreach ($forbiddenPattern in @(
             -not [regex]::IsMatch($rootStartSource, $forbiddenPattern) -and
             -not [regex]::IsMatch($rootPreflightSource, $forbiddenPattern) -and
             -not [regex]::IsMatch($startSource, $forbiddenPattern) -and
+            -not [regex]::IsMatch($bootstrapSource, $forbiddenPattern) -and
             -not [regex]::IsMatch($launcherSource, $forbiddenPattern) -and
             -not [regex]::IsMatch($readinessWrapperSource, $forbiddenPattern)
         ) `

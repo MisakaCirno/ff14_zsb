@@ -137,7 +137,7 @@ R19 已完成。2026-07-20 已取得并验证线上只读环境清单及启动/N
 - SQLite 为仓库根目录 `db.sqlite3`，检查时没有 WAL/SHM/journal；媒体目录不存在；
 - 正式 `/n/` 由 Nginx 独立转发到 Bun，主站升级不需要停止或修改它。
 
-仓库已新增统一根入口 `start_ffxivshare.bat`。它委托 `ops/release/Start-DirectGitWaitress.bat` 完成固定目标的快进更新、按需发布准备、发布预检和 schema 判断：没有更新且产物已验证时直接启动；存在代码更新时先展示并确认，再自动准备；存在 pending migration 时由操作者在同一界面选择安全升级或保持停止；异常历史不会被自动处理。升级流程已用隔离数据库完整验证候选迁移、源库/候选库逐表语义比较、双份源库回滚副本、SHA-256、原子替换和最终 schema 检查；还使用 2026-07-19 的只读生产快照完成了 `0018` 到当前 migration leaf 的演练。启动器不激活环境，不执行强制 Git 操作，也不控制 Nginx/Bun；代理信任和 traceback 参数与当前生产安全契约一致。`ops/nginx/ffxivshare.direct-git.locations.conf.example` 只替换主站、静态和健康检查块，不定义 `/n/`。
+仓库已新增统一根入口 `start_ffxivshare.bat`。它是一条不会在 Git 更新后继续读取自身文件的最小跳板，启动时一次性进入 `ops/release/Invoke-DirectGitBootstrap.ps1`。PowerShell 引导器完成固定目标的快进更新和发布准备后，会重新核对 Git HEAD 与 `prepared-commit.txt`，再用独立进程交接给更新后 commit 中的正式启动器。没有更新且产物已验证时直接启动；存在代码更新时先展示并确认，再自动准备；存在 pending migration 时由操作者在同一界面选择安全升级或保持停止；异常历史不会被自动处理。升级流程已用隔离数据库完整验证候选迁移、源库/候选库逐表语义比较、双份源库回滚副本、SHA-256、原子替换和最终 schema 检查；还使用 2026-07-19 的只读生产快照完成了 `0018` 到当前 migration leaf 的演练。启动器不激活环境，不执行强制 Git 操作，也不控制 Nginx/Bun；代理信任和 traceback 参数与当前生产安全契约一致。`ops/nginx/ffxivshare.direct-git.locations.conf.example` 只替换主站、静态和健康检查块，不定义 `/n/`。
 
 仓库也已新增 `preflight_ffxivshare.bat`：它以脱敏报告自动检查完整目标 commit、关键脏文件、环境键及生产值、Python/Node/npm、锁定依赖、前端和 `collectstatic` 产物、SQLite 文件身份及 schema。测试已证明 NO-GO 和 READY 两条路径都不包含 `SECRET_KEY`；完整生产形态合成配置取得 `ready_for_maintenance=true`，pending migration 只作为后续安全升级提示。所有检查前后数据库 SHA-256 相同，也没有创建 sidecar。统一启动器还会用当前 Git HEAD 覆盖进程内 `APP_VERSION`，使运行日志和数据库备份绑定真实 commit，而不依赖 `.env` 中可能过期的版本值。
 

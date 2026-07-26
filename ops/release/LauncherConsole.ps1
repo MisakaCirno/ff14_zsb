@@ -18,6 +18,12 @@ function Write-LauncherWarning {
     Write-Host "[WARN] $Message" -ForegroundColor Yellow
 }
 
+function Write-LauncherError {
+    param([Parameter(Mandatory = $true)][string]$Message)
+
+    Write-Host "[ERROR] $Message" -ForegroundColor Red
+}
+
 function Write-LauncherNotice {
     param([Parameter(Mandatory = $true)][string]$Message)
 
