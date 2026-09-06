@@ -1,5 +1,6 @@
 from dataclasses import FrozenInstanceError
 from urllib.parse import quote, urlsplit
+from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser, User
 from django.db import connection
@@ -283,7 +284,8 @@ class ShareDetailPresentationTests(TestCase):
         self.assertIn('避免旧版下架记录缺失', detail.notice.message)
         self.assertIn('历史状态待确认', [badge.label for badge in detail.badges])
 
-    def test_preview_url_encodes_strategy_code_as_one_path_segment(self):
+    @patch('shares.preview_urls.get_board_render_version', return_value='detail-test')
+    def test_preview_url_encodes_strategy_code_as_one_path_segment(self, get_version):
         special_code = '[stgy:a/b?c#d+e"f]'
         share = Share.objects.create(
             title='特殊字符预览',
@@ -297,7 +299,7 @@ class ShareDetailPresentationTests(TestCase):
 
         self.assertEqual(
             detail.preview_url,
-            f'/n/board/{quote(special_code, safe="")}?rv=2',
+            f'/n/board/{quote(special_code, safe="")}?rv=detail-test',
         )
         encoded_segment = urlsplit(detail.preview_url).path.removeprefix('/n/board/')
         for delimiter in ('/', '?', '#', '+', '"'):

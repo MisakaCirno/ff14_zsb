@@ -95,9 +95,32 @@ sb_renderer/           独立渲染器（本轮不改）
 
 ## 战术板预览缓存版本
 
-分享卡片、详情页和弹窗统一通过 `shares.preview_urls.build_board_preview_url` 生成 `/n/board/<分享码>?rv=<版本>`。`ffxivshare.settings.BOARD_RENDER_CACHE_VERSION` 应与 node-zsb 的 `RENDER_CACHE_VERSION` 保持一致；当前均为 `2`。
+分享卡片、详情页和弹窗统一通过 `shares.preview_urls.build_board_preview_url` 生成图片地址，由 `shares.render_version.get_board_render_version` 请求 node-zsb 的 `GET /render-meta` 自动发现版本。响应必须为 HTTP 200、`ok: true`，且 `data.renderVersion` 是非空字符串。版本按不透明字符串原样使用，不转成数字、不手动同步版本号；分享码始终编码成单一路径段，`rv` 也单独进行 URL 编码。
 
-只有渲染输出可能变化时才升级该版本。推荐先部署带新版本参数的 FFXIVShare，再部署新版 node-zsb；两个服务短暂不一致时，渲染器会以不缓存的临时跳转纠正版本，不会把新图片写入旧版浏览器缓存。
+后端请求地址与浏览器图片地址分开配置：
+
+| 配置 | 默认值与用途 |
+| --- | --- |
+| `BOARD_RENDER_META_URL` | 生产：`http://localhost:3000/render-meta`，直连同机 node-zsb，兼容其 `localhost` / IPv6 回环监听；开发：`https://ff14hub.com/n/render-meta`，与现有 Django `/n/` 开发代理使用同一线上渲染器；测试环境未显式配置时为空，避免测试访问网络。显式设为空可禁用发现，使用无版本图片地址。 |
+| `BOARD_RENDER_META_TIMEOUT_SECONDS` | 默认 `1` 秒，限制元数据网络操作和并发等待时间。 |
+
+浏览器始终请求同源 `/n/board/<编码后的分享码>?rv=<编码后的版本>`；后端元数据 URL 必须是后端可访问的完整地址，不能直接填写 `/n/render-meta`。生产 node-zsb 不在同机或使用不同监听地址时，可改为实际直连 URL 或 `https://ff14hub.com/n/render-meta`。本地默认无须启动 node-zsb；如果改为本地联调，需要同时让浏览器 `/n/` 图片代理指向同一个本地渲染器，只改元数据地址不会改变图片代理目标。
+
+版本使用进程内线程安全缓存，最长复用 60 秒，扣除上游 `Age` 和本次请求耗时，并遵守更短的 `max-age`。过期后的并发请求合并刷新，等待超过超时的请求直接使用无版本地址。接口尚未部署、超时、HTTP 错误、无效 JSON/版本或已无剩余新鲜期时，立即放弃旧版本，回退到 `/n/board/<编码后的分享码>`，利用 node-zsb 已有的 `no-cache` + ETag 校验；只缓存这个失败结果 5 秒以避免逐卡片重试。正常响应限制为 16 KiB。
+
+该缓存覆盖当前单 Waitress 进程的所有线程；增加进程或实例时，每个进程各自合并刷新，不跨进程合并（配置 Django 共享 cache 也不会自动改变这一点）。元数据流量上限通常是每进程每 60 秒一次，带 `Age` 时会更早刷新。
+
+主站没有 Django 整页或模板片段缓存；动态 HTML 统一使用私有 `no-store`，卡片 JSON 片段也保留现有 `no-store`。基础模板禁用 HTMX 历史快照，防止浏览器历史缓存恢复旧预览地址；历史恢复请求不发送 `HX-Request`，确保取得新的完整页面。仓库 Nginx 示例未启用 HTML 代理缓存；生产额外的 CDN／代理规则也必须遵守这些响应头，不能强制缓存 HTML。已经打开的页面需刷新后获取新地址。
+
+FFXIVShare 可以先于元数据接口上线，期间自动使用无版本地址；接口可用后自动恢复版本化图片。今后仅由 node-zsb 维护和部署渲染版本，无须再次更新分享站、修改作品数据、清理图片缓存或重新发布作品。
+
+本次接入的离线回归测试：
+
+```powershell
+$env:APP_ENV = 'test'
+$env:BOARD_RENDER_META_URL = ''
+venv\Scripts\python.exe -B manage.py test shares.test_render_version shares.test_preview_url_contracts shares.test_preview_page_cache
+```
 
 ## 进一步阅读
 

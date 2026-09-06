@@ -2,6 +2,7 @@
 Django settings for ffxivshare project.
 """
 
+import os
 from pathlib import Path
 
 from django.contrib.messages import constants as message_constants
@@ -50,9 +51,18 @@ RENDERER_PROXY_MAX_BYTES = env_int(
     default=16 * 1024 * 1024,
     minimum=1024,
 )
-# Public cache hint used by preview URLs. The renderer remains authoritative and
-# redirects stale or premature versions, so deployments cannot poison a versioned URL.
-BOARD_RENDER_CACHE_VERSION = '2'
+# Server-to-server metadata URL, separate from the browser's /n/ image prefix.
+# Development /n/ proxies to production; production can reach the local renderer.
+BOARD_RENDER_META_URL = os.environ.get(
+    'BOARD_RENDER_META_URL',
+    '' if APP_ENV == 'test' else (
+        'http://localhost:3000/render-meta' if IS_PRODUCTION
+        else 'https://ff14hub.com/n/render-meta'
+    ),
+).strip()
+BOARD_RENDER_META_TIMEOUT_SECONDS = env_int(
+    'BOARD_RENDER_META_TIMEOUT_SECONDS', default=1, minimum=1,
+)
 SECURE_SSL_REDIRECT = env_bool('SECURE_SSL_REDIRECT', default=IS_PRODUCTION)
 SECURE_REDIRECT_EXEMPT = [r'^health/(?:live|ready)/$']
 SESSION_COOKIE_SECURE = env_bool('SESSION_COOKIE_SECURE', default=IS_PRODUCTION)
@@ -100,6 +110,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'ffxivshare.observability.RequestObservabilityMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'shares.middleware.PreviewPageCacheMiddleware',
     'ffxivshare.security.ContentSecurityPolicyMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

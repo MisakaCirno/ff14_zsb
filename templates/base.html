@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta name="htmx-config" content='{"historyRestoreAsHxRequest":false}'>
     <title>{% block title %}粘鼠板儿{% endblock %}</title>
     <link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/bootstrap-icons.css' %}">
@@ -12,7 +13,7 @@
     {% vite_assets %}
     {% block extra_head %}{% endblock %}
 </head>
-<body class="app-body">
+<body class="app-body" hx-history="false">
     <a class="app-skip-link" href="#main-content">跳到主要内容</a>
 
     <header class="app-header">

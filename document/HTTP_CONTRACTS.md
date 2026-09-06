@@ -2,6 +2,12 @@
 
 本文记录 R11 固定的公开 API 和主站局部响应边界。后续前端重构可以替换实现，但不得在没有迁移方案的情况下改变这些契约。
 
+## 战术板预览与 HTML 缓存
+
+卡片、详情页和弹窗的预览 URL 共用后端渲染版本获取器，自动查询 node-zsb `/render-meta`。版本最长缓存 60 秒并扣除 `Age` 与请求耗时；发现失败或版本过期时使用无 `rv` 图片入口，不延长旧版本。配置、并发边界和回退规则见 [预览缓存说明](../README.md#战术板预览缓存版本)。
+
+动态 HTML（完整页面及片段）如果尚无 `no-store`，统一补充 `max-age=0, no-cache, no-store, must-revalidate, private`，避免 HTML 缓存固定旧版图片 URL；已有的 `no-store` 响应头契约保持不变。兼容卡片 JSON 继续使用原有私有 `no-store`；基础模板设置 `hx-history="false"`，不保存 HTMX 页面历史快照，并通过 `historyRestoreAsHxRequest: false` 在历史恢复时取得完整 HTML。此策略不改变 node-zsb 图片或 Vite 静态资源的长期缓存。
+
 ## 小抄儿公开 API
 
 以下路径保持不变：

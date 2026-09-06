@@ -3,6 +3,7 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.messages import constants as message_constants
@@ -1950,7 +1951,8 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         self.assertIn('form?.requestSubmit()', controls_source)
         self.assertIn('window.confirm(message)', controls_source)
 
-    def test_share_preview_variants_render_expected_metadata(self):
+    @patch('shares.preview_urls.get_board_render_version', return_value='preview-test')
+    def test_share_preview_variants_render_expected_metadata(self, get_version):
         share = SimpleNamespace(
             title='预览 & "标题"',
             strategy_code='[stgy:a&"b]',
@@ -1993,7 +1995,7 @@ class FrontendTemplateSourceTests(SimpleTestCase):
         )
 
         self.assertIn('alt="预览 &amp; &quot;标题&quot; 的战术板预览"', standard)
-        self.assertIn('/n/board/%5Bstgy%3Aa%26%22b%5D?rv=2', standard)
+        self.assertIn('/n/board/%5Bstgy%3Aa%26%22b%5D?rv=preview-test', standard)
         self.assertNotIn('<script', standard)
         self.assertIn('可能令人不适', standard)
         self.assertNotIn('可能包含剧透', standard)
